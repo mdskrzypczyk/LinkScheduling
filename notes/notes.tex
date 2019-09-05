@@ -1,0 +1,115 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
+\title{Link Scheduling Notes}
+\author{mdskrzypczyk }
+\date{August 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Cost functions}
+Objective functions to optimize with choice of link scheduling.
+
+\subsection{Minimized Weighted Idle Time}
+
+    $$\text{min } d = \sum_{i=1}^{n-1} w_{i+1}|e_i - e_{i+1}| + max_i(e_i)(w_1 + w_{n+1}) - w_1e_1 - w_{n+1}e_n$$
+
+Where:
+\begin{itemize}
+    \item $n$ is the number of edges in the chain
+    \item $e_i$ is the time at which link $i$ is expected to be generated
+    \item $w_i$ is a decoherence weight associated with node $i$
+    \item $\sum$ term represents the weighted decoherence introduced by the nodes internal to the chain (2:n)
+    \item $max_i(e_i)$ is the completion time of the last link
+    \item Final terms represent the decoherence introduced on the qubits held by the end nodes as they must wait until the full link has been established to begin using
+\end{itemize}
+
+Observations:
+\begin{itemize}
+    \item Preferable to have end links generated last as generating them earlier accumulates more decoherence (dependent on weights)
+\end{itemize}
+
+\subsection{Minimized Total Fidelity Loss}
+
+$$\text{min } F_{loss} = \sum_{i=1}^{n} F_{0,i}e^{-w_it_i}$$
+
+Where:
+\begin{itemize}
+    \item $F_{loss}$ is the total lost fidelity
+    \item $F_{0,i}$ is the initial fidelity of a generated link
+    \item $w_i$ is the rate of decoherence of a link
+    \item $t_i$ is the amount of time the link decoheres for
+\end{itemize}
+
+Problems:
+\begin{itemize}
+    \item Metric does not consider how the links decohere after they have been SWAPPED, $w_i$ is a property of the
+    originally generated link, not the nodes holding the qubits
+\end{itemize}
+
+\section{Greedy Heuristics}
+\begin{itemize}
+    \item Place links that take less time to generate ahead of current link and links that take less time behind the current link.
+    \item Place links that have a higher fidelity by the time both links should be done earlier in the schedule
+\end{itemize}
+
+\section{Coordination}
+\subsection{Timeslot Scheduling}
+Share schedules of nodes along path and insert slots for when time should be spent generating a link.
+
+\subsubsection{Execution Techniques}
+\begin{itemize}
+    \item Get individual machine schedules.
+    \begin{itemize}
+        \item Schedule cannot be represented infinitely into the future (messages are finite in size, base size on the max time of generation request?
+        \item Need an efficient representation that permits taking intersections for creating link schedules
+        \item Prune slots that are occupied or too short for generating a given link.  "Too short" can have a few meanings, below average or below some fraction of average time to generate. (Check probability distribution, geometric?)
+        \item Represent schedule for each communication qubit on the link
+    \end{itemize}
+    \item Take an intersection to form availability schedules for each link.
+    \begin{itemize}
+        \item How can we take into account several communication qubits for this part?
+        \item Reserving a slot in a link schedule affects the adjacent link schedule availability.
+    \end{itemize}
+    \item Determine the order of the links and which slots should be used.
+    \begin{itemize}
+        \item Prune to isolate valid pairs of adjacent slots that allow SWAP-ing to achieve reasonable fidelity.
+        \begin{itemize}
+            \item "Window" adjacent schedules to find pairs of slots.  Window size should tolerate occupied slots between available slots.  May be based on achievable fidelity and how low we can accept the fidelity to become before the second link generates.
+            \item Can we order these slot pairs by a greedy heuristic?
+            \item Can also order based on how much faster/slower a link would degrade the sooner we can push a SWAP through to a device that decoheres less.
+        \end{itemize}
+        \item There may be several "starting" points within a link availability schedule, how to pick which one?
+        \begin{itemize}
+            \item Consider the timespan of generating all the links?
+            \item Construct a naive order assuming full availability and then slot?
+            \item Construct the order based on the available slots?  Start with the earliest slot?  Start with the worst link?
+            \item Brute force is $O(l2^n)$ if an end node's schedule has $l$ starts and we use the closest two slots (before/after) for $n$ nodes
+            \item Greedy has $O(nl)$ if an end node has $l$ different starts and we always select the next one simply
+        \end{itemize}
+    \end{itemize}
+    \item How to handle requests for several pairs?
+    \begin{itemize}
+        \item Instruct nodes to have a decided link scheduling recurring to meet the max time requirement.  "Do schedule $X$ every 10 slots".
+        \item Using multiple routes?  This can incur a significant communication overhead if a request is cancelled.
+    \end{itemize}
+\end{itemize}
+
+\begin{itemize}
+    \item Token Bucket (?) - Investigate
+\end{itemize}
+
+\section{Questions}
+\begin{itemize}
+    \item Could decoherence at intermediate links be more important because it affects the success of SWAPs?
+    \item Wait some time before requested to generate entanglement to gather more information about other desired links?
+\end{itemize}
+\end{document}
+
+\section{TODO}
+\begin{itemize}
+    \item
+\end{itemize}
