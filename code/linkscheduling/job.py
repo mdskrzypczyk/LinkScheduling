@@ -1,25 +1,15 @@
 class Job:
-    def __init__(self, name, duration=0, params=None):
+    def __init__(self, name, ID, duration=0, params=None):
         self.name = name
+        self.ID = ID
         self.duration = duration
         self.params = params
-        self.start = None
+
+    def get_ID(self):
+        return self.ID
 
     def get_duration(self):
         return self.duration
-
-    def set_start(self, start):
-        self.start = start
-
-    def get_start(self):
-        if self.start is None:
-            raise Exception("Job {} has not been assigned a start time!".format(self.name))
-        return self.start
-
-    def get_end(self):
-        if self.start is None:
-            raise Exception("Job {} has not been assigned a start time!".format(self.name))
-        return self.start + self.duration       
 
 
 class JobOrdering:

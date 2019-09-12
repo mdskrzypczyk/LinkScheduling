@@ -1,6 +1,10 @@
 \documentclass{article}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[a4paper, margin=1in]{geometry}
+
+
 
 \title{Link Scheduling Notes}
 \author{mdskrzypczyk }
@@ -9,6 +13,76 @@
 \begin{document}
 
 \maketitle
+
+\section{Device notes}
+\begin{itemize}
+    \item Matteo says that any NV device can be brought to the $T_1/T_2$ parameters used in the link layer simulations through careful tuning.
+    \begin{itemize}
+        \item Might mean it's worth focusing on a homogenous network of nodes that decohere at the same rate. This means that only the initial fidelity matters depending on the distance of the links.
+        \item SWAP'd links will then degrade at the same rate as the individual ones between nodes, can apply an exponential fitting to track the loss of fidelity.
+    \end{itemize}
+    \item Also said that the parameters may fluctuate between 30\% and 100\% of those used in the simulations, so can also investigate heterogenous networks.
+    \item Consider storing the links with better fidelity first in the carbon due to the great storage time.  This will \emph{probably} maximize the resulting swapped fidelity.
+\end{itemize}
+
+\subsection{Decoherence for single/double electron/carbon storage}
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence.png}
+    \caption{Plot of decoherence on an entangled pair of qubits for cases where a single qubit is in the electron/carbon and the other is stored perfectly, both are in the electron, both are in the carbon, and one in electron while other in carbon. All bell pairs initiated at $F=1$ with move to storage performed immediately after generating.}
+    \label{fig:decoherence}
+\end{figure}
+
+This plot was generated using the following values for $T_1/T_2$ times sourced from the experimental realizations discussed in \emph{A Link Layer Protocol for Quantum Networks}.
+
+\begin{table}[!htb]
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+              & Electron $T_1$ & Electron $T_2$ & Carbon $T_1$ & Carbon $T_2$ \\
+\hline
+Duration/Time & 1h            & 1.46s       & 10h ($\inf$) & 1s          \\
+\hline
+\end{tabular}
+\end{table}
+
+From the collected data it also appears that if we fit the curves with $f=ae^{-bt}+c$ for storage in electron/electron, carbon/carbon, and electron/carbon, we can compute the single electron/carbon decoherence using the same $a,c$ but computing $b_{single}=
+\frac{1}{2}b_{double}$ and obtaining $b_{double}$ for electron/carbon by simply summing $b_{single}$ for both the electron and carbon decoherence.
+
+Additional plots of decoherence consider inserting a delay before the SWAP occurs from the electron to the carbon.
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_100ms.png}
+    \caption{Plot of decoherences with SWAP delay of $100ms$.}
+    \label{fig:decoherence_100_delay}
+\end{figure}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_250ms.png}
+    \caption{Plot of decoherences with SWAP delay of $250ms$.}
+    \label{fig:decoherence_250_delay}
+\end{figure}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_500ms.png}
+    \caption{Plot of decoherences with SWAP delay of $500ms$.}
+    \label{fig:decoherence_500_delay}
+\end{figure}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_1000ms.png}
+    \caption{Plot of decoherences with SWAP delay of $1000ms$.}
+    \label{fig:decoherence_1000_delay}
+\end{figure}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_2000ms.png}
+    \caption{Plot of decoherences with SWAP delay of $2000ms$.}
+    \label{fig:decoherence_2000_delay}
+\end{figure}
 
 \section{Cost functions}
 Objective functions to optimize with choice of link scheduling.
@@ -53,12 +127,24 @@ Problems:
 \section{Greedy Heuristics}
 \begin{itemize}
     \item Place links that take less time to generate ahead of current link and links that take less time behind the current link.
+    \begin{itemize}
+        \item Can this actually put us in a position where decoherence puts fidelity of a link too low to be useful?
+    \end{itemize}
     \item Place links that have a higher fidelity by the time both links should be done earlier in the schedule
 \end{itemize}
 
 \section{Coordination}
 \subsection{Timeslot Scheduling}
 Share schedules of nodes along path and insert slots for when time should be spent generating a link.
+
+\subsubsection{Why Timeslot Scheduling?}
+\begin{itemize}
+    \item We want a coordination mechanism that can take into account a node's availability to establish entanglement in the network.
+    \item This may include applications that are running at the node which cannot be interrupted or other links the node is helping establish.
+    \item We also want to reduce additional communication for coordinating link building, ie. avoid communication between nodes of the form "I am done with link X are you available to start link Y?" as this might go on indefinitely.
+    \item Timeslot scheduling allows us a simple mechanism to stop generating a link.  If we have not generated a shorter segment by the end of the slot, we give up and can instruct other nodes to give up as well.
+    \item Timeslot scheduling can be done in a centralized manner where an external central authority knows all the schedules of the nodes or requests them or it can be done in a distributed manner where the nodes along the path share their schedules with one another.
+\end{itemize}
 
 \subsubsection{Execution Techniques}
 \begin{itemize}
@@ -90,6 +176,7 @@ Share schedules of nodes along path and insert slots for when time should be spe
             \item Brute force is $O(l2^n)$ if an end node's schedule has $l$ starts and we use the closest two slots (before/after) for $n$ nodes
             \item Greedy has $O(nl)$ if an end node has $l$ different starts and we always select the next one simply
         \end{itemize}
+        \item In order to calculate fidelities, can require devices to provide some sample points from a Fidelity curve of the qubits. Using a granularity at least as fine as that used for the timeslots can allow us to determine what the fidelity of an entangled pair would be by the time we expect the next one to be ready. The problem with this is that it does not provide us information about how the SWAP'd links behave.  Would be unreasonable to request these points for every possible SWAP'd link.  Alternatively, require nodes to supply $(a,b,c,t_0)$ for the fit $F=ae^{-bt} + c$ and the initial fidelity of the generated link $F_0=ae^{-bt_0}+c$.  This also does not seem to imply an immediate way to find out how the SWAP'd link degrades (actually from a short simulation with two nodes that have the same parameters it seems like the weight in the exponent just doubles when stored on two devices, if all nodes are homogenous then the same curve can be used but we need to calculate the new SWAP'd fidelity and resume decoherence from the corresponding point in the curve).
     \end{itemize}
     \item How to handle requests for several pairs?
     \begin{itemize}
@@ -98,18 +185,35 @@ Share schedules of nodes along path and insert slots for when time should be spe
     \end{itemize}
 \end{itemize}
 
-\begin{itemize}
-    \item Token Bucket (?) - Investigate
-\end{itemize}
-
 \section{Questions}
-\begin{itemize}
-    \item Could decoherence at intermediate links be more important because it affects the success of SWAPs?
-    \item Wait some time before requested to generate entanglement to gather more information about other desired links?
-\end{itemize}
+
+
+\section{Does the order of SWAP matter?}
+Three links with fidelities $F_1,F_2,F_3$. Equation for SWAP'd fidelity:
+
+$$F_{new} = F_1F_2 + \frac{(1-F_1)(1-F_2)}{3}$$
+
+Let $F' = F_1 F_2 + \frac{(1-F_1)(1-F_2)}{3}$ be the SWAP'd fidelity of links 1 and 2. Then:
+
+    $$F' F_3 + \frac{(1-F')(1-F_3)}{3}$$
+    $$=(F_1 F_2 + \frac{(1-F_1)(1-F_2)}{3})F_3 + \frac{(1-(F_1 F_2 + \frac{(1-F_1)(1-F_2)}{3}))(1-F_3)}{3}$$
+    $$=F_1 F_2F_3 + \frac{F_3(1-F_1)(1-F_2)}{3} + \frac{(1-F_1 F_2 - \frac{(1-F_1)(1-F_2)}{3})(1-F_3)}{3}$$
+    $$=F_1 F_2F_3 + \frac{(F_3-F_1F_3)(1-F_2)}{3} + \frac{(1-F_3)-F_1 F_2(1-F_3) - \frac{(1-F_3)(1-F_1)(1-F_2)}{3}}{3}$$
+    $$=F_1 F_2F_3 + \frac{F_3 - F_2F_3 - F_1F_3 + F_1F_2F_3}{3} + \frac{1-F_3-F_1 F_2+F_1F_2F_3 - \frac{(1-F_3-F_1+F_1F_3)(1-F_2)}{3}}{3}$$
+    $$=F_1 F_2F_3 + \frac{1}{3}(1 - F_1F_2 - F_2F_3 - F_1F_3 + 2F_1F_2F_3) - \frac{1}{9}(1 - F_1 - F_2 - F_3 + F_1F_2 + F_2F_3 + F_1F_3 - F_1F_2F_3)$$
+    $$=\frac{2}{9} + \frac{1}{9}(F_1 + F_2 + F_3) - \frac{4}{9}(F_1F_2 + F_2F_3 + F_1F_3) + \frac{16}{9}F_1 F_2F_3$$
+
+Substituting fidelities of $1$ in provides what we expect:
+
+$$\frac{2}{9} + \frac{1}{9}(3) - \frac{4}{9}(3) + \frac{16}{9}$$
+$$=\frac{2}{9} + \frac{3}{9} - \frac{12}{9} + \frac{16}{9}$$
+$$=\frac{5}{9} + \frac{4}{9}$$
+$$=1$$
+
+In short, the order of SWAP does \emph{not} matter.  What may matter is if SWAP-ing and holding that link between the two nodes pushes it below a permitted Fidelity due to the rate of decoherence.
 \end{document}
 
 \section{TODO}
 \begin{itemize}
-    \item
+    \item Check if it is better to generate higher fidelity link first and store it in carbon with slower decoherence or better to store link with lower fidelity in slower decoherence.  Due to the SWAP delay at a node we might want the extra time a higher fidelity link permits us to perform the SWAP rather than using a lower fidelity link that becomes awfully worse during the delay...
 \end{itemize}

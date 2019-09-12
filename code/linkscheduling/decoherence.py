@@ -5,13 +5,26 @@ import numpy as np
 from netsquid import simutil
 from netsquid.components.instructions import INSTR_INIT
 from netsquid.protocols import TimedProtocol
-from netsquid.qubits.qubitapi import create_qubits, measure, operate, set_qstate_formalism, QFormalism, fidelity
-from netsquid.qubits.ketstates import b00, b01, b10, b11
+from netsquid.qubits.qubitapi import create_qubits, measure, operate, set_qstate_formalism, QFormalism, fidelity, reduced_dm
+from netsquid.qubits.ketstates import b00, b01, b10, b11, s0, s1, h0, h1
 from netsquid.qubits.operators import CNOT, H, X, Z
 from netsquid_netconf.easynetwork import setup_physical_network
+from netsquid.components.qprogram import QuantumProgram
+from netsquid_physlayer import qProgramLibrary as qprgms
+
 
 set_qstate_formalism(QFormalism.DM)
 
+#custom kets
+sh00 = np.kron(s0, h0)
+sh01 = np.kron(s0, h1)
+sh10 = np.kron(s1, h0)
+sh11 = np.kron(s1, h1)
+
+sb00 = (sh00 + sh11) / np.sqrt(2)
+sb01 = (sh01 + sh10) / np.sqrt(2)
+sb10 = (sh00 - sh11) / np.sqrt(2)
+sb11 = (sh01 - sh10) / np.sqrt(2)
 
 def create_link_between_nodes(node1, loc1, node2, loc2, track=True, track_timestep=10000):
     # Create bell pair
@@ -76,7 +89,7 @@ class FidelityTrackingProtocol(TimedProtocol):
             self.fidelities.append(F)
 
 
-def single_vs_double_device_decoherence():
+def single_vs_double_device_decoherence_no_noise():
     config_path = "/Users/mskrzypczyk/Documents/projects/LinkScheduling/code/linkscheduling/config/two_uniform_device.json"
     network = setup_physical_network(config_file=config_path)
     node0 = network.get_node_by_id(0)
@@ -84,62 +97,339 @@ def single_vs_double_device_decoherence():
     node1 = network.get_node_by_id(1)
     device1 = node1.components['bob']
 
-    # Single device decoherence
+    # Single device decoherence in electron and carbon
     q1, q2 = create_qubits(2)
+    q3, q4 = create_qubits(2)
     operate([q1], H)
     operate([q1, q2], CNOT)
 
+    operate([q3], H)
+    operate([q3, q4], CNOT)
+
     device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device0.execute_instruction(INSTR_INIT, [1], qubit=q3, physical=False)
     simutil.sim_reset()
 
     total_time = 2000000  # 2ms
     num_points = 20
     timesteps = np.linspace(0, total_time, num_points)
-    fidelities_single_device = []
+    fidelities_single_device_electron = []
+    fidelities_single_device_carbon = []
     for timestep in timesteps:
         simutil.sim_run(end_time=timestep)
         dm = device0.peek(0)[0].qstate.dm
         # Compute fidelity
         F = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
-        fidelities_single_device.append(F)
+        fidelities_single_device_electron.append(F)
 
+        dm = device0.peek(1)[0].qstate.dm
+        # Compute fidelity
+        F = max([fidelity(qubits=[q3, q4], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_single_device_carbon.append(F)
 
     device0.pop(0)
-    # Double device decoherence
+    device0.pop(1)
+
+    # Double device decoherence in electrons and carbons
     q1, q2 = create_qubits(2)
+    q3, q4 = create_qubits(2)
     operate([q1], H)
     operate([q1, q2], CNOT)
 
-    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
-    device1.execute_instruction(INSTR_INIT, [0], qubit=q2, physical=False)
+    operate([q3], H)
+    operate([q3, q4], CNOT)
 
-    fidelities_double_device = []
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device0.execute_instruction(INSTR_INIT, [1], qubit=q3, physical=False)
+    device1.execute_instruction(INSTR_INIT, [0], qubit=q2, physical=False)
+    device1.execute_instruction(INSTR_INIT, [1], qubit=q4, physical=False)
+
+    fidelities_double_device_electron = []
+    fidelities_double_device_carbon = []
     for timestep in timesteps:
         simutil.sim_run(end_time=total_time + timestep)
         dm = device0.peek(0)[0].qstate.dm
         device1.peek(0)
         # Compute fidelity
         F = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
-        fidelities_double_device.append(F)
+        fidelities_double_device_electron.append(F)
 
+        dm = device0.peek(1)[0].qstate.dm
+        device1.peek(1)
+        # Compute fidelity
+        F = max([fidelity(qubits=[q3, q4], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_double_device_carbon.append(F)
+
+    device0.pop(0)
+    device0.pop(1)
+    device1.pop(0)
+    device1.pop(1)
+
+    # Double device decoherence in electron and carbon
+    q1, q2 = create_qubits(2)
+    operate([q1], H)
+    operate([q1, q2], CNOT)
+
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device1.execute_instruction(INSTR_INIT, [1], qubit=q2, physical=False)
+
+    fidelities_double_device_electron_and_carbon = []
+    for timestep in timesteps:
+        simutil.sim_run(end_time=2*total_time + timestep)
+        dm = device0.peek(0)[0].qstate.dm
+        device1.peek(1)
+        # Compute fidelity
+        F = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_double_device_electron_and_carbon.append(F)
+
+    device0.pop(0)
+    device1.pop(1)
 
     # Fit curves of decoherence
     def func(x, a, b, c):
-        return a * np.exp(-b * x) + c
+        return a*np.exp(-b * x) + c
 
 
     fit_timesteps = timesteps / (total_time / num_points)
-    optimizedParameters_single, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device)
-    optimizedParameters_double, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device)
+    optimizedParameters_single_electron, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_electron)
+    optimizedParameters_single_carbon, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_carbon, maxfev=10000)
+    optimizedParameters_double_electron, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron)
+    optimizedParameters_double_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_carbon, maxfev=10000)
+    optimizedParameters_double_electron_and_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron_and_carbon)
 
     # Convert to microseconds
     plot_timesteps = timesteps / 1000
-    plt.plot(plot_timesteps, fidelities_single_device, 'bo', label="true_single")
-    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single), label="fit_single")
-    plt.plot(plot_timesteps, fidelities_double_device, 'ro', label="true_double")
-    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double), label="fit_double")
+    plt.plot(plot_timesteps, fidelities_single_device_electron, 'bo', label="true_single_electron")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single_electron), label="fit_single_electron")
+    plt.plot(plot_timesteps, fidelities_double_device_electron, 'ro', label="true_double_electron")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_electron), label="fit_double_electron")
+    plt.plot(plot_timesteps, fidelities_single_device_carbon, 'go', label="true_single_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single_carbon), label="fit_single_carbon")
+    plt.plot(plot_timesteps, fidelities_double_device_carbon, 'co', label="true_double_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_carbon), label="fit_double_carbon")
+    plt.plot(plot_timesteps, fidelities_double_device_electron_and_carbon, 'yo', label="true_double_electron_and_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_electron_and_carbon), label="fit_double_electron_and_carbon")
     plt.legend()
     plt.xlabel("Time (microseconds)")
+    plt.ylabel("Fidelity")
+    plt.show()
+    pdb.set_trace()
+
+
+def _build_move_program():
+    """Build and return a move program"""
+    prgm = QuantumProgram()
+    qs = prgm.get_qubit_indices(2)
+    qprgms.move_using_CXDirections(prgm, qs[0], qs[1])
+
+    return prgm
+
+
+def run_to_move_completion(device):
+    amount_of_time = 0
+    while device.busy:
+        amount_of_time += 1000
+        simutil.sim_run(duration=1000)
+
+    return amount_of_time
+
+
+def single_vs_double_device_decoherence_with_noise():
+    config_path = "/Users/mskrzypczyk/Documents/projects/LinkScheduling/code/linkscheduling/config/four_uniform_device.json"
+    network = setup_physical_network(config_file=config_path)
+    node0 = network.get_node_by_id(0)
+    device0 = node0.components['alice']
+    node1 = network.get_node_by_id(1)
+    device1 = node1.components['bob']
+    node0 = network.get_node_by_id(2)
+    device2 = node0.components['charlie']
+    node1 = network.get_node_by_id(3)
+    device3 = node1.components['david']
+
+    # Single device decoherence in electron and carbon
+    q1, q2 = create_qubits(2)
+    q3, q4 = create_qubits(2)
+    operate([q1], H)
+    operate([q1, q2], CNOT)
+
+    operate([q3], H)
+    operate([q3, q4], CNOT)
+
+    q5, q6 = create_qubits(2)
+
+    simutil.sim_reset()
+    swap_delay = 2000000000  # 1s
+    prgm = _build_move_program()
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device0.execute_instruction(INSTR_INIT, [1], qubit=q5, physical=False)
+    simutil.sim_run(duration=swap_delay)
+    device0.peek(0)
+    device0.peek(1)
+
+    device0_noise = [mp.noise_model for mp in device0._memory_positions[0:2]]
+    device0._memory_positions[0].noise_model = None
+    device0._memory_positions[1].noise_model = None
+    device0.execute_program(prgm, qubit_mapping=[0, 1])
+    amount_of_time = run_to_move_completion(device0)
+    device0.peek(0)
+    device0.peek(1)
+    device0._memory_positions[0].noise_model = device0_noise[0]
+    device0._memory_positions[1].noise_model = device0_noise[1]
+
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q3, physical=False)
+
+    total_time = 2000000000  # 2s
+    num_points = 20
+    timesteps = np.linspace(0, total_time, num_points)
+    fidelities_single_device_electron = []
+    fidelities_single_device_carbon = []
+    for timestep in timesteps:
+        simutil.sim_run(end_time=swap_delay + amount_of_time + timestep)
+        dm = device0.peek(0)[0].qstate.dm
+        # Compute fidelity
+        F = max([fidelity(qubits=[q3, q4], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_single_device_electron.append(F)
+
+        dm = device0.peek(1)[0].qstate.dm
+        # Compute fidelity
+        F = max([fidelity(qubits=[q5, q2], reference_ket=b, squared=True) for b in [sb00, sb01, sb10, sb11]])
+        fidelities_single_device_carbon.append(F)
+
+    device0.pop(0)
+    device0.pop(1)
+
+    # Double device decoherence in electrons and carbons
+    q1, q2 = create_qubits(2)
+    q3, q4 = create_qubits(2)
+    operate([q1], H)
+    operate([q1, q2], CNOT)
+
+    operate([q3], H)
+    operate([q3, q4], CNOT)
+
+    q5, q6 = create_qubits(2)
+
+    device2.execute_instruction(INSTR_INIT, [0], qubit=q3, physical=False)
+    device3.execute_instruction(INSTR_INIT, [0], qubit=q4, physical=False)
+    device2.execute_instruction(INSTR_INIT, [1], qubit=q5, physical=False)
+    device3.execute_instruction(INSTR_INIT, [1], qubit=q6, physical=False)
+    simutil.sim_run(duration=swap_delay)
+    device2.peek(0)
+    device2.peek(1)
+    device3.peek(0)
+    device3.peek(1)
+
+    device2_noise = [mp.noise_model for mp in device2._memory_positions[0:2]]
+    device2._memory_positions[0].noise_model = None
+    device2._memory_positions[1].noise_model = None
+    device3_noise = [mp.noise_model for mp in device3._memory_positions[0:2]]
+    device3._memory_positions[0].noise_model = None
+    device3._memory_positions[1].noise_model = None
+
+    device2.execute_program(prgm, qubit_mapping=[0, 1])
+    device3.execute_program(prgm, qubit_mapping=[0, 1])
+
+    amount_of_time = run_to_move_completion(device2)
+    device2.peek(0)
+    device2.peek(1)
+    device3.peek(0)
+    device3.peek(1)
+    device2._memory_positions[0].noise_model = device2_noise[0]
+    device2._memory_positions[1].noise_model = device2_noise[1]
+    device3._memory_positions[0].noise_model = device3_noise[0]
+    device3._memory_positions[1].noise_model = device3_noise[1]
+
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device1.execute_instruction(INSTR_INIT, [0], qubit=q2, physical=False)
+
+    fidelities_double_device_electron = []
+    fidelities_double_device_carbon = []
+    for timestep in timesteps:
+        simutil.sim_run(end_time=total_time + 2*amount_of_time + 2*swap_delay + timestep)
+        dm = device0.peek(0)[0].qstate.dm
+        device1.peek(0)
+        # Compute fidelity
+        F = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_double_device_electron.append(F)
+
+        dm = device2.peek(1)[0].qstate.dm
+        device3.peek(1)
+        # Compute fidelity
+        F = max([fidelity(qubits=[q5, q6], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+        fidelities_double_device_carbon.append(F)
+
+    device0.pop(0)
+    device1.pop(0)
+    device2.pop(1)
+    device3.pop(1)
+
+    # Double device decoherence in electron and carbon
+    q1, q2 = create_qubits(2)
+    operate([q1], H)
+    operate([q1, q2], CNOT)
+
+    q3, q4 = create_qubits(2)
+
+    device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
+    device1.execute_instruction(INSTR_INIT, [0], qubit=q2, physical=False)
+    device0.execute_instruction(INSTR_INIT, [1], qubit=q3, physical=False)
+    device1.execute_instruction(INSTR_INIT, [1], qubit=q4, physical=False)
+
+    simutil.sim_run(duration=swap_delay)
+    device0.peek(0)
+    device0.peek(1)
+    device1.peek(0)
+    device1.peek(1)
+
+    device1_noise = [mp.noise_model for mp in device3._memory_positions[0:2]]
+    device1._memory_positions[0].noise_model = None
+    device1._memory_positions[1].noise_model = None
+    device1.execute_program(prgm, qubit_mapping=[0, 1])
+    amount_of_time = run_to_move_completion(device1)
+
+    device1.peek(0)
+    device1.peek(1)
+    device1._memory_positions[0].noise_model = device1_noise[0]
+    device1._memory_positions[1].noise_model = device1_noise[1]
+
+    fidelities_double_device_electron_and_carbon = []
+    for timestep in timesteps:
+        simutil.sim_run(end_time=2*total_time + 3*amount_of_time + 3*swap_delay + timestep)
+        dm = device0.peek(0)[0].qstate.dm
+        device1.peek(1)
+        # Compute fidelity
+        F = max([fidelity(qubits=[q1, q4], reference_ket=b, squared=True) for b in [sb00, sb01, sb10, sb11]])
+        fidelities_double_device_electron_and_carbon.append(F)
+
+    device0.pop(0)
+    device1.pop(1)
+
+    # Fit curves of decoherence
+    def func(x, a, b, c):
+        return a*np.exp(-b * x) + c
+
+
+    fit_timesteps = timesteps / (total_time / num_points)
+    optimizedParameters_single_electron, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_electron)
+    optimizedParameters_single_carbon, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_carbon)
+    optimizedParameters_double_electron, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron)
+    optimizedParameters_double_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_carbon)
+    optimizedParameters_double_electron_and_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron_and_carbon)
+
+    # Convert to microseconds
+    plot_timesteps = timesteps / 1000000000
+    plt.plot(plot_timesteps, fidelities_single_device_electron, 'bo', label="true_single_electron")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single_electron), color='b',label="fit_single_electron")
+    plt.plot(plot_timesteps, fidelities_double_device_electron, 'ro', label="true_double_electron")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_electron), color='r', label="fit_double_electron")
+    plt.plot(plot_timesteps, fidelities_single_device_carbon, 'go', label="true_single_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single_carbon), color='g', label="fit_single_electron")
+    plt.plot(plot_timesteps, fidelities_double_device_carbon, 'co', label="true_double_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_carbon), color='c', label="fit_double_electron")
+    plt.plot(plot_timesteps, fidelities_double_device_electron_and_carbon, 'yo', label="true_double_electron_and_carbon")
+    plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_double_electron_and_carbon), color='y', label="fit_double_electron_and_carbon")
+    plt.legend()
+    plt.xlabel("Time (seconds)")
     plt.ylabel("Fidelity")
     plt.show()
     pdb.set_trace()
@@ -323,8 +613,8 @@ def five_device_uniform_decoherence():
     simutil.sim_run(duration=swap_delay)
 
     # SWAP the link
-    p4 = perform_swap(node1, [p0, p2], node0, 0)
     perform_swap(node2)
+    p4 = perform_swap(node1, [p0, p2], node0, 0)
 
     # Next "create" the second bell pair and store this one in bob's electron
     link_gen_time = 40000
@@ -351,7 +641,7 @@ def five_device_uniform_decoherence():
     pdb.set_trace()
 
 
-if __name__=='__main__':
-    five_device_uniform_decoherence()
+if __name__ == '__main__':
+    single_vs_double_device_decoherence_with_noise()
 
 
