@@ -2,17 +2,12 @@ import copy
 from job import Job, JobOrdering
 from schedule import LinkSchedule
 from random import randint
-from math import ceil
+from math import ceil, exp, log
 
 # Assume all schedules are clear so links can be scheduled immediately after/before one another
 # Assume each node has a single communication qubit (should be extendable if a schedule is provided for each of
 # of the communication qubits and one is selected)
 # Dynamic programming to brute force optimal solutions
-
-
-def compute_swapped_fidelity(f1, f2):
-    fswap = f1*f2 + (1-f1)*(1-f2)/3
-    return fswap
 
 
 def greedy(jobs, schedules):
@@ -116,6 +111,39 @@ def brute_force_helper(jobs, job_ordering, index):
         return job_ordering_post
 
 
+def compute_job_ordering_brute_force(jobs, link_schedules):
+    potential_job_slots = []
+    for j, ls in zip(jobs, link_schedules):
+        num_slots_for_job = ceil(j.duration / ls.get_slot_size())
+        c_slots = ls.get_continuous_slots(min_size=num_slots_for_job)
+        if not c_slots:
+            return False
+        potential_job_slots.append(c_slots)
+
+
+def compute_swapped_fidelity(Fx, Fy):
+    Fswap = Fx * Fy + (1 - Fx) * (1 - Fy) / 3
+    return Fswap
+
+
+def three_link_swap_fidelity(Fx, Fy, Fz):
+    Fxy = Fx*Fy
+    Fxz = Fx*Fz
+    Fyz = Fy*Fz
+    Fxyz = Fxy*Fz
+    return (2 + (Fx + Fy + Fz) - 4*(Fxy + Fyz + Fxz) + 16 * Fxyz) / 9
+
+
+def decohered_fidelity(F0, w, t):
+    return (F0 * exp(-w * t) + 1) / 2
+
+
+def brute_force_helper(jobs, link_schedules, slots):
+
+    if len(slots) == len(jobs):
+        return
+
+
 def compute_job_ordering(jobs, link_schedules):
     # First check if each link schedule has an available slot for it's job
     potential_job_slots = []
@@ -201,6 +229,13 @@ def compute_schedule(jobs, schedules):
     link_schedules = compute_link_availability(schedules)
     metric, slots = compute_job_ordering(jobs, link_schedules)
     insert_jobs_into_schedules(jobs, slots, schedules)
+
+
+def create_jobs(n):
+    # Create jobs and store the following information within the parameters:
+    # a, b, c for fidelity fit a*e^(-b*t) + c
+    # - for decoherence in electron/carbon for both nodes (obtaining double carbon/double electron/carbonelectron just sums)
+
 
 
 def main():

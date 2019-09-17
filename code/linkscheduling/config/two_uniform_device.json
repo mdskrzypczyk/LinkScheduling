@@ -181,6 +181,14 @@
     "bob": {
       "ID": 1,
       "qpd_config": "default"
+    },
+    "charlie": {
+      "ID": 2,
+      "qpd_config": "default"
+    },
+    "david": {
+      "ID": 3,
+      "qpd_config": "default"
     }
   },
   "connections": []

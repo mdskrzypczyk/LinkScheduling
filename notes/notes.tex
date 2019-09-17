@@ -36,6 +36,7 @@
 This plot was generated using the following values for $T_1/T_2$ times sourced from the experimental realizations discussed in \emph{A Link Layer Protocol for Quantum Networks}.
 
 \begin{table}[!htb]
+\centering
 \begin{tabular}{|l|l|l|l|l|}
 \hline
               & Electron $T_1$ & Electron $T_2$ & Carbon $T_1$ & Carbon $T_2$ \\
@@ -84,8 +85,57 @@ Additional plots of decoherence consider inserting a delay before the SWAP occur
     \label{fig:decoherence_2000_delay}
 \end{figure}
 
+\begin{table}[!htb]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
+\hline
+Fidelity before SWAP  & 1 & 0.9669 & 0.9213 & 0.855 & 0.752 & 0.6269 \\
+\hline
+Fidelity after SWAP   & 0.9668 & 0.9353 & 0.892 & 0.8289 & 0.7311 & 0.6122 \\
+\hline
+\end{tabular}
+\caption{Fidelity pre/post SWAP for different initial fidelities when one electron perfectly stored and other in device.}
+\end{table}
+
+\begin{table}[!htb]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
+\hline
+Fidelity before SWAP  & 1 & 0.936 & 0.855 & 0.752 & 0.627 & 0.532 \\
+\hline
+Fidelity after SWAP   & 0.935 & 0.8772 & 0.804 & 0.711 & 0.5981 & 0.5123 \\
+\hline
+\end{tabular}
+\caption{Fidelity pre/post SWAP for different initial fidelities when both electrons in device and both moved.}
+\end{table}
+
+\begin{table}[!htb]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
+\hline
+Fidelity before SWAP  & 1 & 0.936 & 0.855 & 0.752 & 0.6269 & 0.532 \\
+\hline
+Fidelity after SWAP   & 0.9664 & 0.9056 & 0.8287 & 0.7309 & 0.6121 & 0.522 \\
+\hline
+\end{tabular}
+\caption{Fidelity pre/post SWAP for different initial fidelities when both electrons in device and one moved.}
+\end{table}
+
+Note that the fidelities for moving entanglement into the carbons on both devices actually yields a higher fidelity.  This is because while one move is happening the electron is decohering at the other node.  Should verify that noise during the gate operation can be removed which is how this data was generated.
+
 \section{Cost functions}
 Objective functions to optimize with choice of link scheduling.
+
+\subsection{Maximized Final Fidelity}
+While it may be overkill, in practice this may reduce the number of requests into the network if the fidelity of the produced entanglement is good enough to not try and request it again (while it is more expensive).
+
+Should take into consideration how fidelity evolves across the entire link due to changes in decoherence rate from SWAP-ing (may not be a problem if we assume a homegeneous device network).
 
 \subsection{Minimized Weighted Idle Time}
 
@@ -165,6 +215,10 @@ Share schedules of nodes along path and insert slots for when time should be spe
         \item Prune to isolate valid pairs of adjacent slots that allow SWAP-ing to achieve reasonable fidelity.
         \begin{itemize}
             \item "Window" adjacent schedules to find pairs of slots.  Window size should tolerate occupied slots between available slots.  May be based on achievable fidelity and how low we can accept the fidelity to become before the second link generates.
+            \begin{itemize}
+                \item Use $F_{SWAP}=F_1 F_2 + \frac{(1-F_1)(1-F_2)}{3}$, if windowing links in the past, set $F_1$ to the fidelity produced of the previous link, set $F_2=ae^{-w(t_0+t)} + c$ with $t_0$ corresponding to the initial link fidelity, compute maximum $t$ such that $F_{SWAP} \geq F_T$ where $F_T$ is some lower threshold on the needed fidelity.  Only consider links in the past that complete within $t$ time before previous link is \emph{finished} generating.
+                \item If windowing in the future, set $F_2$ to the initial fidelity of the next link and compute $F_1=ae^{-w(t_0+t)}+c$ similarly. Similar to above but treat the previous link as the one in the past and see how far into the future you can generate a link.
+            \end{itemize}
             \item Can we order these slot pairs by a greedy heuristic?
             \item Can also order based on how much faster/slower a link would degrade the sooner we can push a SWAP through to a device that decoheres less.
         \end{itemize}
@@ -216,4 +270,6 @@ In short, the order of SWAP does \emph{not} matter.  What may matter is if SWAP-
 \section{TODO}
 \begin{itemize}
     \item Check if it is better to generate higher fidelity link first and store it in carbon with slower decoherence or better to store link with lower fidelity in slower decoherence.  Due to the SWAP delay at a node we might want the extra time a higher fidelity link permits us to perform the SWAP rather than using a lower fidelity link that becomes awfully worse during the delay...
+    \item Add SWAP noise to link SWAP-ing plots in decoherence.py
+    \item Find a way to estimate how much a move to carbon reduces fidelity, or consider supplying initial link fidelity if move occurs from electron to carbon
 \end{itemize}

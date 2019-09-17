@@ -110,7 +110,7 @@ def single_vs_double_device_decoherence_no_noise():
     device0.execute_instruction(INSTR_INIT, [1], qubit=q3, physical=False)
     simutil.sim_reset()
 
-    total_time = 2000000  # 2ms
+    total_time = 2000000000  # 2s
     num_points = 20
     timesteps = np.linspace(0, total_time, num_points)
     fidelities_single_device_electron = []
@@ -186,19 +186,19 @@ def single_vs_double_device_decoherence_no_noise():
     device1.pop(1)
 
     # Fit curves of decoherence
-    def func(x, a, b, c):
-        return a*np.exp(-b * x) + c
+    def func(x, b):
+        return 0.5 * np.exp(-b * x) + 0.5
 
 
     fit_timesteps = timesteps / (total_time / num_points)
-    optimizedParameters_single_electron, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_electron)
+    optimizedParameters_single_electron, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_electron, maxfev=10000)
     optimizedParameters_single_carbon, pcov_single = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_single_device_carbon, maxfev=10000)
-    optimizedParameters_double_electron, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron)
+    optimizedParameters_double_electron, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron, maxfev=10000)
     optimizedParameters_double_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_carbon, maxfev=10000)
-    optimizedParameters_double_electron_and_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron_and_carbon)
+    optimizedParameters_double_electron_and_carbon, pcov_double = opt.curve_fit(f=func, xdata=fit_timesteps, ydata=fidelities_double_device_electron_and_carbon, maxfev=10000)
 
     # Convert to microseconds
-    plot_timesteps = timesteps / 1000
+    plot_timesteps = timesteps / 100000000
     plt.plot(plot_timesteps, fidelities_single_device_electron, 'bo', label="true_single_electron")
     plt.plot(plot_timesteps, func(fit_timesteps, *optimizedParameters_single_electron), label="fit_single_electron")
     plt.plot(plot_timesteps, fidelities_double_device_electron, 'ro', label="true_double_electron")
@@ -233,6 +233,36 @@ def run_to_move_completion(device):
 
     return amount_of_time
 
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+# VERIFY THE FITTING AND DECOHERENCE WEIGHTS
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
+######################################################
 
 def single_vs_double_device_decoherence_with_noise():
     config_path = "/Users/mskrzypczyk/Documents/projects/LinkScheduling/code/linkscheduling/config/four_uniform_device.json"
@@ -258,13 +288,15 @@ def single_vs_double_device_decoherence_with_noise():
     q5, q6 = create_qubits(2)
 
     simutil.sim_reset()
-    swap_delay = 2000000000  # 1s
+    swap_delay = 2000000000  # 2s
     prgm = _build_move_program()
     device0.execute_instruction(INSTR_INIT, [0], qubit=q1, physical=False)
     device0.execute_instruction(INSTR_INIT, [1], qubit=q5, physical=False)
     simutil.sim_run(duration=swap_delay)
     device0.peek(0)
     device0.peek(1)
+    initial_fidelity_single_device_carbon = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+
 
     device0_noise = [mp.noise_model for mp in device0._memory_positions[0:2]]
     device0._memory_positions[0].noise_model = None
@@ -318,6 +350,7 @@ def single_vs_double_device_decoherence_with_noise():
     device2.peek(1)
     device3.peek(0)
     device3.peek(1)
+    initial_fidelity_double_device_carbon = max([fidelity(qubits=[q3, q4], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
 
     device2_noise = [mp.noise_model for mp in device2._memory_positions[0:2]]
     device2._memory_positions[0].noise_model = None
@@ -380,13 +413,17 @@ def single_vs_double_device_decoherence_with_noise():
     device0.peek(1)
     device1.peek(0)
     device1.peek(1)
+    initial_fidelity_double_device_electron_and_carbon = max([fidelity(qubits=[q1, q2], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
+
 
     device1_noise = [mp.noise_model for mp in device3._memory_positions[0:2]]
     device1._memory_positions[0].noise_model = None
     device1._memory_positions[1].noise_model = None
     device1.execute_program(prgm, qubit_mapping=[0, 1])
     amount_of_time = run_to_move_completion(device1)
-
+    operate(q4, H)
+    device0.peek(0)
+    device1.peek(1)
     device1.peek(0)
     device1.peek(1)
     device1._memory_positions[0].noise_model = device1_noise[0]
@@ -398,7 +435,7 @@ def single_vs_double_device_decoherence_with_noise():
         dm = device0.peek(0)[0].qstate.dm
         device1.peek(1)
         # Compute fidelity
-        F = max([fidelity(qubits=[q1, q4], reference_ket=b, squared=True) for b in [sb00, sb01, sb10, sb11]])
+        F = max([fidelity(qubits=[q1, q4], reference_ket=b, squared=True) for b in [b00, b01, b10, b11]])
         fidelities_double_device_electron_and_carbon.append(F)
 
     device0.pop(0)
@@ -431,7 +468,17 @@ def single_vs_double_device_decoherence_with_noise():
     plt.legend()
     plt.xlabel("Time (seconds)")
     plt.ylabel("Fidelity")
-    plt.show()
+    print("Swap Delay: {}".format(swap_delay / 1000000000))
+    print("Single device carbon:")
+    print(initial_fidelity_single_device_carbon)
+    print(fidelities_single_device_carbon[0])
+    print("Double device carbons:")
+    print(initial_fidelity_double_device_carbon)
+    print(fidelities_double_device_carbon[0])
+    print("Double device electron and carbon:")
+    print(initial_fidelity_double_device_electron_and_carbon)
+    print(fidelities_double_device_electron_and_carbon[0])
+    # plt.show()
     pdb.set_trace()
 
 
@@ -642,6 +689,6 @@ def five_device_uniform_decoherence():
 
 
 if __name__ == '__main__':
-    single_vs_double_device_decoherence_with_noise()
+    single_vs_double_device_decoherence_no_noise()
 
 
