@@ -1,7 +1,8 @@
+import numpy as np
 from collections import defaultdict
-from linkscheduling.log import LSLogger
+from log import LSLogger
 from math import ceil
-from linkscheduling.util import Time, SimTime
+from util import Time, SimTime
 
 DEFAULT_SCHEDULE_SIZE = 100
 DEFAULT_SLOT_SIZE = 100000
@@ -103,10 +104,14 @@ class Schedule:
                                                                                                    self.schedule_size))
 
         # Get a list of the job information for the specified slots
-        job_view = [self.job_lookup[job_ID] if job_ID is not None else None
+        job_view = [self.replace_with_name(self.job_lookup[job_ID]) if job_ID is not None else None
                     for job_ID in self.jobs[start_slot:window_size]]
 
         return job_view
+
+    def replace_with_name(self, job_tuple):
+        s, d, j = job_tuple
+        return np.round(s, decimals=3), np.round(d, decimals=3), j.name
 
     def insert_job(self, job, start_time, duration):
         # Check if the start time is in the past
@@ -122,7 +127,7 @@ class Schedule:
 
         # Convert to slot information
         time_diff = start_time - self.head_time
-        starting_slot = time_diff // self.slot_size
+        starting_slot = int(np.round(time_diff / self.slot_size))
         num_occupied_slots = ceil(duration / self.slot_size)
         job_ID = job.get_ID()
 

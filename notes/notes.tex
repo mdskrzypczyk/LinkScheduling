@@ -52,80 +52,52 @@ From the collected data it also appears that if we fit the curves with $f=ae^{-b
 Additional plots of decoherence consider inserting a delay before the SWAP occurs from the electron to the carbon.
 \begin{figure}[!htb]
     \centering
-    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_100ms.png}
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_0ms.png}
+    \caption{Plot of decoherences with move delay of $100ms$.}
+    \label{fig:decoherence_0_delay}
+\end{figure}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_100ms.png}
     \caption{Plot of decoherences with SWAP delay of $100ms$.}
     \label{fig:decoherence_100_delay}
 \end{figure}
 
 \begin{figure}[!htb]
     \centering
-    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_250ms.png}
-    \caption{Plot of decoherences with SWAP delay of $250ms$.}
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_250ms.png}
+    \caption{Plot of decoherences with move delay of $250ms$.}
     \label{fig:decoherence_250_delay}
 \end{figure}
 
 \begin{figure}[!htb]
     \centering
-    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_500ms.png}
-    \caption{Plot of decoherences with SWAP delay of $500ms$.}
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_500ms.png}
+    \caption{Plot of decoherences with move delay of $500ms$.}
     \label{fig:decoherence_500_delay}
 \end{figure}
 
 \begin{figure}[!htb]
     \centering
-    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_1000ms.png}
-    \caption{Plot of decoherences with SWAP delay of $1000ms$.}
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_1000ms.png}
+    \caption{Plot of decoherences with move delay of $1000ms$.}
     \label{fig:decoherence_1000_delay}
 \end{figure}
 
 \begin{figure}[!htb]
     \centering
-    \includegraphics[width=\textwidth]{figures/decoherence_swap_delay_2000ms.png}
-    \caption{Plot of decoherences with SWAP delay of $2000ms$.}
+    \includegraphics[width=\textwidth]{figures/decoherence_move_delay_2000ms.png}
+    \caption{Plot of decoherences with move delay of $2000ms$.}
     \label{fig:decoherence_2000_delay}
 \end{figure}
 
-\begin{table}[!htb]
-\centering
-\begin{tabular}{|l|l|l|l|l|l|l|}
-\hline
-  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
-\hline
-Fidelity before SWAP  & 1 & 0.9669 & 0.9213 & 0.855 & 0.752 & 0.6269 \\
-\hline
-Fidelity after SWAP   & 0.9668 & 0.9353 & 0.892 & 0.8289 & 0.7311 & 0.6122 \\
-\hline
-\end{tabular}
-\caption{Fidelity pre/post SWAP for different initial fidelities when one electron perfectly stored and other in device.}
-\end{table}
-
-\begin{table}[!htb]
-\centering
-\begin{tabular}{|l|l|l|l|l|l|l|}
-\hline
-  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
-\hline
-Fidelity before SWAP  & 1 & 0.936 & 0.855 & 0.752 & 0.627 & 0.532 \\
-\hline
-Fidelity after SWAP   & 0.935 & 0.8772 & 0.804 & 0.711 & 0.5981 & 0.5123 \\
-\hline
-\end{tabular}
-\caption{Fidelity pre/post SWAP for different initial fidelities when both electrons in device and both moved.}
-\end{table}
-
-\begin{table}[!htb]
-\centering
-\begin{tabular}{|l|l|l|l|l|l|l|}
-\hline
-  Delay before SWAP ($ms$)  & 0 & 100 & 250 & 500 & 1000 & 2000 \\
-\hline
-Fidelity before SWAP  & 1 & 0.936 & 0.855 & 0.752 & 0.6269 & 0.532 \\
-\hline
-Fidelity after SWAP   & 0.9664 & 0.9056 & 0.8287 & 0.7309 & 0.6121 & 0.522 \\
-\hline
-\end{tabular}
-\caption{Fidelity pre/post SWAP for different initial fidelities when both electrons in device and one moved.}
-\end{table}
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/move_decoherence.png}
+    \caption{Plot of initial fidelity/post-move fidelity.}
+    \label{fig:decoherence_move}
+\end{figure}
 
 Note that the fidelities for moving entanglement into the carbons on both devices actually yields a higher fidelity.  This is because while one move is happening the electron is decohering at the other node.  Should verify that noise during the gate operation can be removed which is how this data was generated.
 
