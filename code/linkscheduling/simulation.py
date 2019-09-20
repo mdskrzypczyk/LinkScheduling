@@ -4,7 +4,8 @@ from random import randint, choice, sample
 from collections import defaultdict
 from time import time
 from schedule import Schedule, LinkSchedule
-from compute_schedule_fidelity import brute_force_optimal_schedule, heuristic_search_schedule, LinkJob
+from compute_schedule_fidelity import brute_force_optimal_schedule, brute_force_adjacent, \
+    heuristic_search_schedule, heuristic_search_schedule_with_depth, LinkJob
 
 
 def print_schedules(machine_schedules):
@@ -167,10 +168,8 @@ def crossing_triangle_network_parameters():
 
 
 def network_simulation(num_machines, machine_params, links, link_params, paths, sched_func):
-    start_time = time()
-
     # Schedules with 20 slots with 0.1s per slot
-    machine_schedules = [Schedule(schedule_size=100, slot_size=0.1) for m in range(num_machines)]
+    machine_schedules = [Schedule(schedule_size=25, slot_size=0.1) for m in range(num_machines)]
 
     # Link job descriptions (assume the same for now)
     link_slots = dict([(l, get_link_availability(machine_schedules[l[0]], machine_schedules[l[1]], duration=link_params[l][1])) for l in links])
@@ -185,7 +184,7 @@ def network_simulation(num_machines, machine_params, links, link_params, paths, 
     # Iterate over each path
     path_fidelities = []
     path_timespans = []
-    for path in paths:
+    for i, path in enumerate(paths):
         # Get the jobs for this path
         link_jobs = [jobs[tuple(sorted((n1, n2)))] for n1, n2 in zip(path, path[1:])]
 
@@ -197,14 +196,13 @@ def network_simulation(num_machines, machine_params, links, link_params, paths, 
 
         # Compute the schedule
         fidelity, timespan, slots = sched_func(path_machine_params, link_jobs, job_slots)
-        pdb.set_trace()
         path_fidelities.append(fidelity)
         path_timespans.append(timespan)
         if fidelity >= 0.5:
             unique_jobs = {}
             for nodes, lj in zip(zip(path, path[1:]), link_jobs):
                 nodes = tuple(sorted(nodes))
-                new_job = LinkJob(name=nodes, ID=jobID)
+                new_job = LinkJob(name=[path, nodes], ID=jobID)
                 new_job.set_initial_fidelity(lj.get_initial_fidelity())
                 jobID += 1
                 unique_jobs[nodes] = new_job
@@ -221,8 +219,6 @@ def network_simulation(num_machines, machine_params, links, link_params, paths, 
 
         link_slots = dict([(l, get_link_availability(machine_schedules[l[0]], machine_schedules[l[1]], duration=link_params[l][1])) for l in links])
 
-    end_time = time()
-    print("Computing link schedules took {}s".format(end_time-start_time))
     return machine_schedules, path_fidelities, path_timespans
 
 
@@ -239,7 +235,7 @@ def verify_schedule(machine_schedules, path_fidelities, network_params):
     for ms in machine_schedules:
         for ID, job_info in ms.job_lookup.items():
             s, d, job = job_info
-            link = job.name
+            path, link = job.name
             scheduled_link_counts[link] += 1
 
     success = True
@@ -303,8 +299,6 @@ def generate_random_parameters(num_paths):
                 path = [u] + path
                 u = prev.get(u)
 
-            if path == []:
-                pdb.set_trace()
             paths.append(path)
 
     # (initial fidelity, expected generation time) for each link
@@ -331,13 +325,11 @@ def main():
         for path, fidelity, timespan in zip(paths, pfbf, ptbf):
             print("Path {}: Fidelity {}, Timespan {}".format(path, fidelity, timespan))
         print_schedules(msbf)
-    else:
-        pdb.set_trace()
 
 
 def main_random():
-    num_tests = 20
-    num_paths = 4
+    num_tests = 10
+    num_paths = 7
     test_output_file = "simulation_tests.txt"
     for test in range(num_tests):
         network_params = generate_random_parameters(num_paths)
@@ -347,8 +339,30 @@ def main_random():
             f.write("Parameters:\n")
             f.write("Num machines: {}\nMachine Params: {}\nLinks: {}\nLink Params: {}\nPaths: {}\n".format(*network_params))
 
+        start = time()
         msbf, pfbf, ptbf = network_simulation(*network_params, brute_force_optimal_schedule)
+        end = time()
+        tbf = end - start
+        start = time()
+        msbfa, pfbfa, ptbfa = network_simulation(*network_params, brute_force_adjacent)
+        end = time()
+        tbfa = end - start
+        start = time()
         msh, pfh, pth = network_simulation(*network_params, heuristic_search_schedule)
+        end = time()
+        th = end - start
+        start = time()
+        mshd, pfhd, pthd = network_simulation(*network_params, heuristic_search_schedule_with_depth)
+        end = time()
+        thd = end - start
+        with open(test_output_file, 'a') as f:
+            f.write("Brute force took {}s\nBrute force adjacent took {}s\nHeuristic took {}s\nHeuristic with Depth took {}s\n".format(tbf, tbfa, th, thd))
+        if [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in msbfa]:
+            with open(test_output_file, 'a') as f:
+                f.write("Brute force and Brute force adjacent computed the same schedule!\n")
+        if [ms.get_job_view() for ms in msh] == [ms.get_job_view() for ms in mshd]:
+            with open(test_output_file, 'a') as f:
+                f.write("Heuristic and Heuristic with Depth computed the same schedule!\n")
         if [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in msh]:
             with open(test_output_file, 'a') as f:
                 f.write("Brute force and Heuristic computed the same schedule!\n")
@@ -359,9 +373,29 @@ def main_random():
                 for path, fidelity, timespan in zip(paths, pfbf, ptbf):
                     f.write("Path {}: Fidelity {}, Timespan {}\n".format(path, fidelity, timespan))
                 f.write("==============================================================\n")
+        elif [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in mshd]:
+            with open(test_output_file, 'a') as f:
+                f.write("Brute force and Heuristic with Depth computed the same schedule!\n")
+                status = verify_schedule(msbf, pfbf, network_params)
+                f.write("Schedule satisfies paths? {}\n".format(status))
+                f.write("Results:\n")
+                paths = network_params[-1]
+                for path, fidelity, timespan in zip(paths, pfbf, ptbf):
+                    f.write("Path {}: Fidelity {}, Timespan {}\n".format(path, fidelity, timespan))
+                f.write("==============================================================\n")
+        elif [ms.get_job_view() for ms in msbfa] == [ms.get_job_view() for ms in mshd]:
+            with open(test_output_file, 'a') as f:
+                f.write("Brute force adjacent and Heuristic with Depth computed the same schedule!\n")
+                status = verify_schedule(msbfa, pfbfa, network_params)
+                f.write("Schedule satisfies paths? {}\n".format(status))
+                f.write("Results:\n")
+                paths = network_params[-1]
+                for path, fidelity, timespan in zip(paths, pfbfa, ptbfa):
+                    f.write("Path {}: Fidelity {}, Timespan {}\n".format(path, fidelity, timespan))
+                f.write("==============================================================\n")
         else:
             with open(test_output_file, 'a') as f:
-                f.write("Brute force and Heuristic computed different schedules!\n")
+                f.write("Brute force and Heuristics computed different schedules!\n")
                 status_bf = verify_schedule(msbf, pfbf, network_params)
                 status_h = verify_schedule(msh, pfh, network_params)
                 f.write("BF Schedule satisfies paths? {}\n".format(status_bf))
@@ -383,22 +417,39 @@ def test_specific_instance():
                       (0.68526781, 1.00004608), (0.68526781, 1.00004608), (0.68526781, 1.00004608), (0.68526781, 1.00004608),
                       (0.68526781, 1.00004608)]
     links = [(0, 2), (1, 2), (2, 5), (2, 8), (3, 5), (4, 5), (5, 8), (6, 8), (7, 8)]
-    link_params = {(0, 2): (0.96, 0.3), (1, 2): (0.76, 0.4), (2, 5): (0.6, 0.1), (2, 8): (0.73, 0.5), (3, 5): (0.65, 0.1), (4, 5): (0.88, 0.4), (5, 8): (0.99, 0.3), (6, 8): (0.93, 0.4), (7, 8): (0.93, 0.4)}
-    paths = [[2, 0], [8, 6], [7, 8], [4, 5, 8, 7]]
+    link_params = {(0, 2): (0.99, 0.2), (1, 2): (0.81, 0.4), (2, 5): (0.78, 0.1), (2, 8): (0.7, 0.3), (3, 5): (0.86, 0.3), (4, 5): (0.67, 0.4), (5, 8): (0.65, 0.5), (6, 8): (0.96, 0.3), (7, 8): (1.0, 0.1)}
+    paths = [[7, 8, 5, 3], [0, 2, 5, 4], [0, 2, 5, 3], [7, 8, 2, 1], [6, 8], [2, 5], [5, 2]]
 
+    schedules = []
+    # for i in range(1, len(paths)):
+        # network_params = num_machines, machine_params, links, link_params, paths[:i]
     network_params = num_machines, machine_params, links, link_params, paths
-    # print("Beginning brute force")
-    # start = time()
-    # msbf, pfbf, ptbf = network_simulation(*network_params, brute_force_optimal_schedule)
-    # end = time()
-    # print("Finished brute force, took {}s".format(end-start))
-    print("Beginning heuristic")
+    print("Running Brute Force")
+    start = time()
+    msbf, pfbf, ptbf = network_simulation(*network_params, brute_force_optimal_schedule)
+    end = time()
+    tbf = end - start
+    print("Running Brute Force Adjacent")
+    start = time()
+    msbfa, pfbfa, ptbfa = network_simulation(*network_params, brute_force_adjacent)
+    end = time()
+    tbfa = end - start
+    print("Running Heuristic")
     start = time()
     msh, pfh, pth = network_simulation(*network_params, heuristic_search_schedule)
     end = time()
-    print("Finished heuristic, took {}s".format(end-start))
-    import pdb
+    th = end - start
+    print("Running Heuristic with Depth")
+    start = time()
+    mshd, pfhd, pthd = network_simulation(*network_params, heuristic_search_schedule_with_depth)
+    end = time()
+    thd = end - start
+    schedules.append((msbf, msbfa, msh, mshd))
     pdb.set_trace()
+    if [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in msbfa]:
+        print("Brute force and Brute force adjacent computed the same schedule!")
+    if [ms.get_job_view() for ms in msh] == [ms.get_job_view() for ms in mshd]:
+        print("Heuristic and Heuristic with Depth computed the same schedule!")
     if [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in msh]:
         print("Brute force and Heuristic computed the same schedule!")
         status = verify_schedule(msbf, pfbf, network_params)
@@ -408,9 +459,15 @@ def test_specific_instance():
         for path, fidelity, timespan in zip(paths, pfbf, ptbf):
             print("Path {}: Fidelity {}, Timespan {}".format(path, fidelity, timespan))
         print_schedules(msbf)
-    else:
-        pdb.set_trace()
-
+    elif [ms.get_job_view() for ms in msbf] == [ms.get_job_view() for ms in mshd]:
+        print("Brute force and Heuristic with Depth computed the same schedule!")
+        status = verify_schedule(msbf, pfbf, network_params)
+        print("Schedule satisfies paths? {}".format(status))
+        print("Results:")
+        paths = network_params[-1]
+        for path, fidelity, timespan in zip(paths, pfbf, ptbf):
+            print("Path {}: Fidelity {}, Timespan {}".format(path, fidelity, timespan))
+        print_schedules(msbf)
 
 
 if __name__ == '__main__':

@@ -188,6 +188,12 @@ def compute_full_schedule_fidelity(jobs, slot_times):
     return compute_segment_fidelity(jobs, slot_times, time_last_swap)
 
 
+def brute_force_adjacent(machine_params, jobs, available_slots):
+    selected_slots = []
+    F, T, slots = brute_force_helper_adjacent(machine_params, jobs, available_slots, selected_slots, 0)
+    return F, T, slots
+
+
 def brute_force_optimal_schedule(machine_params, jobs, available_slots):
     selected_slots = []
     F, T, slots = brute_force_helper(machine_params, jobs, available_slots, selected_slots, 0)
@@ -231,7 +237,7 @@ def brute_force_helper(machine_params, jobs, available_slots, selected_slots, i)
             possible_assignment = selected_slots + [slot]
             possible_end_times = [s[1] for s in possible_assignment]
             updated_jobs = assign_qubits(machine_params, jobs, possible_end_times)
-            F = compute_full_schedule_fidelity(updated_jobs, possible_end_times)
+            F = np.round(compute_full_schedule_fidelity(updated_jobs, possible_end_times), decimals=4)
             T = np.round(max([s[1] for s in possible_assignment]) - min([s[0] for s in possible_assignment]), decimals=1)
             if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
                 bestF = F
@@ -257,6 +263,115 @@ def brute_force_helper(machine_params, jobs, available_slots, selected_slots, i)
     return bestF, bestT, best_assignment
 
 
+def find_nearest_slot(slot, slots):
+    s, e = slot
+    dist = float('inf')
+    nearest_slot = None
+    for pslot in slots:
+        ps, pe = pslot
+        if pe == e:
+            return pslot
+
+        elif abs(pe - e) < dist or nearest_slot is None:
+            dist = abs(pe - e)
+            nearest_slot = pslot
+    return nearest_slot
+
+
+def brute_force_helper_adjacent(machine_params, jobs, available_slots, selected_slots, i):
+    if i == len(jobs) - 1:
+        bestF = 0
+        bestT = float('inf')
+        best_assignment = []
+        for slot in available_slots[i]:
+            possible_assignment = selected_slots + [slot]
+            possible_end_times = [s[1] for s in possible_assignment]
+            updated_jobs = assign_qubits(machine_params, jobs, possible_end_times)
+            F = np.round(compute_full_schedule_fidelity(updated_jobs, possible_end_times), decimals=4)
+            T = np.round(max([s[1] for s in possible_assignment]) - min([s[0] for s in possible_assignment]), decimals=1)
+            if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
+                bestF = F
+                bestT = T
+                best_assignment = possible_assignment
+
+        return bestF, bestT, best_assignment
+
+    bestF = 0
+    bestT = float('inf')
+    best_assignment = []
+    for slot in available_slots[i]:
+        # Remove the current slot we're looking at from the next schedules availability since we occupy the node
+        next_node_slots = remove_nonadjacent_slots(slot, available_slots[i+1])
+        if i + 2 < len(available_slots):
+            nearest_hop_slot = find_nearest_slot(slot, available_slots[i+2])
+            next_node_slots = remove_nonadjacent_slots(nearest_hop_slot, available_slots[i+1])
+
+        altered_available_slots = available_slots[:i+1] + [next_node_slots] + available_slots[i+2:]
+        altered_selected_slots = selected_slots + [slot]
+        F, T, assignment = brute_force_helper(machine_params, jobs, altered_available_slots, altered_selected_slots, i + 1)
+        if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
+            bestF = F
+            bestT = T
+            best_assignment = assignment
+
+    return bestF, bestT, best_assignment
+
+
+def heuristic_explore_path(machine_params, jobs, selected_slots, available_slots, depth):
+    if depth == 1 or len(selected_slots) == len(jobs):
+        possible_end_times = [s[1] for s in selected_slots]
+        assign_qubits(machine_params[:len(selected_slots)], jobs[:len(selected_slots)], possible_end_times)
+        F = np.round(compute_full_schedule_fidelity(jobs[:len(selected_slots)], possible_end_times), decimals=4)
+        T = np.round(max([s[1] for s in selected_slots]) - min([s[0] for s in selected_slots]), decimals=1)
+        return F, T
+
+    else:
+        adjacent_slots = remove_nonadjacent_slots(selected_slots[-1], available_slots[len(selected_slots)])
+        bestF = 0
+        bestT = float('inf')
+        for aslot in adjacent_slots:
+            possible_assignment = selected_slots + [aslot]
+            F, T = heuristic_explore_path(machine_params, jobs, possible_assignment, available_slots, depth=depth-1)
+            if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
+                bestF = F
+                bestT = T
+
+        return bestF, bestT
+
+
+def heuristic_search_schedule_with_depth(machine_params, jobs, available_slots, depth=5):
+    best_slots = []
+    bestF = 0
+    bestT = float('inf')
+    for slot in available_slots[0]:
+        selected_slots = [slot]
+        for i in range(1, len(jobs)):
+            adjacent_slots = remove_nonadjacent_slots(selected_slots[-1], available_slots[i])
+            bestCurrF = 0
+            bestCurrT = float('inf')
+            bestSlot = None
+            for aslot in adjacent_slots:
+                possible_assignment = selected_slots + [aslot]
+                F, T = heuristic_explore_path(machine_params, jobs, possible_assignment, available_slots, depth=depth)
+                if bestCurrF == 0 or (F > bestCurrF and T <= bestCurrT) or (F >= bestCurrF and T < bestCurrT):
+                    bestCurrF = F
+                    bestCurrT = T
+                    bestSlot = aslot
+
+            selected_slots.append(bestSlot)
+
+        possible_end_times = [s[1] for s in selected_slots]
+        assign_qubits(machine_params, jobs, possible_end_times)
+        F = np.round(compute_full_schedule_fidelity(jobs, possible_end_times), decimals=4)
+        T = np.round(max([s[1] for s in selected_slots]) - min([s[0] for s in selected_slots]), decimals=1)
+        if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
+            bestF = F
+            bestT = T
+            best_slots = selected_slots
+
+    return bestF, bestT, best_slots
+
+
 def heuristic_search_schedule(machine_params, jobs, available_slots):
     best_slots = []
     bestF = 0
@@ -265,8 +380,6 @@ def heuristic_search_schedule(machine_params, jobs, available_slots):
         selected_slots = [slot]
         for i in range(1, len(jobs)):
             adjacent_slots = remove_nonadjacent_slots(selected_slots[-1], available_slots[i])
-            if slot == (1.1, 1.4) and len(jobs) == 3:
-                pdb.set_trace()
             bestCurrF = 0
             bestCurrT = float('inf')
             bestSlot = None
@@ -275,7 +388,7 @@ def heuristic_search_schedule(machine_params, jobs, available_slots):
                 possible_end_times = [s[1] for s in possible_assignment]
                 assign_qubits(machine_params[:i+1], jobs[:i+1], possible_end_times)
                 F = np.round(compute_full_schedule_fidelity(jobs[:i+1], possible_end_times), decimals=4)
-                T = np.round(max([s[1] for s in selected_slots + [aslot]]) - min([s[0] for s in possible_assignment]), decimals=1)
+                T = np.round(max([s[1] for s in possible_assignment]) - min([s[0] for s in possible_assignment]), decimals=1)
                 if bestCurrF == 0 or (F > bestCurrF and T <= bestCurrT) or (F >= bestCurrF and T < bestCurrT):
                     bestCurrF = F
                     bestCurrT = T
@@ -328,7 +441,6 @@ def main():
     fin_time = time()
     print("Heuristic found schedule with fidelity {} and timespan {} using slot assignment {}".format(fidelity, timespan, slots))
     print("Took {}s".format(fin_time - start_time))
-    pdb.set_trace()
 
 
 if __name__ == "__main__":
