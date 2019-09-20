@@ -128,7 +128,7 @@ class Schedule:
         # Convert to slot information
         time_diff = start_time - self.head_time
         starting_slot = int(np.round(time_diff / self.slot_size))
-        num_occupied_slots = ceil(duration / self.slot_size)
+        num_occupied_slots = int(np.round(duration / self.slot_size))
         job_ID = job.get_ID()
 
         # Set the availability and job information in the schedule

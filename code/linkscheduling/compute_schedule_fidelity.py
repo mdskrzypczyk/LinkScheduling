@@ -98,15 +98,15 @@ def assign_qubits(machine_params, jobs, end_times):
         el, er = end_pair
 
         if el < er:
-            jl.w_right = machine_params[i+1][0]
-            jl.loc_right = "comm"
-            jr.w_left = machine_params[i+1][1]
-            jr.loc_left = "stor"
-        else:
-            jl.w_right = machine_params[i + 1][1]
+            jl.w_right = machine_params[i+1][1]
             jl.loc_right = "stor"
-            jr.w_left = machine_params[i + 1][0]
+            jr.w_left = machine_params[i+1][0]
             jr.loc_left = "comm"
+        else:
+            jl.w_right = machine_params[i + 1][0]
+            jl.loc_right = "comm"
+            jr.w_left = machine_params[i + 1][1]
+            jr.loc_left = "stor"
 
     return jobs
 
@@ -122,7 +122,8 @@ def compute_segment_fidelity(jobs, job_times, time_swap):
         w = sum(job.get_dec_params())
         F0 = job.get_initial_fidelity()
         F0 = apply_job_move_noise(F0, job)
-        return decohered_fidelity(F0, w, t=time_swap - gen_time)
+        dec_time = np.round(time_swap - gen_time, decimals=1)
+        return decohered_fidelity(F0, w, t=dec_time)
 
     # If there are two links, compute the fidelity of the earlier link, decohere, swap, and decohere
     elif len(jobs) == 2:
@@ -135,21 +136,25 @@ def compute_segment_fidelity(jobs, job_times, time_swap):
             w = sum(job_right.get_dec_params())
             Fr = job_right.get_initial_fidelity()
             Fr = apply_job_move_noise(Fr, job_right)
-            Fr = decohered_fidelity(Fr, w, t=gen_left-gen_right)
+            dec_time = np.round(gen_left - gen_right, decimals=1)
+            Fr = decohered_fidelity(Fr, w, t=dec_time)
             Fl = job_left.get_initial_fidelity()
             Fl = apply_job_move_noise(Fl, job_left)
             Fswap = compute_swapped_fidelity(Fr, Fl)
-            Fswap_decohered = decohered_fidelity(Fswap, wswap, time_swap - gen_left)
+            dec_time = np.round(time_swap - gen_left, decimals=1)
+            Fswap_decohered = decohered_fidelity(Fswap, wswap, dec_time)
 
         else:
             w = sum(job_left.get_dec_params())
             Fl = job_left.get_initial_fidelity()
             Fl = apply_job_move_noise(Fl, job_left)
-            Fl = decohered_fidelity(Fl, w, t=gen_right - gen_left)
+            dec_time = np.round(gen_right-gen_left, decimals=1)
+            Fl = decohered_fidelity(Fl, w, t=dec_time)
             Fr = job_right.get_initial_fidelity()
             Fr = apply_job_move_noise(Fr, job_right)
             Fswap = compute_swapped_fidelity(Fl, Fr)
-            Fswap_decohered = decohered_fidelity(Fswap, wswap, time_swap - gen_right)
+            dec_time = np.round(time_swap - gen_right, decimals=1)
+            Fswap_decohered = decohered_fidelity(Fswap, wswap, dec_time)
 
         return Fswap_decohered
 
@@ -179,7 +184,7 @@ def compute_segment_fidelity(jobs, job_times, time_swap):
 
 
 def compute_full_schedule_fidelity(jobs, slot_times):
-    time_last_swap = max(slot_times)
+    time_last_swap = np.round(max(slot_times), decimals=1)
     return compute_segment_fidelity(jobs, slot_times, time_last_swap)
 
 
@@ -190,7 +195,8 @@ def brute_force_optimal_schedule(machine_params, jobs, available_slots):
 
 
 def remove_overlapping_slots(slot, slots):
-    return list(filter(lambda x: not (slot[0] <= x[0] <= slot[1] or slot[0] <= x[1] <= slot[1]), slots))
+    filtered_slots = list(filter(lambda x: not (x[0] <= slot[0] <= x[1] or slot[0] <= x[0] <= slot[1]), slots))
+    return filtered_slots
 
 
 def remove_nonadjacent_slots(slot, slots):
@@ -201,8 +207,8 @@ def remove_nonadjacent_slots(slot, slots):
     else:
         slot_pre = None
         slot_post = None
+        s, e = slot
         for possible_slot in slots:
-            s, e = slot
             ps, pe = possible_slot
             if s > pe:
                 slot_pre = possible_slot
@@ -243,7 +249,7 @@ def brute_force_helper(machine_params, jobs, available_slots, selected_slots, i)
         altered_available_slots = available_slots[:i+1] + [next_node_slots] + available_slots[i+2:]
         altered_selected_slots = selected_slots + [slot]
         F, T, assignment = brute_force_helper(machine_params, jobs, altered_available_slots, altered_selected_slots, i + 1)
-        if bestF == 0 or (F > bestF and T <= bestT):
+        if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
             bestF = F
             bestT = T
             best_assignment = assignment
@@ -259,6 +265,8 @@ def heuristic_search_schedule(machine_params, jobs, available_slots):
         selected_slots = [slot]
         for i in range(1, len(jobs)):
             adjacent_slots = remove_nonadjacent_slots(selected_slots[-1], available_slots[i])
+            if slot == (1.1, 1.4) and len(jobs) == 3:
+                pdb.set_trace()
             bestCurrF = 0
             bestCurrT = float('inf')
             bestSlot = None
@@ -266,9 +274,9 @@ def heuristic_search_schedule(machine_params, jobs, available_slots):
                 possible_assignment = selected_slots + [aslot]
                 possible_end_times = [s[1] for s in possible_assignment]
                 assign_qubits(machine_params[:i+1], jobs[:i+1], possible_end_times)
-                F = compute_full_schedule_fidelity(jobs[:i+1], possible_end_times)
+                F = np.round(compute_full_schedule_fidelity(jobs[:i+1], possible_end_times), decimals=4)
                 T = np.round(max([s[1] for s in selected_slots + [aslot]]) - min([s[0] for s in possible_assignment]), decimals=1)
-                if bestCurrF == 0 or (F > bestCurrF and T <= bestCurrT):
+                if bestCurrF == 0 or (F > bestCurrF and T <= bestCurrT) or (F >= bestCurrF and T < bestCurrT):
                     bestCurrF = F
                     bestCurrT = T
                     bestSlot = aslot
@@ -277,9 +285,9 @@ def heuristic_search_schedule(machine_params, jobs, available_slots):
 
         possible_end_times = [s[1] for s in selected_slots]
         assign_qubits(machine_params, jobs, possible_end_times)
-        F = compute_full_schedule_fidelity(jobs, possible_end_times)
+        F = np.round(compute_full_schedule_fidelity(jobs, possible_end_times), decimals=4)
         T = np.round(max([s[1] for s in selected_slots]) - min([s[0] for s in selected_slots]), decimals=1)
-        if bestF == 0 or (F > bestF and T <= bestT):
+        if bestF == 0 or (F > bestF and T <= bestT) or (F >= bestF and T < bestT):
             bestF = F
             bestT = T
             best_slots = selected_slots
