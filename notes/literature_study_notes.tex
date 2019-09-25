@@ -1,0 +1,264 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[a4paper, margin=1in]{geometry}
+
+\title{Literature Study Notes}
+\author{mdskrzypczyk }
+\date{August 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Time Slot Allocation for Real-Time Messageswith Negotiable Distance Constraints}
+Libin Dong, Rami Melhem, Daniel Moss ́
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Could be useful for repeating schedules to get applications $n$ pairs.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item (Real-time traffic) Periodic Scheduling Problem - Events and activities to be identically repeated at a constant rate.  Periodic phenomena may arise either naturally, or as the consequence of imposed constraints for the reasons of convenience or efficiency.  In particular this may occur whenever a finite set of actions must be repeated with an infinite time horizon.
+    \begin{itemize}
+        \item Rate-monotonic-scheduling (RMS)
+        \item Earliest-deadline-first (EDF)
+    \end{itemize}
+    \item Periodic tasks/messages must satisfy a timing constraint requirement relative to the finishing time of a previous instance (ref 5), defined as the distance constraint system model
+    \begin{itemize}
+        \item Example - Along a network link of bandwidth $B$ a video stream may require data transmission at a rate of $R \times B$ where $R$ is a proportion of full bandwidth.  The average distance between the transmission of consecutive frames must be $1/R$ time slots.  In order to maintain human perception condition of video, time interval between two consecutive video frames must not exceed some maximum value, $D$, which is taken as the distance constraint requirement of the message stream.  Scheduling algorithms for periodic model are not applicable to distance constraint model.
+        \item Distance constraint scheduling closely related to pinwheel problem ($A=\{a_1,...,a_n$ with $a_1 \leq ... \leq a_n$, find an infinite sequence of symbols such that symbol $i$ occurs within any interval of $a_i$ slots).  Density $\rho(A)=\sum_{i=1}^n \frac{1}{a_i}$ used for schedules, various bounds $\rho_{max}$ based on method.
+    \end{itemize}
+    \item Average and maximum distance between slots considered the same but this characterization fails to represent real-time applications (example provided).  Can relax a distance constraint for a stream allows finding a schedule.
+    \item Paper proposes pre-allocation based scheme for scheduling $n$ message streams with rate and maximum distance constraint requirements.  Rate requirement is critical QoS requirement which cannot be violated while distance constraint is negotiable.  If a distance constraint cannot be satisfied a negotiation for relaxing it may be done and the algorithm terminates if negotiation fails.
+    \item Set of streams $\mathcal{M}=\{(A_i, D_i)\}$ where $A_i$ and $D_i$ represent numbers of slots and $A_i \leq D_i$.  Total density factor $\rho(\mathcal{M}) = \sum_{i=0}^n \frac{1}{A_i} \leq 1$ in order to obtain a feasible schedule.
+    \item First calculate the size of the schedule $N$ to satisfy above. By taking LCM of all $A_i$ we are guaranteed there is at least one such $N$, it may be large and it is possible to check if there are smaller $N$ that satisfy.  Example calculating this value is provided in Example 2.
+    \item Time slot allocation algorithm similar to EDF used.
+    \begin{itemize}
+        \item Highest priority is assigned to the message stream with earliest deadline.
+        \item Main difference is that EDF has fixed ready times and deadlines while this algorithm allows dynamically calculating ready time and deadline based on allocation of the previous instance and distance constraint requirement.
+        \item Deadline of next instance calculated so that distance between current instance and next instance does not exceed distance constraint (\emph{forward} direction).
+        \item Allocation pattern repeats every $N$ slots so distance between first instance in current template and last instance in previous template should also be constrained (\emph{backward} direction).
+        \item Algorithm sets initial distance parameter to $A_i$ and only increases towards $D_i$ when negotiation fails.
+        \item Tie-breaking EDF using $\frac{distance}{D_i}$, ie. the message stream that has least flexibility in increasing distance constraint.
+    \end{itemize}
+    \item Performance evaluation and use for WDMA passive star couplers.
+\end{itemize}
+
+\section{Assignment of Segmented Slots EnablingReliable Real-Time Transmission inIndustrial Wireless Sensor Networks}
+Dong Yang,Member, IEEE, Youzhi Xu, Hongchao Wang,Member, IEEE,Tao Zheng,Student Member, IEEE, Hao Zhang, Hongke Zhang, and Mikael Gidlund,Member, IEEE
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Retransmission strategies might be useful when considering links that may not be able to succeed within their timeslots?
+    \item Notion of superframe based on the application. What timeframe could be used for the frame in quantum networks for establishing links?
+    \item Routing-ordered slot scheduling may be useful for deciding which order the incoming batch of routes should be satisfied.
+    \item Techniques for separating slots to allow retransmision before next hop transmission cannot really be used in quantum networks due to decoherence.
+    \item SS/CCA method in FSC involves communicating with other nodes.  May work on smaller WSNs but will not work at long distances when latencies become larger.
+    \item Breaking down superframes into dedicated/shared portions may allow second chance at completing a long distance link.  Dedicated/periodic portion could be used for when multiuple pairs are requested and single pairs could go into a dedicated portion of the superframe.
+    \item Markov chain model involving the probability of successful transmission may be useful given link establishment is probabalistic.
+    \item Packet aggregation is used for ordering the slot assignments, is there a way link aggregation could be employed at this stage?
+    \item Scheduling in IWSN and classical network transmission is a waterfall process, you need to hop in one direction.  In quantum networks the long distance link can in principle be built in any order, reverse, random, etc.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item TMDA used in wireless sensor networks because it allows internal channel access contentions to be avoided totally and a significant reduction in transmission errors.
+    \item None of the existing IWSNs slot-scheduling studies [31]–[33] considered this problem. Although [33] andIEEE 802.15.4e have mentioned the shared slot (SS) scheduling for retransmission in IWSNs, they simply assign some SSs atthe end of the superframe used for retransmission.
+    \item The main motivations of this paper are from the challenges, including slot resource constraints, inefficient SS competition, routing-ordered slot scheduling, and rescheduling caused by nk or node failure, encountered in a real IWSN deployment, where the application was the real-time monitoring of welder machines.
+    \item Retransmission unpredictable, propose new shared slot competition algorithm called fast slot competition to improve success rate of retransmissions with limited slot resources.
+    \item New slot scheduling algorithm Segmented Slot Assignment (SSA) with main purpose to improve retransmission efficiency.
+    \item Concept of free node to decrease complexity and cost of rescheduling caused by link or node failure.
+    \item Duration of superframe chosen based on the sampling period of IWSN application network.  Used 500 ms and due to slot length in WirelessHART standard of 10ms this means each superframe has 50 slots.
+    \item Devices assumed to have simplex radios meaning one slot used for receiving and one slot for transmitting.  Some slots are dedicated to retransmitting erroneous packets as well as periodic messages like keep-alive, need to consider how to use slots in a good way.
+    \item Routing-ordered slot scheduling - Consider the order of routes and corresponding slot assignments.
+    \item Rescheduling costs bandwidth and time to update all nodes (ref 37 highlight).  Paper defines metrics rescheduling convergence time (time period from a link or node failure to recovery by rescheduling, #slots) and rescheduling overhead (Rescheduling information issued to the related nodes and is quantified by the number of related nodes).
+    \item Superframes broken into a dedicated-slot part and a shared-slot part where dedicated-slot portion used for periodic sample packets and shared-slot part used for retransmission of error packets.
+    \item Fast Slot Competition (FSC)
+    \begin{itemize}
+        \item Current exponential backoff algorithms for CSMA/CA result in shared slot running out of current superframe, aggravated by restraint SS resource.  Aims to improve retransmission success rate in current superframe with limited number of SS.
+        \item CCA used in IEEE wireless standards to determine whether a medium is idle. FSC embeds multiple CCA slots into SS for channel sense operation.  In this scheme, when a CCA slot (chosen at random from within the SS) is detected to see that the SS is idle, a preamble reserving the channel is sent immediately.  Competitors see this preamble and wait until the next SS to compete without exponential backoff.
+        \item Analysis includes Markov chain formulation and analysis with number of dedicated-slots/shared-slots/probability of successful transmission.
+    \end{itemize}
+    \item Shared slots are not placed after every dedicated slot due to restricted slot resources.
+    \item Slot scheduling based on hops - Schedule transmissions in order based on number of remaining hops.  Also proposes placing Shared Slots between every set of dedicated slots that belong to a specified hop count.  Rescheduling due to link or node failure is complicated (example in figure 9 provided).
+    \item Rescheduling with free node concept proposed.  Free nodes are one-hop nodes that have no descendents (figure 1). Rationale of free node concept is that transmission from one-hop nodes to the sink can be done in any segment of the superframe without affecting the slot segmenting scheduling.
+    \item Slot-Scheduling Algorithm (SSA)
+    \begin{itemize}
+        \item
+    \end{itemize}
+\end{itemize}
+
+\section{An improved algorithm for slot selection in the AEtherealNetwork-on-Chip}
+Radu Stefan and Kees Goossens
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Paper focuses on slot selection algorithm and ignores path selection, similar to what is done in project
+    \item The paper (seems to) focus on scheduling for access to a common communication bus resource between many chips in a network. Not very applicable to our problem.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item "The slot selection algorithm is given the set of availableslots on a path has the task of identifying a minimal subsetof slots that provide the required bandwidth and latency."
+    \item Bandwidth expressed in words/slot table revolution (?).  Calculated from bandwidth of link, size of a slot table, and required bandwidth.
+    \item Maximum latency expressed in units of length in time of a slot obtained by subtracting from latency required by application the latency that is due to network traversal which is computed from the path length.
+    \item Previous algorithms address latency and bandwidth requirements separately and is greedy that only takes optimal decisions locally.
+    \item Proposed algorithm optimizes according to both criteria and is optimal in that it uses minimal number of time slots.
+    \item Build partial solutions.
+\end{itemize}
+
+\section{Time Slot Schedule based Minimum Delay Graph in TDMA Supported Wireless Industrial System}
+Yonghoon Chung and Ki-hyung Kim, Seung-wha Yoo
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Advertising time slot schedules to machines in a network is known as a "provisioning process".
+    \item Assumes a fixed time slot schedule for wireless devices, not really applicable to our problem, maybe to network layer?  Could be interesting if a different approach is to install a schedule for building links in the network in a specific order and then a node has to determine which set of hops/links should be used.  But in these types of scenarios how is the underlying time slot schedule derived?
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Focuses on graph generation method by considering the schedule of time slot in superframe.
+    \item Time Division Multiple Access based MAC protocol used by the data link layer as it is contention free and prevents network collisions.  Makes impossible that more than one node sends packets at the same time.
+    \item On top of TDMA, the network layer maintains a graph of paths and secondary paths for guaranteed transmission routes.
+    \item Propose a time slot scheduled based graph generation method in the TDMA network for minimizing the end-to-end delay and round-trip delay time.  "Minimum delay graph generation algorithm"
+    \item ELHFR algorithm (Shortest Path Graph) is a graph generation method that defines the graph has minimum number of hops from source to destination.  Draws graph using shortest path algorithm.
+    \item If graph installed according to the network joining order the graph detoured due to an inefficiency can be generated.  To prevent this, nodes use a BFS tree and distance vector method like AODV (ref 8)
+    \item Assume a fixed time slot schedule for transmission in a wireless network and then tries to determine the shortest number of time slots where hops may be used to get message from source to destination.
+\end{itemize}
+
+
+\section{Dynamic Scheduling of Real-Time Messages over an Optical Network}
+Cheng-Chi Yu and Sourav Bhattacharya
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Idea of (time, wavelength) TWDM scheduling could be used as a base for (time, communication qubit) model?
+    \item Hard and soft deadlines can be established based on fidelity requirements?  Hard deadline being the lowest acceptable fidelity.
+    \item Ideas for inputs to analysis may be useful, ie. load, proximity of deadline values, relative mix of hard and soft deadline messages, as well as priority levels.
+    \item Figure 1 slot schedules resemble our schedules very closely.
+    \item Idea for preempting - When a new link request comes in we can filter out links that have a lower priority than the incoming one, schedule the link, and then preempt links that overlap with it when considering the remove priority links.
+    \item Can use similar scheduling heuristics based on how many links need to be preempted (want least number) and priority of the link.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Consider dynamic scheduling in a Time-Wave Division Multiplexing (TWDM) transmission schedule where slots are denoted by (time, wavelength)
+    \item Time-critical messages have hard and soft deadlines (hard have highest priority and soft are user defined lower priority levels).
+    \item Goal is to schedule the messages, all or as many as possible following the priority ordering.
+    \item Previous research is in static scheduling policies which cannot adapt to varying traffic conditions or dynamic scheduling for non-realtime traffice.
+    \item Performance measured in simulation where input factors include load, proximity of the deadline values, realtive mix of hard and soft real-time messages, and priority levels of the messages.
+    \item Real-time is critical need for many computing and communication applications (form QoS needs).
+    \item Real-time scheduling process issues addressed in ref 6.
+    \item Notion of deadline and real-time network traffic management in ref 3.
+    \item Delay concept in optical network addressed from a complimentary point of view in ref 2.  Proposes design of optimum TDM schedule for broadcast WDM networks to construct transmission schedules of length contrained by the lower bound of tuning ltencies.
+    \item TDM-to-WDM data format conversion in ref 1.
+    \item Real-time TWDM network issues discussed in ref 5, proposed a distributed adaptive protocol for deadline critical service on an optical network.  Makes use of a single token circulating through control wavelength for communicating status information between each node and controlling access to each of wavelength.
+    \item Assumes a centralized controller for the network which schedules transmission in the network, allocates bandwidth, and perfroms admission control when a new message is generated.
+    \item Reference 8 has discussion about network topology and TWDM embedded implementation.
+    \item Deadline needs of multiple priority class traffic are traded against each other to best satisfy higher priority messages.
+    \item Proposed approach extends to multihop networks has well, analytical techniques compute the optimum number of slots required (minimally for hard RT messages and desirably for soft RT messages) for each real-time message.
+    \item Implemented using a heuristic scheduling algorithm with three proposed heuristics to select the message to be preempted on a dynamic basis.
+    \item System behavior:
+    \begin{itemize}
+        \item Source node of the network computes an optimum bandwidth according to message size, end-to-end deadline, and other system data.
+        \item Source ndoe sends a request to the centralized controller to transmit a message.  Request includes computed results, priority, and routing path.
+        \item Controller may reject request or acknowledge and compute a new schedule, will update all nodes with modified schedule.
+        \item Controller computes the optimum number of slots required for meeting the deadline and then decides to allocate bandwidth to the new message or reject.
+    \end{itemize}
+    \item To improve chances of lower priority messages being successfully transmitted, additional slack is added to the optimum number of needed slots, when preemption occurs only the needed slots for higher priority message are removed and there is still some chance the remaining slots for the lower priority message are sufficient.
+    \item Heuristics - ALP (Any lower priority) - Removes any lower priority message and does not consider the message size or exact priority level. Simple, but may waste bandwidth in transmission schedule when swapping one or several large bandwidth messages.  LPF (lowest priority first) identifies the message with lowest priority and preempts it.  Similar to ALP with issues but may also cause starvation.  Searching lowest priority message may have overhead. CSS (Closest slot size) preempt messages with lower priority and closest number of required slots.  Reduces the number of messages preempted, also has setbacks.
+    \item Analysis fixes a new message generation probability and sweeps the average deadline and computes the successful transmission rate.
+    \item
+\end{itemize}
+
+
+\section{Routing and Time-Slot Assignment in Photonic Circuit Switching Networks}
+Wing Wa Yu, Albert K. Wong, C.-T. Lee
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Minimizing buffering requirement could be useful for future devices to reduce the number of different paths a node is building links for.  Ie. we don't want to store qubits for different paths at the same time and would prefer to establish both sides of a link as close together in time as possible.  May be relevant in how we want to store the first qubit for as little time as possible.
+    \item Primary difference between our problem is that packets need to flow in path order in classical networks whereas links in quantum networks can be built in an order along the path.
+    \item Another heuristic that is worth exploring is minimizing the timespan of the set of the selected slots.
+    \item Best slot method for slot assignment resembles current brute forcing algorithm with extension that schedules are searched with links in every possible order rather than first available slot in the forward direction.
+    \item Random method may be useful also for removing the overhead of searching the best slot for all initial slots.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Objective to explore PCS as a method to sub-divide individual wavelengths. Consider ways to route and select time slots for photonic circuits so that buffering requirement in the network can be minimized.  Three heuristic models presented.
+    \item Routing and Time slot Assignment problem is similar to Wavelength Routing and Assignment for WDM networks.
+    \item Used heuristic aims to minimize total buffering delay.
+    \item First routing algorithm is based on the time slot schedules used at the nodes.  Shortest path (Dijkstra) using the reciprocal of the residual bandwidth (available time slots) of each link as the link cost.  Two different slot assignment schemes are then used.  Random method selects one of the incoming slots that is available and then takes the first available slot in the subsequent links.  Best slot method searches all available slots of the first link and sees which one has minimum total buffering delay (uses first available slot on each subsequent link).
+    \item Second routing algorithm uses path vector routing.
+\end{itemize}
+
+
+\section{Study on the Problem of Routing, Wavelength and Time-slot Assignment toward Optical Time-slot Switching Technology}
+Shan, Dai, Sun, Zhu, Liu
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Consideration for slot-size is a good discussion point, guardtime needs to be taken into account for response times of devices operating at the end nodes.
+    \item
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Existing transmission control protocols and scheduling algorithms for OBS networks lack ways to deal with QoS guarantee and contention avoidance.  Examples include JET (ref 1/2), JIT (ref 4), Horizon scheduling.
+    \item One-way resource reservation mechanisms and uncertain burst size are incapable of providing connection-oriented services.
+    \item Define $T$ as the average duration of a connection, if the time-slot size is fixed, the $T$ will be a constant time, $\frac{1}{T}=\mu$ will be the rate of service.
+    \item Designing of time-slot size and frame length should be taken into account carefully, guardtime is needed to defend optical switch operation, current response time of optical switch is from several nanoseconds to hundreds of nanoseconds
+    \item p-distribution approach tries to spread out subsequent slots by occupying the index of the next available slot according to a probability distribiution.  distribution function can be modified based on the priority of the traffic.
+\end{itemize}
+
+
+    \section{}
+
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item
+\end{itemize}
+
+
+    \section{}
+
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item
+\end{itemize}
+
+
+    \section{}
+
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item
+\end{itemize}
+
+
+
+\end{document}

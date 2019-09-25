@@ -206,13 +206,22 @@ Share schedules of nodes along path and insert slots for when time should be spe
     \end{itemize}
     \item How to handle requests for several pairs?
     \begin{itemize}
+        \item By using an instance of the pinwheel problem.
         \item Instruct nodes to have a decided link scheduling recurring to meet the max time requirement.  "Do schedule $X$ every 10 slots".
         \item Using multiple routes?  This can incur a significant communication overhead if a request is cancelled.
+    \end{itemize}
+    \item Scheduling a set of paths rather than FIFO?
+    \begin{itemize}
+        \item Order by earliest deadline first?
+        \item By how much time it will take to complete setting up schedules in different nodes (based on number of nodes?)?
+        \item
     \end{itemize}
 \end{itemize}
 
 \section{Questions}
-
+\begin{itemize}
+    \item What if the slot scheduling algorithm was slot-focused rather than path focused?  Ie, rather than iterating over the set of paths and searching from the available set of slots, iterate over the slots and find an appropriate path from the set to schedule here.
+\end{itemize}
 
 \section{Does the order of SWAP matter?}
 Three links with fidelities $F_1,F_2,F_3$. Equation for SWAP'd fidelity:
