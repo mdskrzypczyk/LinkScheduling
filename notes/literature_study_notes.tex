@@ -13,7 +13,7 @@
 \maketitle
 
 \section{Time Slot Allocation for Real-Time Messageswith Negotiable Distance Constraints}
-Libin Dong, Rami Melhem, Daniel Moss ́
+Libin Dong, Rami Melhem, Daniel Moss
 
 \subsection{Thoughts}
 \begin{itemize}
@@ -75,7 +75,7 @@ Dong Yang,Member, IEEE, Youzhi Xu, Hongchao Wang,Member, IEEE,Tao Zheng,Student 
     \item Duration of superframe chosen based on the sampling period of IWSN application network.  Used 500 ms and due to slot length in WirelessHART standard of 10ms this means each superframe has 50 slots.
     \item Devices assumed to have simplex radios meaning one slot used for receiving and one slot for transmitting.  Some slots are dedicated to retransmitting erroneous packets as well as periodic messages like keep-alive, need to consider how to use slots in a good way.
     \item Routing-ordered slot scheduling - Consider the order of routes and corresponding slot assignments.
-    \item Rescheduling costs bandwidth and time to update all nodes (ref 37 highlight).  Paper defines metrics rescheduling convergence time (time period from a link or node failure to recovery by rescheduling, #slots) and rescheduling overhead (Rescheduling information issued to the related nodes and is quantified by the number of related nodes).
+    \item Rescheduling costs bandwidth and time to update all nodes (ref 37 highlight).  Paper defines metrics rescheduling convergence time (time period from a link or node failure to recovery by rescheduling, \#slots) and rescheduling overhead (Rescheduling information issued to the related nodes and is quantified by the number of related nodes).
     \item Superframes broken into a dedicated-slot part and a shared-slot part where dedicated-slot portion used for periodic sample packets and shared-slot part used for retransmission of error packets.
     \item Fast Slot Competition (FSC)
     \begin{itemize}
