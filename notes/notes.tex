@@ -218,6 +218,18 @@ Share schedules of nodes along path and insert slots for when time should be spe
     \end{itemize}
 \end{itemize}
 
+\subsection{Other Considerations}
+The following schedule for a node may not even be allowed based on the available resources (even if the comm qubit is free)
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=\textwidth]{figures/segmented_links.svg}
+    \caption{Path 2 scheduled around Path 1}
+    \label{fig:segmented_links}
+\end{figure}
+
+The issue with this scenario is that in order to generate path 1, the node requires 2 qubits for generating the two links and having them available at the same time when the SWAP must occur.  When scheduling links for a second path, the algorithm may find that this is a possible ordering.  What need to be taken into consideration is that the node will have at least 3 qubits to perform this.  One for Path 2 Link 1, one for Path 1 Link 1, and one for Path 1 Link 2 since we need to hold Path 2's entanglement through the generation of Path 1's entanglement.
+
 \section{Questions}
 \begin{itemize}
     \item What if the slot scheduling algorithm was slot-focused rather than path focused?  Ie, rather than iterating over the set of paths and searching from the available set of slots, iterate over the slots and find an appropriate path from the set to schedule here.

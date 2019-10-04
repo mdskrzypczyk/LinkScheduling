@@ -12,6 +12,12 @@
 
 \maketitle
 
+\section{Other Notes}
+\begin{itemize}
+    \item Our problem is not necessarily circuit-switching.  This is because a path on circuit switching is reserved even when no data is flowing.  In what I have done so far, I only reserve a link for a brief period of time, not the whole time the full-length link is being built.  Reserving the whole path for the full entanglement link generation may be one approach to doing so but does not describe the internal coordination by the nodes for generating the entangled link.  The occupied timespan can be optimized though based on the available slots.
+    \item My approach resembles more closely the packet-switched network where only the links have schedules and are only occupied for the duration a link needs to be built across it.
+\end{itemize}
+
 \section{Time Slot Allocation for Real-Time Messageswith Negotiable Distance Constraints}
 Libin Dong, Rami Melhem, Daniel Moss
 
@@ -218,8 +224,298 @@ Shan, Dai, Sun, Zhu, Liu
 \end{itemize}
 
 
-    \section{}
+\section{Scheduling Multirate Sessions in Time Division Multiplexed Wavelength-Routing Networks}
+Subramaniam, Harder, Choi
 
+\subsection{Thoughts}
+\begin{itemize}
+    \item Timing synchronization for All Optical Network testbed in ref 4 with 250 microsecond frames with 128 slots is impressive.  The techniques used here may be used to argue feasibility of using short frame/slot lengths in our work?
+    \item My current work focuses on scheduling links to optimize the fidelity, but that doesn't seem to be what we want from such a scheduler.  Here, network throughput is optimized.  Maybe we should also focus on maximizing the network throughput while maintaining fidelity at least what is requested.
+    \item This paper considers two scheduling strategies, 1) contiguous assignment of all slots of a session on one wavelength (sounds like 1 comm q  and 1 storage q at all nodes), and 2) noncontiguous assignment of a session's slots on possibly multiple wavelengths (multiple comm/storage qubits).
+    \item Work has some nice proofs worth referencing.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Address off-line multirate session scheduling problem, ie the problem of assigning time slots and wavelengths to a given static set of multirate sessions in ring topologies.
+    \item Given a set of sessions and their relative rates, objective is to maximize network throughput.  This translates to the problem of minimizing the maximum length of a TDM frame over all wavelengths.
+    \item Present a scheduling algorithm with provable worst-case bounds on frame length for multirate session scheduling.  Show off-line single-rate session scheduling problem is equivalent to the off-line wavelength assignment problem and hence obtain bounds on frame length.
+    \item Share sessions on the same wavelength using TDM rather than giving a session the full bandwidth of a wavelength.
+    \item In a circuit-switched network, slots are assigned during session establishment, and therefore the cycle of switching patterns for each node is known once the sessions are established.  Routing nodes can be programmed to follow this cycle of patterns for each frame.  Allowing guard times between time slots and increasing the duration of slots can be used to mitgate the effects of slow reconfiguration times (ref 3).
+    \item Feasibility of timing synchronization for the TDM scheme has been demonstrated in the metropolitan area by the All Optical Network testbed (ref 4).  Each from is 250$\mu s$ long and consists of 128 slots.
+    \item Objective function is to maximize network throughput.  Given long-term traffic demands of sessions, it is reasonable to provision the network bandwidth in a fair manner (respect the relative rates of sessions) and maximize bandwidth utilization.
+    \item Assignment algorithms and performance analysis for a static traffic model can provide insights into the design and performance of algorithms for the dynamic traffic case.
+    \item Study ring topology for "practical suitability in metropolitan area networks".
+    \item Prior work in ref 4-7.
+    \item In either scheduling case "no two sessions may be assigned the same time slot on the same wavelength if their paths share a link".
+\end{itemize}
+
+
+\section{An Optimal Algorithm for Time-slot Assignment in SS/TDMA Satellite Systems}
+Wan, Shan, Shen
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item One optimization may be taken from the work of Bonuccelli et al.  Schedule long path connections first and then direct links in the gaps.
+    \item Satellite systems may be a good reference point for how communication needs to behave.  (ref 1, 5, 10, 11, 12)
+    \item Satellite Switched TDMA (SS/TDMA)
+    \item Optimal in the sense that the length transmission schedule is minimized.
+    \item Methodology for scheduling may be useful, ref 13 for BCW algorithm to decompose traffic matrix into a set of switching matrices. Network flow algorithm in ref 14, push-relabel method.
+    \item Birkhoff-Von Neumann theorem for $L(R)$.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Revisit Maximum Traffic Time-slot Scheduling (MTTS) for both circuit- and packet-switched traffic in SS/TDMA satellite systems.
+    \item Scheduled circuit-switched traffic first into TDMA frames and then inserted packets into empty frames.
+    \item Referred to as Incremental Time-slot Assignment (ITSA) Problem and proved to be NP-hard.
+    \item MTTS problem is NOT NP-hard, optimal algorithm based on aggregating the traffic into scheduled TDMA frames based on network flow method.
+    \item MTTS seeks for an assignment of maximum packets from packet-switch traffice to circuit-switched traffic such that these packets can be transmitted with circuit-switched traffic together.
+    \item Traffic matrix $R$ as an $N \times N$ matrix with non-negative integers.  Each entry $r_{ij}^R$ defines the number of packets to be transmitted from input port i to output port j in a switch.  $|R|=\sum_{i,j} r_{ij}$ is the total number of packets in a traffic matrix $R$. Duration of traffic matrix is the maximum sum of any column or row. Consider traffic matric $P_c$ of circuit-switched traffic and $P_p$ of packet-switched traffic.
+    \item Switching matrix $S$ is a traffic matrix that has at most one entry in any row or column.
+    \item The length of a schedule $L(R)$ denote the duration fo the traffic matrix where $L(R)$ is the maximum sum along any column or row in the traffix matrix. ($max(max_j(\sum_i R_{ij}), max_i(\sum_j R_{ij}))$).
+    \item A transmission schedule in this case is optimal if the length of the schedule is minimized.
+    \item Technique of old algorithm
+    \begin{itemize}
+        \item Construct schedule for static circuit-switched traffic $P_c$ by decomposition of $P_c$ into a set of switching matrices $S_1, S_2,...,S_m$ using BCW algorithm (ref 13.) such that $S_1 + S_2 + ... + S_m = P_c$.
+        \item For each switching matrix $S_i$, fill gaps (unused slots) with packets from $P_p$.  ITSA problem was to determine a set of packets $R_p$ selected from $P_p$ and insert these packets into at least one of the switching matrices such that the new switching matrices can still be scheduled in $L(P_c)$ time slots and $|R_p|$ is maximized.
+        \item These switching matrices are fixed and causes the problem to be NP-hard.
+    \end{itemize}
+    \item Optimal Algorithm
+    \begin{itemize}
+        \item Main difference for MTTS and ITSA is that the switching matrices obtained from decomposing $P_c$ do not have to remain fixed.
+        \item Start by turning $P_p$ into a directed bipartite graph $G(U,V,E)$ where nodes $u_i$ corrrespond to rows of $P_p$ and nodes $v_i$ correspond to columns of $P_p$.  Edge set $E$ consists of an edge between $u_i$ and $v_i$ if $d_{ij}^{P_p} \neq 0$. $d_{ij}^{P_p}$ is the entry of $P_p$ in the $i$th row and $j$th column.
+        \item Set $D=L(P_c)$.  For each row $i$, compute row vacancy degree $e_i=max\{0, D-\sum_j d_{ij}^{P_c}\}$ and column vacancy degree $f_i = max\{0, \sum_i d_{ij}^{P_c}\}$
+        \item Add a source node $T$ and a sink node $K$ to the graph $G(U,V,E)$.  Construct a flow network $G'$ by connecting the source node $T$ to each $u_i$ and connecting each $v_i$ to sink node $K$.  Set the capacity of edge $(T,u_i)$ and $(v_i,K)$ as $e_i$ and $f_i$ respectively.
+        \item Apply network flow algorithm (ref 14.) on constructed graph $G'$ to find maximal network flow $f$
+        \item Maximal flow $f$ indicates packets that can be promoted to matrix $P_c$. Define $f_{ij}$ as the resulting maximal flow on edge $(u_i, v_j)$.  Particularly, a flow $f_{ij}$ on edge $(u_i, v_j)$ corresponds to promote $f_{ij}$ packets in the row $i$ and column $j$ of matrix $P_c$ to $P_p$.
+        \item Construct an $N \times N$ matrix $P_s$, the entry of which on row $i$ and column $j$ is $f_{ij}$, if $f_{ij} exists, otherwise 0$.
+        \item Return $P_s$.
+        \item $P_s$ is the set of packets in $P_p$ that can be promoted to circuit-switched traffic, the new set of packets is $P_c + P_s$ which is still slotted in $L(P_c)$ time and $P_s$ is maximized.
+        \item BCW is used to decompose $P' = P_c + P_s$ into switching matrices that can then be scheduled without conflicts.
+    \end{itemize}
+    \item Also provide an extension to the MTTS problem where packet-switched data has a deadline after circuit-switched and everything needs to be scheduled.
+\end{itemize}
+
+
+\section{Practical Fast Scheduling and Routingover Slotted CSMA for Wireless Mesh Networks}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Scheduling problem formulation and reduction to PMAX-SAT may be a useful way to see if our problem is NP-Hard.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Focus on wireless mesh networks.
+    \item Attempts to come up with a CSMA TDMA schedule to minimize itnerference between transmissions.
+    \item Show that the problem is NP-hard and reduce to PMAX-SAT.
+\end{itemize}
+
+
+\section{Scheduling Techniquesfor Hybrid Circuit/Packet Networks}
+Liu, Mukerjee, Li, Feltman, Papen, Savage, etc
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Hybrid network approach could be a useful way to tackle applications that need lots of entanglement close in time (high-rate) and applications with small amounts of entanglement (low-rate).
+    \item Methodology to use an optimal scheduler to gain insight on an effective heuristic may be a good approach to talk about.
+    \item Should take into consideration the type of traffic that is flowing through the quantum network to see if there are any properties that could be taken advantage of (like sparsity and skew here for datacenter networks).
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Hybrid circuit/packet switched networks place large traffic demands via high-rate circuits and remaining traffice with lower-rate traditional packet-switches.
+    \item High utilization requires an efficient scheduling algorithm that can compute proper circuit configurations and balance traffic across the switches.
+    \item Formalize hybrid switching problem, explore design space of scheduling algorithms, and provide insight on using such algorithms in practice.  Propose a heuristic-based algorithm Solstice.  Show that it is within 14\% of optimal at scale.
+    \item Computing an optimal set of circuit configurations to mazimize circuit-switched utilization has no known polynomial time algorithms, scaling as $O(n!)$ in the number of switch ports (3).
+    \item Shed light on optimal/impractical solution that sheds light on how to design an effective heuristic
+    \item Algorithm provides higher utilization by taking advantage of the known sparsity and skew of datacenter workloads.
+\end{itemize}
+
+
+\section{A Survey of Network Design Problems and Joint Design Approaches in Wireless Mesh Networks}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Papers for first generations scheduling algorithms on simplified graphs might be useful.
+    \item CSMA techniques might be useful, can "ping" a heralding station to detect when the link medium is free.
+    \item By "hardwiring" certain repeater protocols along subpaths the requirements for "relatively stable" demand on the subpath may satisfy requirement for TDMA scheduling and achieving maximum throughput.
+    \item For the single qubit case it may be possible to model as a matching problem or set covering problem.
+    \item Refs 135 and 136 may provide some ideas on converting a centralized algorithm to a distributed one.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item References 49 through 58 may be useful for link scheduling, channel assignment, routing.
+    \item Sections 4, 5 and 6 deal with link scheduling, channel assignment, routing.
+    \item Link scheduling estimates the interference conflicts between the links having transmissiondemands (based on the interference model) and tries to achieve a conflict-free feasible transmission schedule.
+    \item First generation of scheduling algorithms (refs 123-127) based on simplified graph models.
+    \item When traffic is relatively stable (non-sporadic), TDMA can achieve maximum system capacity.  Distributed implementation is substantially difficult and requires tight time synchronization.  Relatively inflexible to dynamic changes to the topology.  TDMA protocols can be categorized into course-grained and fine-grained protocols.  Coarse-grained protocols emphasis given to link scheduling with various valid assumptions of interference model, traffic demands, and centralized control.  Depend on existing link layer techologies for framing, acknowledgements, while handling medium access and transmission control at upper layers.  Fine-grained TMDA protocols often handle all link layer functions at MAC layer, which makes then increasingly difficult to implement in practice.
+    \item Reference 131 provides an LP formulation for node-based and edge-based spatial reuse TDMA scheduling for physical interference model.
+    \item Reference 132 provided traffic controlled schedule generation algorithm.
+    \item Important to model interference relationship between links based on respective interference model before they can be scheduled.
+    \item Problem of link scheduling can be represented as a problem of finding maximum independent set in the conflict graph.  Vertices connect to each other in the conflict graph represent those links of communication graph which interfere with each other and cannot be scheduled simultaneously.
+    \item Reference 50 first designs conflict graph for protocol interference model indicating which set of links interfere with each other and cannot be scheduled together.  Conflict graph in physical interference model has vertices which correspond to edges in communication graph.  Directed edge between two vertices whose weight indicates what fraction of the maximum permissable no;ise at the receiver of one link by activity on another link.
+    \item Conflcit graph based on interference model adds interference constraints to the LP formulation which optimizes throughput for single source-destination pair.  LP formulation requires calculating all possible transmission schedules and it is shown to be computationally expensive.
+    \item Reference 51 proposes a method to simplify the design of conflict graph in the physical interference model.  The node-based conflict graph is designed by keeping the vertex set same as the communication graph and adding di;recting edges uv between vertices u and v whose weight corresponds to the received power at v from the signal transmitted by u.  Only constraint is that node cannot transmit and receive on different links simultaneously.
+    \item So this style forms a matching in communication graph.  Propose an efficient polynomial-time scheduling approximation algorithm.
+    \item Becomes increasingly difficult to estimate or even bound the optimal scheduler performance.
+    \item Reference 134 derives a column generation method using set covering formulation which efficiently solves the scheduling problem.
+    \item References 135 and 136 use netwrok flow problem and also provide a distributed scheduling algorithm.
+    \item Channel/radio assignment mechanisms try to assign different non-interfering channels to the interfering links to increase overall spatial reuse.  References 52 and 167 discuss import design issues and practical challenges while designing multi-channel protocols for WMNs.  Channel assignment protocols can be broadly classified in static, dynamic, and hybrid schemes.
+    \item Channel assignment problem can be modeled as edge-coloring of the network graph and related well-known heuristics or algorithms can be applied for the solution.
+    \item
+\end{itemize}
+
+
+\section{GarQ: An Efficient Scheduling Data Structure for Advance Reservations of Grid Resources}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Discusses time-slotted data structures, segment tree.  Provides a search algorithm for an available interval or nearest one.
+    \item May be useful for an efficient implementation.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Propose Grid advanced reservation Queue (GarQ) which is a new data structure that improves some weakness of Segment Tree and Calendar Queue.  Demonstrate superiority of the proposed structure by conducting a detailed performance evaluation on real workload traces.
+    \item Advanced Reservations allows users to gain simultaneous and concurrent access to adequate resources for the execution of applications.
+    \item Tree-based data structures are commonly used for admission control in network bandwidth reservation (refs 3, 21, 23).
+    \item Describe modified versions of Linked List and Segment Tree data structures to support add, delete, and search as well as the interval search operation capable of dealing with advanced reservations in computational Grids.
+    \item Model composed of a reservation system responsible for handling reservation queries and requests, a grid consisting of a grid information service, resources, and users.
+\end{itemize}
+
+\section{Link Scheduling in Sensor Networks: Distributed Edge Coloring Revisited}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item When nodes in a quantum network are not attempting entanglement generation according to a TDMA schedule, they may focus on preserving entanglement or other local computations.
+    \item Comparing to the edge coloring problem may be a useful approach.
+    \item Problem is that all transmissions are assumed to take the same amount of time (1 slot).  Could slots be made large enough to also have this type of affect.  Could assign an edge multiple colors for each of the timeslots that it occupies?
+    \item NP-Completeness of minimum number of timeslots ref 21 could be useful
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Consider problem of link scheduling in a sensor network employing a TDMA MAC protocol.
+    \item Involves two phases, assign a color to each edge in the network such that no two edges incident on the same node are assigned the same color.  Distributed edge coloring algorithm that needs at most delta+1 colors, where delta is the maximum degree of the graph.
+    \item Second phase maps each color to a unique timeslot and attempt to identify a direction of transmission along each edge such that the hidden terminal and exposed terminal problems are avoided.
+    \item Reference 5 discusses TDMA MAC protocols.  These eliminate collisions, guarantee fairness and provie bounds on per-hop latency.  To conserve energy, a node employing a TDMA MAC protocol can switch off its transceiver when it is neither transmitting nor receiving.
+    \item References 6 and 21 discuss link scheduling.
+    \item Edge coloring as a link scheduling problem - Valid timeslot assignment for nodes can be obtained by mapping each timeslot to a color.  In wireless sensor networks this causes collision problems (probably not in quantum).
+    \item Timeslot assignment to nodes is referred to as broadcast scheduling (refs 2, 20, 23).
+    \item The problem of assigning timeslots to edges using a minimum number of timeslots is known to be NP-complete (ref 21)
+\end{itemize}
+
+\section{On the Complexity of Scheduling in Wireless Networks}
+Sharma, Mazumdar, Shroff
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item $K=1$ hop problem may be related to single comm q case?
+    \item Ref 30, Tassiulas and Ephremides characterized the capacity region of constrained queueing systems, develop a queue length based scheduling scheme that is throughput-optimal (stabilizes the network if the user rates fall within the capacity region of the network)
+    \item References 34, 23, 22, 29, 7 show work in cross-layer optimization algorithms that try to consider multiple criteria like optimal routing, link scheduling, and power control.
+    \item Changing conditions in wireless networks may be similar to how quantum devices need to be recalibrated and drift.
+    \item References 16, 26, 3, 35 discuss fair resource allocation in wireline networks.
+    \item References 4, 19, 21, 33, 28, 36, 24 incorporate congestion control frameworks.  Congestion control component controls the rate at which users inject data into the network so as to ensure that the user rates fall within the capacity region of the network.
+    \item Shows a general global optimization problem for schedulers in networks, these are known to be NP-Complete and Non-Approximable.
+    \item Consider the Maximum Weighted K-Valid Matching Problems (MWKVMPs) that arise as simplifications to the scheduling problem.
+    \item Node exclusive interference model for the single communication qubit case.  Ref 11 has polynomial time link scheduling algorithm.
+    \item Refs 4, 5, 19 have distributed link scheduling algorithm
+    \item
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Consider the problem of throughput-optimal scheduling in wireless networks subject to interference constraints.
+    \item Interference modeled using a family of $K$-hop interference models defined as one for which no two links within $K$ hops can successfully transmit at the same time.
+    \item For $K=1$ the resulting problem is the Maximum Weighted Matching problem which can be solved in polynomial time.
+    \item For $K > 1$ show that resulting problems are NP-Hard and cannot be approximated within a factor that grows polynomially with the number of nodes.
+    \item Show that for specific kinds of graphs used to model the underlying connectivity graph of wireless networks the resulting problems admit polynomial time approximation schemes.
+    \item Simple greedy matching algorithm provides a constant factor approximation to the scheduling problem for all $K$ in this case.
+    \item Capacity of wireless links fluctuate due to fading, changes in power allocation or routing changes.
+    \item Node exclusive interference model commonly used model for bluetooth and FH-CMDA networks.  Only constraint on the set of edges scheduled to transmit is that it must constitute a matching.
+    \item Reference 11 develops a polynomial time link scheduling algorithm under node exclusive interference model.
+    \item References 19, 4, 5 developed distributed schemes that guarantee a throughput within a constant factor of the optimal.
+\end{itemize}
+
+\section{Pinwheel scheduling with two distinct numbers}
+Holte, Rosier, Tulchinsky, Varvel
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Could be used for categorizing different types of traffic and using pinwheel problem.
+    \item Other known results, every instance of pinwheel scheduling with density at most 3/4 has a solution, every instance with three distinct repeat times and density at most 5/6 has a solution.  When there exists a solution an upper bound on the period is at most the product of the repeat times (exponential), not always possible to find a sub-exponential length schedule.  With compact representation that shows distinct repeat times and number of objects with that time the pinwheel scheduling is NP-Hard.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Interesting questions - Determining whether schedules exist, minimum cyclic schedule length, creating an online scheduler.
+    \item Any instance with density = $\sum_{i=1}^n \frac{1}{a_i} > 1$ cannot be scheduled.  Paper concerns element having only two distinct values.
+    \item All such instances with only two values and $d \leq 1$ can be scheduled using a strategy based on balancing.  Schedule created is not always of minimum length however.  More complicated method used to create a minimum-length cyclic schedule.  Both polynomial time algorithms but former much easier to compute than latter.
+    \item Show how to use either method to produce a fast online scheduler.
+    \item Minimum cycle length may be exponential in the length of the input (ref 2).
+    \item Family of hard-real-time scheduling problems in refs 4,5,6,8,9.  Periodic maintenance problem EXACTLY every $a_i$ slots.
+    \item Decision and scheduling problems for dense instances of up to three distinct numbers can be solved in polynomial time.  Minimum schedule length is the LCM of the three numbers.
+    \item Dense instances have interesting properites: Minimum schedule length for instances that can be scheduled is the LCM of distinct numbers.  Slots assigned to item i must occuir exactly $a_i$ slots apart.  These and related properties do not hold for nondense instances.
+    \item Multiset representation $\{x, a, y, b\}$ means there are $a$ elements with frequency $a_i=x$ and $b$ elements with frequency $a_i=y$.  In this case we have $a > 0$, $b > 0$, $\frac{x}{a} > 1$ (because $\frac{a}{x} < 1$) and similarly $\frac{y}{b} > 1$.  If dense then $\frac{a}{x} + \frac{b}{y} = 1$
+\end{itemize}
+
+\section{TMDA Scheduling with Maximum Throughput and Fair Rate Allocation in Wireless Sensor Networks}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item These types of protocols are called Media Access Control (MAC) protocols
+    \item These papers always describe the model they assume for the network
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Propose network-wide optimized TDMA scheduling scheme for WSNs
+    \item Formulate the rate allocation problem based on the Lexicographic Max Min (LMM) criterion which takes fairness, throughput maximization, and slot reuse into consideration.
+    \item Develop a polynomial-time algorithm by exploiting iterative linear program to solve LMM optimization
+    \item Maximizing sum of data rates (MSDR) of all nodes can easily lead to a baised rate allocation
+    \item Exploit slot reuse to improve maximum throughput, introduce slot reuse control parameter $\epsilon$ in the LMM rate allocation problem.  According to the optimal rate allocation vector and relay scheme derived from the LMM optimization, we then propose a TDMA scheduling algorithm, utilizing slot reuse, to achieve a minimum tDMA frame length.
+    \item Slot reuse enables the improvement of the network throughput, the limited network bandwidth should also be considered.  Develop a procedure combining the LMM rate allocation and the TDMA scheduling algorithm to iteratively calculate a proper slot reuse control parameter.
+    \item
+\end{itemize}
+
+\section{Scheduling Algorithms for TDMA Wireless Multihop Networks Thesis}
+Peter Djukic
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Frame utilization is a good metric to look at.
+    \item Is there an analogous way to view channel quality as done here?
+    \item Notion of a conflict graph in network when resources are/not available for generating entanglement with neighbors.  Thesis shows figures depicting different interference modes.  1) two nodes attempting entanglement with a node that only has one remaining resource, 2). So a static conflict graph might indicate nodes that do not have resources to support generating links on all connected edges, or it can dynamically be generated when assigning slots and showing which links can no longer be supported.
+    \item Does routing provide a path or a protocol?  Assume someone gives us a protocol, not an ordered set of edges because protocols may be more complex.
+    \item Computation of requested link rates may be slightly different because it does not translate directly into the end-to-end rate of the connection.  Depends on how many links need to be generated as part of the protocol.  This could still be useful.
+    \item Number of requested slots depends on the number of bits that can be transmitted per slot, in our case this is most likely less than 1.
+    \item One of the main differences between our problem and classical networking scheduling is that packets can be stored and forwarded on any of the scheduled link transmissions in the future, whereas the entanglement generated NEEDS to belong to it's associated generated entanglement so that it can be used properly.
+    \item Create new schedule with set of rates, do not try to keep the same slots occupied between frames.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Link rates and resulting schedules are determined from end-to-end rates.  Connections request their end-to-end rates and a scheduler grants end-to-end rates through a schedule.  Since a schedule does not change between requests it is possible that schedule is temporarily not matched with the required end-to-end connections. (in 802.16 usually on the order of milliseconds.
+    \item Frame Utilization $\rho$ - The ratio of slots carrying traffic to the total number of slots in the data sub-frame.
+    \item Goal is to find scheduling algorithms that minimize $\rho$  given a set of end-to-end requested rates.  Consistent with notion of finding minimum length TDMA schedules.  Synonymous with maximizing end-to-end throughput.
+    \item Model channel quality using the number of bits transmitted in each slot.
+    \item Model conflict graph in the network that keeps track of interference of wireless links.  Triplet $G_c (E,C,f_c)$ where $E$ is the set of edges, $C$ the set of TDMA conflicts, and $f_c$ maps $C$ to a set containing pairs of links that have conflicts.
+    \item Assume that a routing protocol establishes routes between nodes and are represented with ordered sets of links (end-to-end paths in the topology graph).
+    \item Given the requested end-to-end conection rates, find requested link rates by adding up connections traversing each link.  Represent it with a vector of individual link rates.
+    \item The number of requested slots for each link in the frame matches the requested link rate.  Number of slots for each link in a frame matches the requested link rate ($\frac{r_j}{b_j}T_f$ where $r_j$ is rate, $b_j$ is bits transmitted per slot, $T_f$ is the frame duration in seconds.)
+    \item Duration of a link's transmission is then the number of slots multiplied by the slot duration.
+    \item Link capacity constrains the achievable rate across all connections
+    \item DAS problem like, calculate requested link durations based on requested rates, find a vector of starting times such that a schedule exists with the desired rates.  Only tells us if there is/not a schedule.
+    \item ML-DAS problem tries to maximize the durations with factor $\alpha \leq 1$ such that a schedule exists.  By maximizing $\alpha$ we maximize the link durations.  A feasible schedule might only be possble if we reduce the durations by some amount, by maximizing them we find the minimum length schedule that can satisfy the desired rates (reduced by the factor $\alpha$).
+    \item Techniques do not try to maintain the same set of slots between frames, if there is a new set of links we create a new schedule with the set of rates and send it out, so slot positions may change.
+    \item Four reasons to solve the maximum concurrent flow problem, 1) Without delay constraints, problem viewed as the problem of finding the end-to-end "capacity" of wireless networks, 2) Corresponds to the "minimum length" or "maximum utilization" TDMA scheduling problem, 3) Optimization produces end-to-end rates that satisfy a limited proportional fairness property, 4) Method of framing the problem fits nicely into the 802.16 scheduling framework.
+    \item Joint rate control and scheduling - previous optimization needs the requested end-to-end rates before it can proceed, requires operator input which is not desirable in mesh networks.  Generalize the problem so that the requested rates are not necessary and at the optimum point, the granted end-to-end rates satisfy a property such as proportional fairness, max-min fairness or maximum profit. Generalize the previous problem by using a utility function associated with the end-to-end rate.
+\end{itemize}
+
+\section{}
 
 \subsection{Thoughts}
 \begin{itemize}
@@ -231,9 +527,7 @@ Shan, Dai, Sun, Zhu, Liu
     \item
 \end{itemize}
 
-
-    \section{}
-
+\section{}
 
 \subsection{Thoughts}
 \begin{itemize}
@@ -244,21 +538,6 @@ Shan, Dai, Sun, Zhu, Liu
 \begin{itemize}
     \item
 \end{itemize}
-
-
-    \section{}
-
-
-\subsection{Thoughts}
-\begin{itemize}
-    \item
-\end{itemize}
-
-\subsection{Notes}
-\begin{itemize}
-    \item
-\end{itemize}
-
 
 
 \end{document}
