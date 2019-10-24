@@ -481,7 +481,7 @@ Holte, Rosier, Tulchinsky, Varvel
     \item
 \end{itemize}
 
-\section{Scheduling Algorithms for TDMA Wireless Multihop Networks Thesis}
+\section{Scheduling Algorithms for TDMA Wireless Multihop Networks Thesis - CONTINUE THIS}
 Peter Djukic
 
 \subsection{Thoughts}
@@ -494,6 +494,8 @@ Peter Djukic
     \item Number of requested slots depends on the number of bits that can be transmitted per slot, in our case this is most likely less than 1.
     \item One of the main differences between our problem and classical networking scheduling is that packets can be stored and forwarded on any of the scheduled link transmissions in the future, whereas the entanglement generated NEEDS to belong to it's associated generated entanglement so that it can be used properly.
     \item Create new schedule with set of rates, do not try to keep the same slots occupied between frames.
+    \item Look into the multi-commodity problem.
+    \item Look into mesh networks and 802.16.
 \end{itemize}
 
 \subsection{Notes}
@@ -513,31 +515,194 @@ Peter Djukic
     \item Techniques do not try to maintain the same set of slots between frames, if there is a new set of links we create a new schedule with the set of rates and send it out, so slot positions may change.
     \item Four reasons to solve the maximum concurrent flow problem, 1) Without delay constraints, problem viewed as the problem of finding the end-to-end "capacity" of wireless networks, 2) Corresponds to the "minimum length" or "maximum utilization" TDMA scheduling problem, 3) Optimization produces end-to-end rates that satisfy a limited proportional fairness property, 4) Method of framing the problem fits nicely into the 802.16 scheduling framework.
     \item Joint rate control and scheduling - previous optimization needs the requested end-to-end rates before it can proceed, requires operator input which is not desirable in mesh networks.  Generalize the problem so that the requested rates are not necessary and at the optimum point, the granted end-to-end rates satisfy a property such as proportional fairness, max-min fairness or maximum profit. Generalize the previous problem by using a utility function associated with the end-to-end rate.
+    \item Joint routing and scheduling - Looking for best rates over all paths results in the multi-commodity problem.  This thesis uses a set of fixed paths.  In the multi-commodity problem, there are $p$ commodities corresponding to $p$ end-to-end connections, where it is possible that there are more end-to-end connections than nodes in the network ie $p \geq n$.  Suppose we have a connection $\phi$ with source and destination nodes $v_i$ and $v_j$.  At the source node, $x_i^\phi > 0$ is the number of bits sent to the connection's destination in one frame.  $2 \leq i \leq n$ corresponds to uplink connections and $i=1$ for the downlink connections.  At the destination node, $-x_j^\phi$ is the number of bits reaching the node of the connection in one frame.  $2 \leq j \leq n$ for mesh networks. Multi-commodity problem notoriously hard and solution provides multiple paths which makes routing complicated.  
+    \item 802.16 requires a solution that provides a set of routes that form a tree.
+    \item TDMA Scheduling - Examine the scheduling problem when the number of slots in each frame on the virtual slots axis is fixed and end-to-end delay is not an issue.  Delay constrained TDMA discussed later.
+    \item 
 \end{itemize}
 
-\section{}
+\section{A Negotiation Based TDMA Scheduling with Consecutive slot assignments for wireless sensor networks}
 
 \subsection{Thoughts}
 \begin{itemize}
-    \item
+	\item Using locations in schedules to share synchronization mechanisms is an interesting aspect for removing clock drift. (This multihop parent-children broadcast synchronization approach is similar to root-neighbors synchronization approach in FTSP [32]. FlexiTP paper - The
+FlexiTP time synchronization scheme is desirable because children only need to have the same clocks as their parent to ensure that a parent is in the receive mode when a child sends data to it and vice versa. This local synchronization scheme is simple but effective because clock drift is minimized by synchronizing nodes during each data- gathering cycle. Furthermore, it incurs low overheads since the synchronization message is piggybacked to the MFS packet.)
+    \item Diagram style is very nice.
+    \item Multi-hop slot propagation might be interesting idea for single communication qubit networks
 \end{itemize}
 
 \subsection{Notes}
 \begin{itemize}
-    \item
+    \item To avoid transmission collisions between schedules can also propagate slot info to three(+)-hop neighbors,
+    \item In this paper, we propose a TDMA scheduling with well-designed slots negotiation and consecutive slots assignment mechanisms. Furthermore, our approach adopts a local time synchronization mechanism to remove the impact of clock drift. In our approach, each node’s schedule consists of slots which are used to data collection and time synchronization, respectively. Slots are assigned to nodes in the initial phase. Once all nodes establish their schedules, they receive and transmit data according to their schedules in each data collection cycle.
+    \item 
 \end{itemize}
 
-\section{}
+\section{Optimal Timeslot Size for Synchronous Optical Burst Switching}
 
 \subsection{Thoughts}
 \begin{itemize}
-    \item
+    \item Explanation of guard times nice.  Important to remember that the slot size has an impact on how much guard time ends up filling the frame.  Trade off with granularity of link usage (bursts) and spending more of frame in guard time.  What if we have mini slots in slots so guard times only occur every $N$ mini slots?
+    \item Because link generation is low probability, can we model entanglement generation as "bursty"?
+    \item Idea to think of timeslot utilization using probability of generating adjacent links in the network.  There is a point where increasing the slot duration increases the number of links expected to be built in a slot but may lose rate due to switching links less frequently. This suggests that networks with different probabilities of generating elementary links have different optimal slot sizes.
+    \item Calculation of burst blocking probability uses equation in reference 2, might be useful for above
+    \item 
 \end{itemize}
 
 \subsection{Notes}
 \begin{itemize}
-    \item
+    \item Guard time used between consecutive slots to accompany device calibration delays
+    \item Investigate effect of timeslot size in order to provide an analytical framework for estimating the optimized solution, based on a given network configuration and traffic characteristics/
+    \item  Analyzes time slot utilization based on the amount of bursty traffic expected provided a probability distribution.
+    \item Weighted Burst Loss Approximation - Compute offered load in the network, approximate offered load on each link, and approximate burst blocking probability at each link.
+    \item 
 \end{itemize}
 
+\section{Accurate clock synchronization for IEEE 802.11-based multi-hop wireless networks}
+\subsection{Thoughts}
+\begin{itemize}
+    \item Interesting, might be useful for some protocol specific things.
+\end{itemize}
+
+
+\subsection{Notes}
+\begin{itemize}
+    \item IEEE 802.11 uses a 64-bit TSF counter with micro-second resolution for synchronizing nodes in wireless network operating in ad-hoc mode.  Nodes broadcast their TSF value during beacon periods and update local TSF counter to the latest one seen.
+    \item NTP most commonly used IEEE standard
+    \item 
+\end{itemize}
+
+\section{Optimization based rate allocation and scheduling in TDMA based wireless mesh networks}
+\subsection{Thoughts}
+\begin{itemize}
+    \item Network Utility Maximization (ref 5), proposed for internet congestion control (ref 14, 15), important tool for modeling and designing resource allocation algorithms
+    \item TDMA MAC protocol ref 6
+    \item CSMA style protocol not chosen due to difficulty in QoS support
+    \item Ref 19 contention models
+    \item References 13 and 19 using contention graphs $G_C(V_C, E_C)$ where $V_C$ contains all transmissions in the network and $E_C$ indicates that two vertices contend with each other.
+    \item References 12 and 20 for clique/independent set stuff.
+    \item Reference 7 Least Overlapped First scheduling algorithm
+    \item Figure style is nice for schedules
+    \item Look at the algorithm more
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Propose a framework that performs both rate allocation and scheduling for unicast and multicast traffic in TDMA-based wireless mesh networks.
+    \item Rate allocation algorithm based on Network Utility Maximization.  Graph coloring-based scheduling algorithm achieves the allocated rates.  
+    \item Scheduling algorithm based on graph coloring of the contention graph and assumes the spatial TDMA MAC protocol
+    \item Provides efficient and fair rate allocation for both unicast and multicast traffic, framework effectively schedules the allocated rates which results in guaranteed throughput and bounded delay for session recipients, efficient and suitable for centralized impelementation
+    \item Rate allocation takes variable link capacities into consideration
+    \item By using perfect contention graphs to model rate allocation constraints, guaranteee that the allocated rates can be supported by an efficient scheduling algorithm proposed
+    \item Define notion of $transmission$, which is a generalization of a link.  A transmission consists of a sender, list of recipients, session carried by transmission, transmission rate used.
+    \item Transmission Contention Graph - Ref 19 - Protocol Model and Physical Model.  Example of Protocol Model in ref 8. Under this model every link-layer transmission rate corresponds to a fixed transmission range and interference range.  A transmission $i$ conflicts with transmission $j$ if 1) Both transmissions share the same sender, or 2) any recipient of transmission $j$ is within the interference range of the sneder of transmissoin $i$ or vice versa.
+    \item Define a transmission contention (conflict) graph based on the contention relationship among different transmissions.  Contention graphs have been used in several papers to model network resource constraints.
+    \item Maximal cliques and maximal independent sets of contention graphs are interesting.  A set of nodes is a clique if its induced subgraph is complete.  A maximal clique is defined as a clique that is not contained in any other clique.  Denote the set of maximal cliques of a contention graph as $C$.  An Independent Set is a set of nodes that are not connected by any edges, and a maximal independent set is an independent set not contained by any other independent set.
+    \item For a contention graph $G_C$, $I$ is the family of all independent sets of the graph.  Schedule $D$ can be defined as an infinite sequence of independent sets $I_1, I_2,...,I_k,...$ where $I_k \in I$.
+    \item Compute a frequency of transmission and claim that it can be treated as the normalized bandwidth allocated to a specific transmission.  A vector of frequencies is clique feasible for the contention graph if $\sum_{i \in C_j} f_i \leq 1, \all C_j \in C$
+    \item Has been shown that if the contention graph is a perfect graph, clique feasibility is equivalent to scheduling feasibility of the frequency vector.
+    \item A perfect graph is a graph in which every induced subgraph can be colored with $p$ colors where $p$ is the size of the largest clique in the subgraph,  A chordal graph is a graph that does not contain an induced $k-$cycle for $k \geq 4$ is an instance of a perfect graph. 
+\end{itemize}
+
+\section{On the Scalability of IEEE 802.11 Ad Hoc Networks}
+\subsection{Thoughts}
+\begin{itemize}
+    \item Might provide some insights into how clock synchronization done in 802.11 and what could be limitations for assuming so in the quantum networks.
+    \item Reference 7 does an analysis of the effect of network size and traffic patterns on the capacity of ad hoc wireless networks, might be useful to apply to this MAC protocol.
+    \item Lamport also proposes a synchronization mechanism in reference 6
+\end{itemize}
+
+\section{Link Scheduling Algorithms for Wireless Mesh Networks}
+\subsection{Thoughts}
+\begin{itemize}
+    \item All papers begin by specifying a model of the network, should do this for work.
+    \item Definitions for protocol interference and physical interference model definitions in reference 19 could be a good guide to defining a new interference model for quantum networks that motivates link scheduling.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Reference 18 shows optimal link-scheduling is NP-hard, also shows a graph coloring algorithm
+    \item Protocol interference and physical interference models.
+\end{itemize}
+
+\section{A dynamic adjustable contention period mechanism and adaptive backoff process to improve the performance for multichannel mesh deterministic access in wireless mesh LAN}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item A contention-based mechanism can be formulated by simply sending the control messages to the midpoint without actually performing the photon-emission.  Can split time into a contention period where everyone is trying to attempt entanglement generation using a midpoint but only begins photon emission after the contention period is over, maybe midpoint can be involved in deciding which end node(s) get to go-ahead with entanglement generation?  Avoids unecessary entanglement attempts but introduces additional noise on the qubits due to duration of contention period.
+    \item This work uses the IEEE802.11 ad-hoc timing synchronization mechanism in reference 30.
+    \item Distributed coordination function (DCF)?  Used at beacon intervals?
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Contention mechanism shown in Figure 2 may be a useful idea for a CSMA-like MAC protocol.
+    \item Mesh point sends beacon in accordance with the principles of the distributed coordination function (DCF) at the beginning of each beacon interval.  Other MPs cease sending beacons and take the timestamp values in the beacons if any MP sends the bacon successfully.
+\end{itemize}
+
+\section{An On-demand and Dynamic Slot Assignment Protocol for Ad Hoc Networks}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Argue that applying GPS or time analysis schemes in reference 1 can be used for slot synchronization.
+    \item Figures on different reservation collisions may be useful for thesis.
+    \item Theoretical performance analysis based on slot collisions may be useful.
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Dynamic slot assignment is difficult to realize as ad hoc networks are distributed and their topologies are variable.
+    \item Several slot assignment protocols for ad hoc networks have been proposed which can be classified into three classes.  Absolute toplogoy transparent (like TSMA in ref 2), insensitive to toplogy variation (like FPRP, Five Phase Reservation Protocol, in 3, ref 4 also has something), or assigning slot to node based on its two hop neighbor information (like USAP, Unifying Slot Assignment Protocol, in references 6 and 7).
+    \item Most current slo tassignment schemes for ad hoc networks are inefficient in adapting to variations of applications and network toplogy like TSMA and USAP,FPRP has partitioned TDMA frames that contain a reservation subframe an dinformation subframe.  These subframes interleaved periodicallywhich allows for slot competition amongst neighbors and to inform neighbors of competition results.  Winners are allowed to use corresponding channels.
+    \item Proposed protocol (ODSA) decreases slot reservation collisions by using randomness in slot selection.  On top of this, it should be able to adapt to variations in time delay and ensure time delay which is important for ad hoc networks with real-time applications.
+\end{itemize}
+
+\section{An Evolutionary-Dynamic TDMA Slot Assignment Protocol for Ad Hoc Networks}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Discussion of frame format (length, organization) and reservation negotiation should go into thesis.
+    \item Discusses a distributed approach where frames have slots that are reserved for reservation negotiation.  This isn't necessarily needed in the link scheduling protocol in the distributed case since we assume the scheduled resource is quantum and not classical.
+    \item Also discusses how nodes join the network and what information they obtain.  Nodes joining a quantum network would contact a centralized controller to obtain frame/slot information.
+\end{itemize}
+
+\subsection{Notes}
+
+\section{Network Flows Theory, Algorithms, and Applications}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Section 3.5 - Flow decomposition algorithms - Maybe not too useful
+    \item Section 5.1 - Label Correcting Algorithms
+    \item Section 6 - Maximum Flows
+    \item Section 8 - Maximum Flows,  Additional Topics
+    \item Section 9 - Minimum Cost Flows
+    \item Section 12 - Assignments and Matchings
+    \item Section 14 - Convex Cost Flows
+    \item Section 15 - Generalized Flows
+    \item Section 17 - Multicommodity Flows
+    \item Section 19.6 - Dynamic Flows
+\end{itemize}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Flow Decomposition
+    \begin{itemize}
+        \item Formulating network flow problems can be modeled using arcs or flows on paths and cycles.
+	\item Arc flow formulation means we have a vector $x=\{x_{ij}\}$ that satisfies:
+		$$\sum_{\{j:(i,j) \in A\}} x_{ij} - \sum_{\{j:(j,i) \in A\}} x_{ji} = -e(i) \text{   for all } i \in N$$
+		$$0 \leq x_{ij} \leq u_{ij} \text{   for all } (i,j) \in A$$
+        \item This is to say that the imbalance of a node is equal to the difference in it's inflow and it's outflow.  An imbalance greater than 0 corresponds to an excess node and an imbalance less than zero corresponds to a deficit node.  Zero is a balanced node.
+	\item Flow Decomposition Problem - Every path and cycle flow has a unique representation as nonnegative arc flows.  Conversely, every nonnegative arc flow x can be represented as a path and cycle flow (though not necessarily unique) with the following properties:
+	\begin{itemize}
+	    \item Every directed path with positive flow connects a deficit node to an excess node.
+            \item At most n+m paths and cycles have nonzero flow; out of these, at most m cycles have nonzero flow.
+	\end{itemize}
+    \end{itemize}
+    \item Label Correcting Algorithms
+    \begin{itemize}
+        \item 
+    \end{itemize}
+\end{itemize}
 
 \end{document}
