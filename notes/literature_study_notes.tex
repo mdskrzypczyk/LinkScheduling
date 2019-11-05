@@ -705,4 +705,38 @@ FlexiTP time synchronization scheme is desirable because children only need to h
     \end{itemize}
 \end{itemize}
 
+
+\section{Real-Time Systems Lecture Notes - Giorgio Buttazzo}
+
+\subsection{Thoughts}
+\begin{itemize}
+    \item Task definition useful
+    \item Can model idle behavior in protocols at nodes as "busy-wait" times where concurrent actions can be placed into the schedule (lecture 2, page 12 of 15).
+    \item Mention of concurrency and conflicts with shared resources might be useful when considering interleaving protocols and having enough resources to support executing them concurrently?
+    \item Our problem seems Nonpreemptive, Static, Offline, Use of Optimal vs Heuristic is explored
+    \item Possible heuristics: Shortest Job First (Maybe shortest protocol first?), Priority Scheduling,
+    \item Scheduling algorithms also accompanied with a feasibility test to make sure schedule is possible.
+    \item Deadlines of individual bell pairs may be related to whether they need to be available at the same time or not
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Task definition - Has an activation time $a_i$, a start time $s_i$, a computation time $C_i$ and a finish time $f_i$.  The response time of a task $R_i=f_i-a_i$.
+    \item A Real-Time Task is a task characterized by a timing constraint on its response time, called a deadline $d_i$. Relative deadline $D_i$ from activation time $a_i$. A task is feasible if it is guaranteed to complete within its deadline $d_i$ or equivalently the response time is less than the relative deadline $R_i \leq D_i$.
+    \item Slack corresponds to the amount of time between $f_i$ and $d_i$ if $d_i - f_i > 0$.  If finish time after deadline then this is called lateness $f_i - d_i$.
+    \item There are time driven tasks (periodic) and event-driven tasks (aperiodic).
+    \item Periodic tasks have activation times $a_{i,k} = \Phi_i + (k-1)T_i$ where $k$ enumerates the instance of periodic task $i$ with periodicity $T_i$.  The deadlines $d_{i,k}=a_{i,k} + D_i$ and often $T_i=D_i$.
+    \item Hard tasks must meet deadlines, Firm tasks become invalid if they miss deadline, Soft tasks has flexible deadlines.
+    \item Precedence constraints impose an ordering in the task execution.
+    \item If a task must wait for I/O or data concurrency allows another task to run during that interval.
+    \item Concurrency becomes superior when managing periodic tasks at different rates (using rate monotonic). But can introduce conflicts when using shared resources.
+    \item Some simplifying assumptions: Single Processor, Homogenous Task Sets, Fully Preemptive Tasks, Simultaneous Activations, No precedence constraints, No resource constraints.
+    \item Descriptions of Preemptive/Nonpreemptive, Static/Dynamic, Online/Offline, Optimal/Heuristic
+    \item Optimality Criteria: Minimizing maximum lateness, minimizing number of missed deadlines, Maximizing cumulative value of tasks assigned with values
+    \item Discussion of handling precedence requests (lecture 3)
+    \item Examples of feasible/infeasible schedules using different algorithms
+    \item
+\end{itemize}
+
+
 \end{document}
