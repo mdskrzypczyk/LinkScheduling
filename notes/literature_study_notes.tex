@@ -738,5 +738,33 @@ FlexiTP time synchronization scheme is desirable because children only need to h
     \item
 \end{itemize}
 
+\section{Scheduling: An Engineering Approach to Computer Networking}
+
+\subsection{Thoughts}
+\begin{itemize}
+	\item For protocols using RMS/EDF, space protocols that have slack and permitted extension (spacing between actions in protocol).  But how do we know which actions in the protocol can be shifted around?
+\end{itemize}
+
+\subsection{Notes}
+\begin{itemize}
+    \item Fairness: Each connection gets no more than it wants, in case of excess it is equally shared.
+    \item EDF scheduling using periodic deadlines based on period to achieve desired rate
+\end{itemize}
+
+\section{Lightweight EDF Scheduling with Deadline Inheritence}
+\subsection{Thoughts}
+\begin{itemize}
+	\item Utilization $U$ of a schedule $\Omega$ is $U=\sum_{i=0}^n \frac{C_i}{T_i}$, in order to be schedulable $U \leq 1$ must hold.
+	\item CPU time that must be available between 0 and $t$ for a schedule $\Omega$ to be schedulable: processor demand $H(t)=\sum_{i=0}^n \lfloor \frac{t - D_i + T_i}{T_i} \rfloor C_i$.
+	\item The workload $W(t)$ represents the cumulative amount of CPU time that is consumable by all task releases between time 0 and $t$ is $W(t)=\sum_{i=0}^n \lceil \frac{t}{T_i} \rceil C_i$.
+	\item Observation by Baruah et al (ref 3), "If for any interval of length $L$, all work load offered during $[0,L]$ can be resolved before or at $L$, then this can be concluded for any arbitrary time interval $[t, t+L]$.
+	\item Figure 1 shows $H(t)$ and $W(t)$ for a sample test set.  When $W(t)$ touches the diagonal it means that the schedule is feasible.  If $H(t)$ cross the diagonal it means the schedule is infeasible.
+	\item Presents an algorithm using a queue and stack for scheduling EDF style.
+	\item For shared resources, released tasks stay on the Released Queue if it needs resources that are already in use by one of the tasks in the Run Stack, even if such a released task has a shorter deadline.  So once  task is on the Run Stack it will never claim a resource held by another preempted task.  This is enforced using a mechanism called deadline inheritence, similar to priority inheritence in reference 6.
+	\item Deadline inheritence assigns each resource an inherited deadline which is the minimum deadline of all tasks using the resource.  The inherited deadline of a task is then the minimum deadline of all resources in use at a point in time.  A tasks inherited deadline then changes as the task acquires and releases resources.
+\end{itemize}
+
+\subsection{Notes}
+
 
 \end{document}
