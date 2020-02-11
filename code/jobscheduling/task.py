@@ -99,14 +99,18 @@ class DAGResourceSubTask(ResourceTask):
     def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None):
         super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources)
         self.d = d
+        if parents is None:
+            parents = []
         self.parents = parents
+        if children is None:
+            children = []
         self.children = children
 
-    def set_parents(self, parents):
-        self.parents = parents
+    def add_parent(self, task):
+        self.parents = list(set(self.parents + [task]))
 
-    def set_children(self, children):
-        self.children = children
+    def add_child(self, task):
+        self.children = list(set(self.children + [task]))
 
 
 def get_dag_exec_time(sources):
@@ -168,11 +172,12 @@ class ResourceDAGTask(ResourceTask):
         self.tasks = {}
         self.subtasks = tasks
         for task in tasks:
-            if task.parents is None:
+            if not task.parents:
                 self.sources.append(task)
-            if task.children is None:
+            if not task.children:
                 self.sinks.append(task)
             self.tasks[task.name] = task
+
         c = get_dag_exec_time(self.sources)
         if d is None:
             if not all([t.d is None for t in self.sinks]):
@@ -185,6 +190,7 @@ class ResourceDAGTask(ResourceTask):
 
     def earliest_deadline(self):
         return min([subtask.d for subtask in self.sources])
+
 
 
 class PeriodicResourceDAGTask(PeriodicDAGTask):
