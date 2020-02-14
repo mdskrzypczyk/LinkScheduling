@@ -55,8 +55,6 @@ def find_split_path_protocol(path, G, Fmin, Rmin, numL, numR):
 
         # Compute minimum fidelity in order for num distillations to achieve Fmin
         Fminswap = fidelity_for_distillations(num, Fmin)
-        if Fminswap == 0:
-            continue
         Funswapped = unswap_links(Fminswap)
 
         # Search for protocols on left and right that have above properties

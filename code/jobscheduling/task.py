@@ -47,7 +47,7 @@ def generate_non_periodic_budget_task_set(periodic_task_set):
     return taskset
 
 class Task:
-    def __init__(self, name, c, a=0, d=None):
+    def __init__(self, name, c, a=0, d=None, **kwargs):
         self.name = name
         self.a = a
         self.c = c
@@ -190,7 +190,6 @@ class ResourceDAGTask(ResourceTask):
 
     def earliest_deadline(self):
         return min([subtask.d for subtask in self.sources])
-
 
 
 class PeriodicResourceDAGTask(PeriodicDAGTask):

@@ -1,5 +1,5 @@
 import networkx as nx
-from esss import swap_links, distill_links, esss
+from esss import swap_links, distill_links, esss, Protocol
 
 
 def create_protocol(path, G, Fmin, Rmin):
@@ -12,7 +12,10 @@ def create_protocol(path, G, Fmin, Rmin):
     print("Creating protocol on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
     subG = nx.subgraph_view(G, filter_node, filter_edge)
     protocol = esss(path, subG, Fmin, Rmin)
-    return protocol
+    if type(protocol) != Protocol and protocol is not None:
+        return protocol
+    else:
+        return None
 
 
 def swap_then_distill(F1, F2, n):
