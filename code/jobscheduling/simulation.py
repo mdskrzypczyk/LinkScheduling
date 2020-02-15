@@ -8,6 +8,7 @@ from esss import LinkProtocol, DistillationProtocol, SwapProtocol
 from visualize import draw_DAG
 from nv_links import load_link_data
 from math import sqrt, ceil
+from scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, pretty_print_schedule
 
 
 def get_dimensions(n):
@@ -34,7 +35,7 @@ def gen_topologies(n):
     for i in range(n):
         comm_qs = []
         storage_qs = []
-        for num_comm_q in range(3):
+        for num_comm_q in range(4):
             comm_q_id = "{}-C{}".format(i, num_comm_q)
             comm_qs.append(comm_q_id)
         for num_storage_q in range(1):
@@ -112,13 +113,18 @@ def gen_topologies(n):
 
 
 def get_schedulers():
+    # schedulers = [
+    #     MultipleResourceEDFScheduler,
+    #     MultipleResourceBlockEDFScheduler,
+    #     MultipleResourceNPEDFScheduler,
+    #     MultipleResourceBlockNPEDFScheduler,
+    #     MultipleResourceBlockCEDFScheduler,
+    #     MultipleResourceBlockEDFLBFScheduler
+    # ]
     schedulers = [
-        MultipleResourceEDFScheduler,
-        MultipleResourceBlockEDFScheduler,
-        MultipleResourceNPEDFScheduler,
+        # MultipleResourceOptimalBlockScheduler,
         MultipleResourceBlockNPEDFScheduler,
-        MultipleResourceBlockCEDFScheduler,
-        MultipleResourceBlockEDFLBFScheduler
+        MultipleResourceBlockCEDFScheduler
     ]
     return schedulers
 
@@ -127,9 +133,9 @@ def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
     for num_demands in range(num):
-        src, dst = ['0', '3'] # random.sample(nodeG.nodes, 2)
-        fidelity = 0.7577304591440375 # 0.5 + random.random() / 2
-        rate = 1.6666666666666665 # 1 / random.sample(list(range(5, 10)), 1)[0] * 10
+        src, dst = random.sample(nodeG.nodes, 2)
+        fidelity = 0.5 + random.random() / 2
+        rate = 1 / random.sample(list(range(5, 10)), 1)[0] * 10
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -212,7 +218,7 @@ def convert_protocol_to_task(request, protocol):
                 last_action, _ = stack.pop()
 
     source, dest, fidelity, rate = request
-    main_dag_task = ResourceDAGTask(name="{},{},{},{}".format(source, dest, fidelity, rate), tasks=tasks, d=1 / rate)
+    main_dag_task = ResourceDAGTask(name="{},{},{},{}".format(source, dest, fidelity, rate), tasks=tasks, d=ceil(1 / rate))
 
     return main_dag_task
 
@@ -224,7 +230,6 @@ def schedule_dag_for_resources(dagtask, topology):
     nodes = dagtask.resources
     node_resources = dict([(n, node_topology.nodes[n]["comm_qs"]) for n in nodes])
     resource_schedules = defaultdict(list)
-    resource_states = defaultdict(int)
     stack = []
     task = sink
     last_task = None
@@ -241,10 +246,8 @@ def schedule_dag_for_resources(dagtask, topology):
 
             else:
                 if peek_task.name[0] == "L":
-                    possible_task_resources = [list(filter(lambda r: resource_states[r] == 0, node_resources[n])) for n in peek_task.resources]
+                    possible_task_resources = [node_resources[n] for n in peek_task.resources]
                     used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
-                    for r in used_resources:
-                        resource_states[r] = 1
 
                 elif peek_task.name[0] == "S":
                     [task_node] = peek_task.resources
@@ -258,15 +261,17 @@ def schedule_dag_for_resources(dagtask, topology):
                                 for p in search_task.parents:
                                     if p.name[0] == "S":
                                         q.append(p)
+                                    elif p.name[0] == "D":
+                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] if r in node_resources[task_node]]
                                     else:
-                                        possible_task_resources += [[r] for sp in search_task.parents for r in sp.resources if r in node_resources[task_node] and resource_states[r] == 1]
+                                        possible_task_resources += [[r] for r in p.resources if r in node_resources[task_node]]
+                        elif pt.name[0] == "D":
+                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2] if r in node_resources[task_node]]
                         else:
-                            possible_task_resources += [[r] for pt in peek_task.parents for r in pt.resources if r in node_resources[task_node] and resource_states[r] == 1]
+                            possible_task_resources += [[r] for r in pt.resources if r in node_resources[task_node]]
 
 
                     used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
-                    for r in used_resources:
-                        resource_states[r] = 0
 
                 else:
                     # Find the resources that are being distilled
@@ -281,32 +286,42 @@ def schedule_dag_for_resources(dagtask, topology):
                                 for p in search_task.parents:
                                     if p.name[0] == "S":
                                         q.append(p)
+                                    elif p.name[0] == "D":
+                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] for tn in task_nodes if r in node_resources[tn]]
                                     else:
-                                        possible_task_resources += [[r] for tn in task_nodes for sp in search_task.parents for r in sp.resources if r in node_resources[tn] and resource_states[r] == 1]
+                                        possible_task_resources += [[r] for tn in task_nodes for sp in search_task.parents for r in sp.resources if r in node_resources[tn]]# and resource_states[r] == 1]
                         elif pt.name[0] == "D":
-                            possible_task_resources += [[list(sorted(pt.resources))[1]]] + [[list(sorted(pt.resources))[3]]]
+                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2]]
                         else:
                             possible_task_resources += [[r] for tn in task_nodes for r in pt.resources if r in node_resources[tn]]
 
                     used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
 
-                    nrs = [list(sorted(filter(lambda r: r in node_resources[tn], used_resources))) for tn in task_nodes]
-                    for nr in nrs:
-                        resource_states[nr[0]] = 0
-
-                    for r in used_resources:
-                        schedule = resource_schedules[r]
-                        last_occupied_time = schedule[-2]
-                        resource_schedules[r] = list(sorted(set(schedule + list(range(last_occupied_time + 1, peek_task.a)))))
-
                 last_task = stack.pop()
 
-    draw_DAG(dagtask)
-    import pdb
-    pdb.set_trace()
+    sink_task = dagtask.sinks[0]
+    asap_duration = sink_task.a + ceil(sink_task.c)
+    asap_decoherence = get_schedule_decoherence(resource_schedules, asap_duration)
     print("Scheduling task ALAP")
     convert_task_to_alap(dagtask)
+    print("ASAP Schedule latency {} total decoherence {}".format(asap_duration, asap_decoherence))
     return dagtask
+
+
+def get_schedule_decoherence(resource_schedules, completion_time):
+    total_decoherence = 0
+    for r in resource_schedules.keys():
+        rs = resource_schedules[r]
+        for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
+            if t1.name[0] == "L" or t1.name[0] == "D":
+                total_decoherence += (s2 - ceil(t1.a) - s1)
+
+        if rs:
+            s, t = rs[-1]
+            if t.name[0] == "L" or t.name[0] == "D":
+                total_decoherence += (completion_time - s - ceil(t.c))
+
+    return total_decoherence
 
 import itertools
 
@@ -324,64 +339,106 @@ def schedule_task_asap(task, task_resources, resource_schedules):
     earliest_possible_start = float('inf')
     earliest_resources = None
     for resource_set in list(itertools.product(*task_resources)):
-        schedule_set = [resource_schedules[r] for r in resource_set]
-        possible_start = get_earliest_start_for_resources(earliest_start, task, schedule_set)
 
-        if possible_start < earliest_possible_start:
+        possible_start = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules)
+
+        if earliest_start <= possible_start < earliest_possible_start:
             earliest_possible_start = possible_start
             earliest_resources = resource_set
 
         if possible_start == earliest_start:
             break
 
-    slots = list(range(earliest_possible_start, earliest_possible_start + ceil(task.c)))
+    slots = []
+    for slot in range(earliest_possible_start, earliest_possible_start + ceil(task.c)):
+        slots.append((slot, task))
     for r in list(set(earliest_resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
-    task.a = slots[0]
-    task.resources = list(set(earliest_resources))
+    task.a = slots[0][0]
+    task.resources = list(sorted(set(earliest_resources)))
     print("Scheduled {} with resources {} at t={}".format(task.name, task.resources, task.a))
     return list(set(earliest_resources))
 
 
-def get_earliest_start_for_resources(earliest, task, resource_schedules):
-    occupied_slots = set()
-    for rs in resource_schedules:
-        occupied_slots |= set(rs)
-    occupied_slots = list(filter(lambda s: s >= earliest, list(sorted(occupied_slots))))
-    if not occupied_slots or occupied_slots[0] >= earliest + task.c:
-        return earliest
-    else:
-        occupied_ranges = list(to_ranges(occupied_slots))
-        for (s1, e1), (s2, e2) in zip(occupied_ranges, occupied_ranges[1:]):
-            if s2 - e1 >= task.c:
-                return e1
+def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules):
+    occupied_slots = defaultdict(list)
+    for r in resource_set:
+        rs = resource_schedules[r]
+        for slot, t in rs:
+            occupied_slots[slot].append(t)
 
-        return occupied_ranges[-1][1] + 1
+    if not occupied_slots:
+        return earliest
+
+    else:
+        occupied_ranges = list(to_ranges(occupied_slots.keys()))
+        _, e = occupied_ranges[-1]
+        last_tasks = []
+        for r in resource_set:
+            rs = resource_schedules[r]
+            filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
+            if filtered_schedule:
+                last_task_slot, last_task = filtered_schedule[-1]
+                last_tasks.append(last_task)
+
+        if not (task.name[0] == "L" and any([task_locks_resource(t, resource_set) for t in last_tasks])):
+            if e >= earliest:
+                return occupied_ranges[-1][1] + 1
+            else:
+                return earliest
+        else:
+            return float('inf')
+
+
+def task_locks_resource(task, resources):
+    link_lock = (task.name[0] == "L" and any([r in task.resources for r in resources]))
+    distill_lock = (task.name[0] == "D" and any([r in list(sorted(task.resources))[1:4:2] for r in resources]))
+    return link_lock or distill_lock
 
 
 def convert_task_to_alap(dagtask):
-    stack = dagtask.sinks
+    # Last task doesn't move
+    queue = list(sorted(dagtask.subtasks, key=lambda task: -task.a))
     resource_schedules = defaultdict(list)
-    resource_states = defaultdict(int)
-    while stack:
-        task = stack.pop()
+    last_task = queue.pop(0)
+    for r in last_task.resources:
+        resource_schedules[r] = [(s, last_task) for s in range(last_task.a, last_task.a + ceil(last_task.c))]
+
+    while queue:
+        task = queue.pop(0)
+
+        # Find the latest t <= child.a s.t. all resources available
         schedule_task_alap(task, resource_schedules)
-        stack += list(sorted(task.parents, key=lambda task: task.a))
+
+    earliest = min([task.a for task in dagtask.subtasks])
+    if earliest != 0:
+        for task in dagtask.subtasks:
+            task.a -= earliest
+        for r in resource_schedules.keys():
+            schedule = resource_schedules[r]
+            resource_schedules[r] = [(s - earliest, t) for s, t in schedule]
+
+    sink_task = dagtask.sinks[0]
+    alap_latency = sink_task.a + ceil(sink_task.c)
+    alap_decoherence = get_schedule_decoherence(resource_schedules, alap_latency)
+    print("ALAP Schedule latency {} total decoherence {}".format(alap_latency, alap_decoherence))
 
 
 def schedule_task_alap(task, resource_schedules):
-    latest = min([ct.a - ceil(task.c) for ct in task.children] + [task.a])
-    schedule_set = [resource_schedules[r] for r in task.resources]
-    start = get_latest_slot_for_resources(latest, task, schedule_set)
+    possible = [task.a]
+    child_starts = [ct.a - ceil(task.c) for ct in task.children if set(task.resources) & set(ct.resources)]
+    if child_starts:
+        possible += [min(child_starts)]
+    latest = max(possible)
 
-    slots = list(range(start, start + ceil(task.c)))
+    slots = [(s, task) for s in range(latest, latest + ceil(task.c))]
     for r in list(set(task.resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
-    if slots[0] != task.a:
-        print("Moved task {} from t={} to t={}".format(task.name, task.a, slots[0]))
-    task.a = slots[0]
+    if slots[0][0] != task.a:
+        print("Moved task {} from t={} to t={}".format(task.name, task.a, slots[0][0]))
+    task.a = slots[0][0]
     print("Scheduled {} with resources {} at t={}".format(task.name, task.resources, task.a))
 
 
@@ -409,6 +466,8 @@ def main():
     budget_allowances = [1*i for i in range(1, 11)]
     network_topologies = gen_topologies(num_network_nodes)
 
+    network_schedulers = get_schedulers()
+    # schedule_validator = MultipleResourceBlockNPEDFScheduler.check_feasible
     results = {}
 
     for topology in network_topologies:
@@ -431,25 +490,24 @@ def main():
                     print("Scheduling task for request {}".format(request))
                     scheduled_task = schedule_dag_for_resources(task, topology)
                     taskset.append(scheduled_task)
-                    draw_DAG(scheduled_task)
-                    import pdb
-                    pdb.set_trace()
 
                 network_tasksets[u].append(taskset)
 
-        import pdb
-        pdb.set_trace()
 
         # Use all schedulers
-        for scheduler in network_schedulers:
+        for scheduler_class in network_schedulers:
+            scheduler = scheduler_class()
             results_key = str(type(scheduler))
             scheduler_results = defaultdict(int)
 
             for u in utilizations:
                 # Run scheduler on all task sets
                 for taskset in network_tasksets[u]:
-                    schedule, _ = scheduler.schedule_tasks(taskset)
-                    valid = schedule_validator(schedule, taskset)
+                    schedule = scheduler.schedule_tasks(taskset)
+                    # valid = schedule_validator(schedule, taskset)
+
+                    import pdb
+                    pdb.set_trace()
 
                     # Record success
                     if valid:

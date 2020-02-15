@@ -903,13 +903,13 @@ class MultipleResourceOptimalDAGScheduler(Scheduler):
 
 
 class MultipleResourceOptimalBlockScheduler(Scheduler):
-    def schedule(self, dagset):
+    def schedule_tasks(self, dagset):
         # Convert DAGs into tasks
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
-                                              resources=dag_task.get_resources())
+            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.d,
+                                              resources=dag_task.resources)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
 
@@ -922,9 +922,13 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
             for r in block_task.resources:
                 G.add_edge(block_task.name, r)
 
-        sub_graphs = nx.connected_component_subgraphs(G)
+        sub_graphs = nx.connected_components(G)
         tasksets = []
+        print(list(sub_graphs))
+        import pdb
+        pdb.set_trace()
         for sg in sub_graphs:
+            print(sg)
             nodes = set(sg.nodes)
             task_names = nodes - resources
             taskset = [tasks[name] for name in task_names]
@@ -934,7 +938,7 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
         scheduler = PeriodicOptimalScheduler()
         schedules = []
         for taskset in tasksets:
-            schedule, valid = scheduler.schedule(taskset)
+            schedule, valid = scheduler.schedule_tasks(taskset)
             schedules.append(schedule)
 
         # Set of schedules is the schedule for each group of resources
@@ -942,13 +946,13 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
 
 
 class MultipleResourceBlockNPEDFScheduler(Scheduler):
-    def schedule(self, dagset):
+    def schedule_tasks(self, dagset):
         # Convert DAGs into tasks
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
-                                              resources=dag_task.get_resources())
+            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.d,
+                                              resources=dag_task.resources)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
 
@@ -961,10 +965,9 @@ class MultipleResourceBlockNPEDFScheduler(Scheduler):
             for r in block_task.resources:
                 G.add_edge(block_task.name, r)
 
-        sub_graphs = nx.connected_component_subgraphs(G)
+        sub_graphs = nx.connected_components(G)
         tasksets = []
-        for sg in sub_graphs:
-            nodes = set(sg.nodes)
+        for nodes in sub_graphs:
             task_names = nodes - resources
             taskset = [tasks[name] for name in task_names]
             tasksets.append(taskset)
@@ -973,7 +976,7 @@ class MultipleResourceBlockNPEDFScheduler(Scheduler):
         scheduler = PeriodicNPEDFScheduler()
         schedules = []
         for taskset in tasksets:
-            schedule, valid = scheduler.schedule(taskset)
+            schedule, valid = scheduler.schedule_tasks(taskset)
             schedules.append(schedule)
 
         # Set of schedules is the schedule for each group of resources
