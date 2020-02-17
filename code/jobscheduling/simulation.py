@@ -3,7 +3,7 @@ import random
 from collections import defaultdict
 import networkx as nx
 from protocols import create_protocol
-from task import DAGResourceSubTask, ResourceDAGTask
+from task import DAGResourceSubTask, ResourceDAGTask, PeriodicResourceDAGTask
 from esss import LinkProtocol, DistillationProtocol, SwapProtocol
 from visualize import draw_DAG
 from nv_links import load_link_data
@@ -133,9 +133,9 @@ def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
     for num_demands in range(num):
-        src, dst = random.sample(nodeG.nodes, 2)
-        fidelity = 0.5 + random.random() / 2
-        rate = 1 / random.sample(list(range(5, 10)), 1)[0] * 10
+        src, dst = ['0', '3'] # random.sample(nodeG.nodes, 2)
+        fidelity =  0.7669982849869461 # 0.5 + random.random() / 2
+        rate = 1.6666666666666665 # 1 / random.sample(list(range(5, 10)), 1)[0] * 10
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -163,7 +163,7 @@ def print_protocol(protocol):
             q += p.protocols
 
 
-def convert_protocol_to_task(request, protocol):
+def convert_protocol_to_task(request, protocol, slot_size=0.01):
     tasks = []
     labels = {
         LinkProtocol.__name__: 0,
@@ -204,7 +204,8 @@ def convert_protocol_to_task(request, protocol):
 
                 resources = peek_protocol_action.nodes
 
-                dagtask = DAGResourceSubTask(name=name, c=peek_protocol_action.duration, parents=parent_tasks[peek_protocol_action.name],
+                dagtask = DAGResourceSubTask(name=name, c=ceil(peek_protocol_action.duration / slot_size),
+                                             parents=parent_tasks[peek_protocol_action.name], dist=peek_protocol_action.dist,
                                              resources=resources)
 
                 for parent in parent_tasks[peek_protocol_action.name]:
@@ -218,7 +219,7 @@ def convert_protocol_to_task(request, protocol):
                 last_action, _ = stack.pop()
 
     source, dest, fidelity, rate = request
-    main_dag_task = ResourceDAGTask(name="{},{},{},{}".format(source, dest, fidelity, rate), tasks=tasks, d=ceil(1 / rate))
+    main_dag_task = PeriodicResourceDAGTask(name="{},{},{},{}".format(source, dest, fidelity, rate), tasks=tasks, p=ceil(1 / rate))
 
     return main_dag_task
 
@@ -236,11 +237,11 @@ def schedule_dag_for_resources(dagtask, topology):
     while stack or task:
         if task is not None:
             stack.append(task)
-            task = None if not task.parents else sorted(task.parents, key=lambda pt: pt.c)[1]
+            task = None if not task.parents else sorted(task.parents, key=lambda pt: pt.dist)[1]
 
         else:
             peek_task = stack[-1]
-            right_task = None if not peek_task.parents else sorted(peek_task.parents, key=lambda pt: pt.c)[0]
+            right_task = None if not peek_task.parents else sorted(peek_task.parents, key=lambda pt: pt.dist)[0]
             if right_task is not None and last_task != right_task:
                 task = right_task
 
@@ -427,6 +428,9 @@ def convert_task_to_alap(dagtask):
 
 def schedule_task_alap(task, resource_schedules):
     possible = [task.a]
+    if task.name == "D;4;0;2":
+        import pdb
+        pdb.set_trace()
     child_starts = [ct.a - ceil(task.c) for ct in task.children if set(task.resources) & set(ct.resources)]
     if child_starts:
         possible += [min(child_starts)]
@@ -493,6 +497,8 @@ def main():
 
                 network_tasksets[u].append(taskset)
 
+        import pdb
+        pdb.set_trace()
 
         # Use all schedulers
         for scheduler_class in network_schedulers:

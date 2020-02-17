@@ -215,6 +215,7 @@ class Protocol:
         self.R = R
         self.nodes = nodes
         self.set_duration(R)
+        self.dist = 0
 
     def set_duration(self, R):
         if R == 0:
@@ -230,6 +231,7 @@ class LinkProtocol(Protocol):
     def __init__(self, F, R, nodes):
         super(LinkProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.name = self.name_template.format(self.count, *nodes)
+        self.dist = 0
         LinkProtocol.count += 1
 
     def __copy__(self):
@@ -244,8 +246,13 @@ class DistillationProtocol(LinkProtocol):
         super(DistillationProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.protocols = list(sorted(protocols, key=lambda p: p.R))
         self.durations = [protocol.duration for protocol in self.protocols]
+        self.dist = max([protocol.dist for protocol in self.protocols]) + 1
         self.name = self.name_template.format(self.count, *nodes)
         DistillationProtocol.count += 1
+
+    def set_duration(self, R):
+        distillation_duration = 0.01
+        self.duration = distillation_duration
 
     def __copy__(self):
         return DistillationProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
@@ -259,8 +266,13 @@ class SwapProtocol(Protocol):
         super(SwapProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.protocols = list(sorted(protocols, key=lambda p: p.R))
         self.durations = [protocol.duration for protocol in self.protocols]
+        self.dist = max([protocol.dist for protocol in self.protocols]) + 1
         self.name = self.name_template.format(self.count, *nodes)
         SwapProtocol.count += 1
+
+    def set_duration(self, R):
+        swap_duration = 0.01
+        self.duration = swap_duration
 
     def __copy__(self):
         return SwapProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])

@@ -46,6 +46,7 @@ def generate_non_periodic_budget_task_set(periodic_task_set):
 
     return taskset
 
+
 class Task:
     def __init__(self, name, c, a=0, d=None, **kwargs):
         self.name = name
@@ -88,15 +89,16 @@ class PeriodicResourceTask(ResourceTask):
 
 
 class DAGSubTask(Task):
-    def __init__(self, name, c, d=None, parents=None, children=None):
+    def __init__(self, name, c, d=None, parents=None, children=None, dist=0):
         super(DAGSubTask, self).__init__(name, c=c, d=None)
         self.d = d
         self.parents = parents
         self.children = children
+        self.dist = dist
 
 
 class DAGResourceSubTask(ResourceTask):
-    def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None):
+    def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None, dist=0):
         super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources)
         self.d = d
         if parents is None:
@@ -105,6 +107,7 @@ class DAGResourceSubTask(ResourceTask):
         if children is None:
             children = []
         self.children = children
+        self.dist = dist
 
     def add_parent(self, task):
         self.parents = list(set(self.parents + [task]))
@@ -153,10 +156,11 @@ class PeriodicDAGTask(PeriodicTask):
         self.sources = []
         self.sinks = []
         self.tasks = {}
+        self.subtasks = tasks
         for task in tasks:
-            if task.parents is None:
+            if not task.parents:
                 self.sources.append(task)
-            if task.children is None:
+            if not task.children:
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
