@@ -1,10 +1,9 @@
 import networkx as nx
-import pdb
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 from collections import defaultdict
 from math import floor
 from queue import PriorityQueue
-from task import generate_non_periodic_task_set, generate_non_periodic_budget_task_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask
+from jobscheduling.task import generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask
 
 
 def pretty_print_schedule(schedule):
@@ -84,7 +83,7 @@ class OptimalScheduler(Scheduler):
         return disjoint_tasksets
 
 
-    def schedule(self, taskset):
+    def schedule_tasks(self, taskset):
         schedule = []
 
         disjoint_tasksets = self.get_disjoint_tasksets(taskset)
@@ -138,7 +137,7 @@ class OptimalScheduler(Scheduler):
 
 
 class PeriodicOptimalScheduler(OptimalScheduler):
-    def schedule(self, taskset):
+    def schedule_tasks(self, taskset):
         taskset = generate_non_periodic_task_set(taskset)
         disjoint_tasksets = self.get_disjoint_tasksets(taskset)
 
@@ -178,6 +177,7 @@ class EDFScheduler(Scheduler):
         return taskset
 
     def schedule_tasks(self, taskset):
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         queue = PriorityQueue()
         schedule = []
@@ -236,6 +236,7 @@ class PreemptionBudgetScheduler(Scheduler):
         return taskset
 
     def schedule_tasks(self, taskset):
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         taskset_copy = [BudgetTask(name=task.name, a=task.a, c=task.c, d=task.d, k=task.k) for task in taskset]
         self.ready_queue = PriorityQueue()
@@ -432,6 +433,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
         return taskset
 
     def schedule_tasks(self, taskset):
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         taskset_copy = [BudgetTask(name=task.name, a=task.a, c=task.c, d=task.d, k=task.k) for task in taskset]
         self.ready_queue = PriorityQueue()
@@ -683,6 +685,7 @@ class NPEDFScheduler(Scheduler):
         return taskset
 
     def schedule_tasks(self, taskset):
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         queue = PriorityQueue()
         schedule = []
@@ -722,7 +725,8 @@ class MultiResourceNPEDFScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
         return taskset
 
-    def schedule(self, taskset):
+    def schedule_tasks(self, taskset):
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         resource_schedules = defaultdict(list)
 
@@ -819,12 +823,13 @@ class CEDFScheduler:
         cq.pop(idx)
         return
 
-    def schedule(self, taskset):
+    def schedule_tasks(self, taskset):
         ready_queue = PriorityQueue()
         critical_queue = list()
         schedule = []
 
         # First sort the taskset by activation time
+        original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         taskset = list(sorted(taskset, key=lambda task: task.a))
         for task in taskset:
@@ -898,8 +903,9 @@ class PeriodicNPEDFScheduler(NPEDFScheduler):
         return generate_non_periodic_task_set(taskset)
 
 
-class MultipleResourceOptimalDAGScheduler(Scheduler):
-    pass
+class PeriodicMultipleResourceNPEDFScheduler(MultiResourceNPEDFScheduler):
+    def preprocess_taskset(self, taskset):
+        return generate_non_periodic_dagtask_set(taskset)
 
 
 class MultipleResourceOptimalBlockScheduler(Scheduler):
@@ -908,7 +914,7 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.d,
+            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
                                               resources=dag_task.resources)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
@@ -924,12 +930,8 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
 
         sub_graphs = nx.connected_components(G)
         tasksets = []
-        print(list(sub_graphs))
-        import pdb
-        pdb.set_trace()
-        for sg in sub_graphs:
-            print(sg)
-            nodes = set(sg.nodes)
+
+        for nodes in sub_graphs:
             task_names = nodes - resources
             taskset = [tasks[name] for name in task_names]
             tasksets.append(taskset)
@@ -951,7 +953,7 @@ class MultipleResourceBlockNPEDFScheduler(Scheduler):
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.d,
+            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
                                               resources=dag_task.resources)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
@@ -977,14 +979,14 @@ class MultipleResourceBlockNPEDFScheduler(Scheduler):
         schedules = []
         for taskset in tasksets:
             schedule, valid = scheduler.schedule_tasks(taskset)
-            schedules.append(schedule)
+            schedules.append((taskset, schedule, valid))
 
         # Set of schedules is the schedule for each group of resources
         return schedules
 
 
 class MultipleResourceBlockCEDFScheduler(Scheduler):
-    def schedule(self, dagset):
+    def schedule_tasks(self, dagset):
         # Convert DAGs into tasks
         tasks = {}
         resources = set()
@@ -998,15 +1000,15 @@ class MultipleResourceBlockCEDFScheduler(Scheduler):
         G = nx.Graph()
         for r in resources:
             G.add_node(r)
+
         for block_task in tasks.values():
             G.add_node(block_task.name)
             for r in block_task.resources:
                 G.add_edge(block_task.name, r)
 
-        sub_graphs = nx.connected_component_subgraphs(G)
+        sub_graphs = nx.connected_components(G)
         tasksets = []
-        for sg in sub_graphs:
-            nodes = set(sg.nodes)
+        for nodes in sub_graphs:
             task_names = nodes - resources
             taskset = [tasks[name] for name in task_names]
             tasksets.append(taskset)
@@ -1015,18 +1017,51 @@ class MultipleResourceBlockCEDFScheduler(Scheduler):
         scheduler = PeriodicCEDFScheduler()
         schedules = []
         for taskset in tasksets:
-            schedule, valid = scheduler.schedule(taskset)
-            schedules.append(schedule)
+            schedule, valid = scheduler.schedule_tasks(taskset)
+            schedules.append((taskset, schedule, valid))
 
         # Set of schedules is the schedule for each group of resources
         return schedules
 
 
+class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
+    def schedule_tasks(self, dagset):
+        # Convert DAGs into tasks
+        tasks = {}
+        resources = set()
+        for dag_task in dagset:
+            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
+                                              resources=dag_task.resources)
+            tasks[block_task.name] = block_task
+            resources |= block_task.resources
+
+        # Separate tasks based on resource requirements
+        G = nx.Graph()
+        for r in resources:
+            G.add_node(r)
+        for block_task in tasks.values():
+            G.add_node(block_task.name)
+            for r in block_task.resources:
+                G.add_edge(block_task.name, r)
+
+        sub_graphs = nx.connected_components(G)
+        tasksets = []
+        for nodes in sub_graphs:
+            task_names = nodes - resources
+            taskset = [tasks[name] for name in task_names]
+            tasksets.append(taskset)
+
+        # For each set of tasks use NPEDFScheduler
+        scheduler = PeriodicMultipleResourceNPEDFScheduler()
+        schedules = []
+        for taskset in tasksets:
+            schedule, valid = scheduler.schedule_tasks(taskset)
+            schedules.append((taskset, schedule, valid))
+
+        # Set of schedules is the schedule for each group of resources
+        return schedules
+
 class MultipleResourceBlockFPPScheduler(Scheduler):
-    pass
-
-
-class MultipleResourceNPEDFScheduler(Scheduler):
     pass
 
 

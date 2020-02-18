@@ -1,6 +1,6 @@
 import logging
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
 logging.basicConfig(format=FORMAT)
 
@@ -10,7 +10,7 @@ class LSLogger:
     Simple logger module used in the LinkScheduling project, overrides the default logger but allows space for any
     additional desired functionalities.
     """
-    def __init__(self, name):
+    def __init__(self, name=None):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(LOG_LEVEL)
 

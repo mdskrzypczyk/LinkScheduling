@@ -2,14 +2,14 @@ import json
 
 
 def load_link_data():
-    with open("data.json") as f:
+    with open("device_characteristics/data.json") as f:
         data = json.load(f)
 
     distances = list(data["rates"].keys())
 
     d_to_capability = {}
     for d in distances:
-        d_to_capability[d] = list(zip(data["rates"][d], data["fidelities"][d]))
+        d_to_capability[d] = list(zip(data["fidelities"][d], data["rates"][d]))
 
     return d_to_capability
 

@@ -33,6 +33,20 @@ def generate_non_periodic_task_set(periodic_task_set):
     return taskset
 
 
+def generate_non_periodic_dagtask_set(periodic_task_set):
+    periods = [task.p for task in periodic_task_set]
+    schedule_length = get_lcm_for(periods)
+    taskset = []
+    for task in periodic_task_set:
+        # Generate a task for each period the task executes
+        num_tasks = schedule_length // task.p
+        for i in range(num_tasks):
+            taskset.append(
+                ResourceDAGTask(name="{},{}".format(task.name, i), a=task.a + task.p * i, d=task.a + task.p * (i + 1), tasks=task.subtasks))
+
+    return taskset
+
+
 def generate_non_periodic_budget_task_set(periodic_task_set):
     periods = [task.p for task in periodic_task_set]
     schedule_length = get_lcm_for(periods)
@@ -148,7 +162,7 @@ class DAGTask(Task):
             if not all([t.d is None for t in self.sinks]):
                 d = max([t.d for t in self.sinks])
 
-        super(DAGTask, self).__init__(name, c, d)
+        super(DAGTask, self).__init__(name=name, c=c, d=d)
 
 
 class PeriodicDAGTask(PeriodicTask):
@@ -166,11 +180,11 @@ class PeriodicDAGTask(PeriodicTask):
 
         c = get_dag_exec_time(self.sources)
 
-        super(PeriodicDAGTask, self).__init__(name, c, p)
+        super(PeriodicDAGTask, self).__init__(name=name, c=c, p=p)
 
 
 class ResourceDAGTask(ResourceTask):
-    def __init__(self, name, tasks, d=None):
+    def __init__(self, name, tasks, a=0, d=None):
         self.sources = []
         self.sinks = []
         self.tasks = {}
@@ -186,7 +200,7 @@ class ResourceDAGTask(ResourceTask):
         if d is None:
             if not all([t.d is None for t in self.sinks]):
                 d = max([t.d for t in self.sinks])
-        super(ResourceDAGTask, self).__init__(name=name, c=c, d=d)
+        super(ResourceDAGTask, self).__init__(name=name, a=a, c=c, d=d)
 
         self.resources = set()
         for task in tasks:

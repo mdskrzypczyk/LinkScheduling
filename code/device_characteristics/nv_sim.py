@@ -63,8 +63,6 @@ def main(no_output=False):
         d_to_fidelities[internode_distance] = fidelities
         d_to_sem_fidelities[internode_distance] = sem_fidelities
 
-    import pdb
-    pdb.set_trace()
     data = {
         "rates": d_to_rates,
         "sem_rates": d_to_sem_rates,
