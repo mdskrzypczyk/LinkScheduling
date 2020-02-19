@@ -7,6 +7,7 @@ from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
 from jobscheduling.protocols import convert_protocol_to_task, create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol, schedule_dag_for_resources
 from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
+from jobscheduling.visualize import draw_DAG
 
 
 logger = LSLogger()
@@ -24,7 +25,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n):
+def gen_topologies(n, num_comm_q=2, num_storage_q=2):
     d_to_cap = load_link_data()
     link_distance = 5
     link_capability = d_to_cap[str(link_distance)]
@@ -34,14 +35,14 @@ def gen_topologies(n):
     for i in range(n):
         comm_qs = []
         storage_qs = []
-        for num_comm_q in range(4):
-            comm_q_id = "{}-C{}".format(i, num_comm_q)
+        for c in range(num_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
             comm_qs.append(comm_q_id)
-        for num_storage_q in range(1):
-            storage_q_id = "{}-S{}".format(i, num_storage_q)
+        for s in range(num_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
             storage_qs.append(storage_q_id)
         lineGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        lineG.add_node("{}".format(i), comm_qs=comm_qs)
+        lineG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
             prev_node_id = i - 1
             for j in range(4):
@@ -55,14 +56,14 @@ def gen_topologies(n):
     for i in range(n):
         comm_qs = []
         storage_qs = []
-        for num_comm_q in range(4):
-            comm_q_id = "{}-C{}".format(i, num_comm_q)
+        for c in range(num_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
             comm_qs.append(comm_q_id)
-        for num_storage_q in range(1):
-            storage_q_id = "{}-S{}".format(i, num_storage_q)
+        for s in range(num_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
             storage_qs.append(storage_q_id)
         ringGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        ringG.add_node("{}".format(i), comm_qs=comm_qs)
+        ringG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
             prev_node_id = i - 1
             for j in range(4):
@@ -71,6 +72,31 @@ def gen_topologies(n):
             ringG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
     ringG.add_edge("{}".format(0), "{}".format(n-1), capabilities=link_capability, weight=link_distance)
+
+    # Demo
+    demoGcq = nx.Graph()
+    demoG = nx.Graph()
+    for i in range(4):
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        demoGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        demoG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
+        if i > 0:
+            prev_node_id = i - 1
+            for j in range(4):
+                for k in range(4):
+                    demoGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
+
+    demoG.add_edge("0", "1", capabilities=d_to_cap["10"], weight=10)
+    demoG.add_edge("1", "2", capabilities=d_to_cap["15"], weight=15)
+    demoG.add_edge("2", "3", capabilities=d_to_cap["35"], weight=35)
+    demoG.add_edge("3", "0", capabilities=d_to_cap["50"], weight=50)
 
     for j in range(1):
         for k in range(1):
@@ -84,14 +110,14 @@ def gen_topologies(n):
         for j in range(h):
             comm_qs = []
             storage_qs = []
-            for num_comm_q in range(4):
-                comm_q_id = "{},{}-C{}".format(i, j, num_comm_q)
+            for c in range(num_comm_q):
+                comm_q_id = "{},{}-C{}".format(i, j, c)
                 comm_qs.append(comm_q_id)
-            for num_storage_q in range(1):
-                storage_q_id = "{},{}-S{}".format(i, j, num_storage_q)
+            for s in range(num_storage_q):
+                storage_q_id = "{},{}-S{}".format(i, j, s)
                 storage_qs.append(storage_q_id)
             gridGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-            gridG.add_node("{},{}".format(i, j), comm_qs=comm_qs)
+            gridG.add_node("{},{}".format(i, j), comm_qs=comm_qs, storage_qs=storage_qs)
 
             # Connect upward
             if j > 0:
@@ -110,7 +136,7 @@ def gen_topologies(n):
                         gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
 
-    return [(gridGcq, gridG)] #[(lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG)]
+    return [(demoGcq, demoG), (lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG)]
 
 
 def get_schedulers():

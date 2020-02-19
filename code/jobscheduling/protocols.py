@@ -5,6 +5,7 @@ from copy import copy
 from jobscheduling.log import LSLogger
 from jobscheduling.qmath import swap_links, unswap_links, distill_links, fidelity_for_distillations, distillations_for_fidelity
 from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicResourceDAGTask
+from jobscheduling.visualize import draw_DAG
 
 
 logger = LSLogger()
@@ -234,6 +235,20 @@ def print_protocol(protocol):
             q += p.protocols
 
 
+def print_resource_schedules(resource_schedules):
+    schedule_length = max([rs[-1][0] + 1 for rs in resource_schedules.values() if rs])
+    timeline_string = "R" + " "*max([len(r) + 1 for r in resource_schedules.keys()])
+    timeline_string += ''.join(["|{:>3}".format(i) for i in range(schedule_length)])
+    print(timeline_string)
+    for r in sorted(resource_schedules.keys()):
+        schedule_string = "{}: ".format(r)
+        resource_timeline = defaultdict(lambda: None)
+        for s, t in resource_schedules[r]:
+            resource_timeline[s] = t
+        schedule_string += ''.join(["|{:>2} ".format("V" if resource_timeline[i] is None else resource_timeline[i].name[0]) for i in range(schedule_length)])
+        print(schedule_string)
+
+
 def convert_protocol_to_task(request, protocol, slot_size=0.01):
     tasks = []
     labels = {
@@ -299,7 +314,10 @@ def schedule_dag_for_resources(dagtask, topology):
     comm_q_topology, node_topology = topology
     [sink] = dagtask.sinks
     nodes = dagtask.resources
-    node_resources = dict([(n, node_topology.nodes[n]["comm_qs"]) for n in nodes])
+    node_comm_resources = dict([(n, node_topology.nodes[n]["comm_qs"]) for n in nodes])
+    node_storage_resources = dict([(n, node_topology.nodes[n]["storage_qs"]) for n in nodes])
+    comm_to_storage_resources = dict([(comm_name, node_storage_resources[n])for n in nodes for comm_name in node_topology.nodes[n]["comm_qs"]])
+    all_node_resources = dict([(n, node_topology.nodes[n]["comm_qs"] + node_topology.nodes[n]["storage_qs"]) for n in nodes])
     resource_schedules = defaultdict(list)
     stack = []
     task = sink
@@ -317,8 +335,8 @@ def schedule_dag_for_resources(dagtask, topology):
 
             else:
                 if peek_task.name[0] == "L":
-                    possible_task_resources = [node_resources[n] for n in peek_task.resources]
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
+                    possible_task_resources = [node_comm_resources[n] for n in peek_task.resources]
+                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
                 elif peek_task.name[0] == "S":
                     [task_node] = peek_task.resources
@@ -333,16 +351,16 @@ def schedule_dag_for_resources(dagtask, topology):
                                     if p.name[0] == "S":
                                         q.append(p)
                                     elif p.name[0] == "D":
-                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] if r in node_resources[task_node]]
+                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] if r in all_node_resources[task_node]]
                                     else:
-                                        possible_task_resources += [[r] for r in p.resources if r in node_resources[task_node]]
+                                        possible_task_resources += [[r] for r in p.resources if r in all_node_resources[task_node]]
                         elif pt.name[0] == "D":
-                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2] if r in node_resources[task_node]]
+                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2] if r in all_node_resources[task_node]]
                         else:
-                            possible_task_resources += [[r] for r in pt.resources if r in node_resources[task_node]]
+                            possible_task_resources += [[r] for r in pt.resources if r in all_node_resources[task_node]]
 
 
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
+                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
                 else:
                     # Find the resources that are being distilled
@@ -358,15 +376,15 @@ def schedule_dag_for_resources(dagtask, topology):
                                     if p.name[0] == "S":
                                         q.append(p)
                                     elif p.name[0] == "D":
-                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] for tn in task_nodes if r in node_resources[tn]]
+                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] for tn in task_nodes if r in all_node_resources[tn]]
                                     else:
-                                        possible_task_resources += [[r] for tn in task_nodes for sp in search_task.parents for r in sp.resources if r in node_resources[tn]]# and resource_states[r] == 1]
+                                        possible_task_resources += [[r] for tn in task_nodes for sp in search_task.parents for r in sp.resources if r in all_node_resources[tn]]
                         elif pt.name[0] == "D":
                             possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2]]
                         else:
-                            possible_task_resources += [[r] for tn in task_nodes for r in pt.resources if r in node_resources[tn]]
+                            possible_task_resources += [[r] for tn in task_nodes for r in pt.resources if r in all_node_resources[tn]]
 
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules)
+                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
                 last_task = stack.pop()
 
@@ -401,6 +419,7 @@ def get_schedule_decoherence(resource_schedules, completion_time):
 
     return total_decoherence
 
+
 import itertools
 
 
@@ -412,24 +431,44 @@ def to_ranges(iterable):
         yield group[0][1], group[-1][1]
 
 
-def schedule_task_asap(task, task_resources, resource_schedules):
+def schedule_task_asap(task, task_resources, resource_schedules, storage_resources):
     earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(task.resources) & set(p.resources)])
     earliest_possible_start = float('inf')
     earliest_resources = None
+    earliest_mapping = None
     for resource_set in list(itertools.product(*task_resources)):
+        possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules, storage_resources)
 
-        possible_start = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules)
-
-        if earliest_start <= possible_start < earliest_possible_start:
+        if earliest_start <= possible_start <= earliest_possible_start and (earliest_mapping is None or len(earliest_mapping.keys()) >= len(locked_storage_mapping.keys())):
             earliest_possible_start = possible_start
             earliest_resources = resource_set
+            earliest_mapping = locked_storage_mapping
 
         if possible_start == earliest_start:
             break
 
+    if earliest_possible_start == float('inf') and task.name[0] == "L":
+        return None
+
+    # If the earliest_resources are locked by their last tasks, we have already confirmed there are storage resources for them
+    if earliest_mapping:
+        logger.debug("Changing resources due to task {}".format(task.name))
+        # Iterate over the locked resources, update their last task to reference the storage resource
+        for lr, sr in earliest_mapping.items():
+            # Update the resource schedules with the storage resource occupying information
+            lr_schedule = resource_schedules[lr]
+            _, last_task = lr_schedule[-1]
+            num_slots = ceil(last_task.c)
+            resource_schedules[sr] += lr_schedule[-num_slots:]
+            last_task.resources.remove(lr)
+            last_task.resources.append(sr)
+            logger.debug("Moved {} to {}".format(lr, sr))
+            logger.debug("Rescheduled {} with resources {} at t={}".format(last_task.name, last_task.resources, last_task.a))
+
     slots = []
     for slot in range(earliest_possible_start, earliest_possible_start + ceil(task.c)):
         slots.append((slot, task))
+
     for r in list(set(earliest_resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
@@ -439,7 +478,7 @@ def schedule_task_asap(task, task_resources, resource_schedules):
     return list(set(earliest_resources))
 
 
-def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules):
+def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules, storage_resources):
     occupied_slots = defaultdict(list)
     for r in resource_set:
         rs = resource_schedules[r]
@@ -447,7 +486,7 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
             occupied_slots[slot].append(t)
 
     if not occupied_slots:
-        return earliest
+        return earliest, {}
 
     else:
         occupied_ranges = list(to_ranges(occupied_slots.keys()))
@@ -458,15 +497,47 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
             filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
             if filtered_schedule:
                 last_task_slot, last_task = filtered_schedule[-1]
-                last_tasks.append(last_task)
+                last_tasks.append((r, last_task))
 
-        if not (task.name[0] == "L" and any([task_locks_resource(t, resource_set) for t in last_tasks])):
+        if not (task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks])):
             if e >= earliest:
-                return occupied_ranges[-1][1] + 1
+                return e + 1, {}
             else:
-                return earliest
+                return earliest, {}
+
+        elif task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks]):
+            locked_resources = set([r for r, t in last_tasks if task_locks_resource(t, [r])])
+            lr_to_sr = defaultdict(lambda: None)
+            sr_to_lr = defaultdict(lambda: None)
+            for locked_r in locked_resources:
+                # Find a storage resource to move the locked resource into (check whether the storage resources are also locked)
+                for storage_r in storage_resources[locked_r]:
+                    if lr_to_sr[locked_r]:
+                        continue
+                    rs = resource_schedules[storage_r]
+                    filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
+
+                    if filtered_schedule:
+                        last_task_slot, last_task = filtered_schedule[-1]
+                        if not task_locks_resource(last_task, [storage_r]) and sr_to_lr[storage_r] is None:
+                            lr_to_sr[locked_r] = storage_r
+                            sr_to_lr[storage_r] = locked_r
+
+                    elif sr_to_lr[storage_r] is None:
+                        lr_to_sr[locked_r] = storage_r
+                        sr_to_lr[storage_r] = locked_r
+
+                # If non available, return float('inf')
+                if lr_to_sr[locked_r] is None:
+                    return float('inf'), {}
+
+            # Return the slot where the new action can start
+            if e >= earliest:
+                return e + 1, lr_to_sr
+            else:
+                return earliest, lr_to_sr
         else:
-            return float('inf')
+            return float('inf'), {}
 
 
 def task_locks_resource(task, resources):
@@ -504,6 +575,7 @@ def convert_task_to_alap(dagtask):
 
 
 def schedule_task_alap(task, resource_schedules):
+
     possible = [task.a]
     child_starts = [ct.a - ceil(task.c) for ct in task.children if set(task.resources) & set(ct.resources)]
     if child_starts:

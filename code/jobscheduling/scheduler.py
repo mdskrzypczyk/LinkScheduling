@@ -3,7 +3,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from math import floor
 from queue import PriorityQueue
-from jobscheduling.task import generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask
+from jobscheduling.task import generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask, PeriodicResourceDAGTask
 
 
 def pretty_print_schedule(schedule):
@@ -215,6 +215,7 @@ class EDFScheduler(Scheduler):
                 # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                 valid = False
 
+        taskset = original_taskset
         return schedule, valid
 
     def merge_adjacent_entries(self):
@@ -333,7 +334,7 @@ class PreemptionBudgetScheduler(Scheduler):
         self.remove_invalid_entries()
 
         valid = self.check_feasible(self.schedule, taskset_copy)
-
+        taskset = original_taskset
         return self.schedule, valid
 
     def check_feasible(self, schedule, taskset):
@@ -562,7 +563,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
         self.merge_adjacent_entries()
 
         valid = self.check_feasible(self.schedule, taskset_copy)
-
+        taskset = original_taskset
         return self.schedule, valid
 
     def check_feasible(self, schedule, taskset):
@@ -714,7 +715,7 @@ class NPEDFScheduler(Scheduler):
             if task.d < end:
                 # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                 valid = False
-
+        taskset = original_taskset
         return schedule, valid
 
     def check_feasibility(self, taskset):
@@ -749,7 +750,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
                 if task.d < end:
                     # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                     valid = False
-
+        taskset = original_taskset
         return resource_schedules, valid
 
     def get_available_slots(self, earliest, latest, schedule):
@@ -1030,8 +1031,7 @@ class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
-                                              resources=dag_task.resources)
+            block_task = PeriodicResourceDAGTask(name=dag_task.name, tasks=dag_task.subtasks, p=dag_task.p)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
 
