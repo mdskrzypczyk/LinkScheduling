@@ -249,7 +249,7 @@ def print_resource_schedules(resource_schedules):
         print(schedule_string)
 
 
-def convert_protocol_to_task(request, protocol, slot_size=0.01):
+def convert_protocol_to_task(request, protocol, slot_size=0.1):
     tasks = []
     labels = {
         LinkProtocol.__name__: 0,

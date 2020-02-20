@@ -142,7 +142,7 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
 def get_schedulers():
     schedulers = [
         # MultipleResourceOptimalBlockScheduler,
-        MultipleResourceBlockNPEDFScheduler,
+        # MultipleResourceBlockNPEDFScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
         MultipleResourceBlockCEDFScheduler
     ]
@@ -226,6 +226,8 @@ def main():
                 schedule = scheduler.schedule_tasks(taskset)
                 end = time.time()
                 logger.info("Completed scheduling in {}s".format(end - start))
+                import pdb
+                pdb.set_trace()
                 if schedule:
                     for sub_taskset, sub_schedule, valid in schedule:
                         logger.info("Created schedule for sub_taskset {}, valid={}".format([t.name for t in sub_taskset], valid))

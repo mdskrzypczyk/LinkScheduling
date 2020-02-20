@@ -4,6 +4,11 @@ from collections import defaultdict
 from math import floor
 from queue import PriorityQueue
 from jobscheduling.task import generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask, PeriodicResourceDAGTask
+from jobscheduling.log import LSLogger
+from intervaltree import IntervalTree
+
+
+logger = LSLogger()
 
 
 def pretty_print_schedule(schedule):
@@ -729,14 +734,19 @@ class MultiResourceNPEDFScheduler(Scheduler):
     def schedule_tasks(self, taskset):
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
-        resource_schedules = defaultdict(list)
+        resource_schedules = defaultdict(IntervalTree)
 
         # First sort the taskset by activation time
+        logger.debug("Sorting tasks by earliest deadlines")
         taskset = list(sorted(taskset, key=lambda task: task.earliest_deadline()))
 
+        import pdb
+        pdb.set_trace()
         # Let time evolve and simulate scheduling, start at first task
         for next_task in taskset:
+            logger.debug("Processing task {}".format(next_task.name))
             start_time = self.get_start_time(resource_schedules, next_task)
+            logger.debug("Computed starting time {}".format(start_time))
             for subtask in next_task.subtasks:
                 subtask_start = start_time + subtask.a
                 subtask_end = subtask_start + subtask.c
@@ -748,29 +758,9 @@ class MultiResourceNPEDFScheduler(Scheduler):
         for rn, rs in resource_schedules.items():
             for start, end, task in rs:
                 if task.d < end:
-                    # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                     valid = False
         taskset = original_taskset
         return resource_schedules, valid
-
-    def get_available_slots(self, earliest, latest, schedule):
-        slots = []
-        for s, e, _ in schedule:
-            if earliest < s:
-                slots += list(range(earliest, s))
-            earliest = e
-            if earliest > latest:
-                return slots
-
-        if earliest <= latest:
-            slots += list(range(earliest, latest + 1))
-        return slots
-
-    def intersect_slots(self, slots1, slots2):
-        return list(sorted(set(slots1) & set(slots2)))
-
-    def shift_slots(self, slots, amount):
-        return [s - amount for s in slots]
 
     def get_start_time(self, resource_schedules, next_task):
         # Get the available slots of the resources for duration of next_task
@@ -778,39 +768,49 @@ class MultiResourceNPEDFScheduler(Scheduler):
         for rn in next_task.resources:
             rs = resource_schedules[rn]
             earliest = next_task.a
-            latest = next_task.d - next_task.c
-            rs_slots = self.get_available_slots(earliest, latest, rs)
-            RS[rn] = rs_slots
+            filtered_schedule = list(filter(lambda slot_info: earliest <= slot_info[0], rs))
+            RS[rn] = filtered_schedule
 
-        # Sort subtasks of next_task by start time
+        # While no start has been found
         subtasks = sorted(next_task.subtasks, key=lambda subtask: subtask.a)
+        first_subtask = subtasks[0]
+        earliest_start = next_task.a
+        while True:
+            # Start with the subtask released earliest
+            start = self.find_next_start(earliest_start, first_subtask, RS)
 
-        subtask_resources = subtasks[0].resources
-        subtask_resource_slots = [resource_schedules[resource_name] for resource_name in subtask_resources]
-        common_slots = list(sorted(set.intersection(*[set(self.get_available_slots(subtasks[0].a, subtasks[0].d, l))
-                                          for l in subtask_resource_slots])))
+            # From this slot find if remaining subtasks can be scheduled in slots relative to this one
+            if self.check_subtasks_satisfied(start, subtasks[1:], RS):
+                return start
+            else:
+                earliest_start = start + 1
 
-        starts = []
-        for i in range(len(common_slots)):
-            if common_slots[i] + subtasks[0].c <= subtasks[0].d and i + (subtasks[0].c - 1) < len(common_slots) and all([common_slots[i+j] - j == common_slots[i] for j in range(1, subtasks[0].c)]):
-                starts.append(common_slots[i])
+    def find_next_start(self, earliest, task, resource_schedules):
+        while True:
+            filtered_schedules = {}
+            for resource in task.resources:
+                filtered_schedules[resource] = list(filter(lambda slot_info: earliest <= slot_info[0] < earliest + task.d or earliest < slot_info[1] <= earliest + task.d, resource_schedules[resource]))
 
-        for subtask in subtasks[1:]:
-            resources = subtask.resources
-            resource_slots = [resource_schedules[resource_name] for resource_name in resources]
-            common_slots = list(sorted(set.intersection(*[set(self.get_available_slots(subtask.a, subtask.d, l))
-                                          for l in resource_slots])))
-            subtask_starts = []
-            for i in range(len(common_slots)):
-                if common_slots[i] + subtask.c <= subtask.d and i + (subtask.c - 1) < len(common_slots) and all([common_slots[i + j] - j == common_slots[i] for j in range(1, subtask.c)]):
-                    subtask_starts.append(common_slots[i])
+            # If no slots interfere with starting at the earliest time then we can begin
+            if all([filtered_schedules[resource] == [] for resource in task.resources]):
+                return earliest
 
-            subtask_starts = [s-(subtask.a-subtasks[0].a) for s in subtask_starts]
+            # Otherwise we need to find the earliest common gap in the schedules greater than earliest
+            else:
+                earliest = max([filtered_schedules[resource][0][1] for resource in task.resources if filtered_schedules[resource]])
 
-            starts = set.intersection(set(starts), set(subtask_starts))
+    def check_subtasks_satisfied(self, start, subtasks, resource_schedules):
+        for subtask in subtasks:
+            subtask_start = start + subtask.a
+            for resource in subtask.resources:
+                if not self.subtask_can_start(subtask_start, subtask.d, resource_schedules[resource]):
+                    return False
 
-        # Return earliest start time
-        return min(starts)
+        return True
+
+    def subtask_can_start(self, start, duration, resource_schedule):
+        reduced_schedule = list(filter(lambda slot_info: start <= slot_info[0] < start + duration or start < slot_info[1] <= start + duration, resource_schedule))
+        return reduced_schedule == []
 
 
 class CEDFScheduler:
