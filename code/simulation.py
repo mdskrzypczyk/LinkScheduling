@@ -136,7 +136,7 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
                         gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
 
-    return [(demoGcq, demoG), (lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG)]
+    return [(lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG), (demoGcq, demoG)]
 
 
 def get_schedulers():
@@ -155,7 +155,7 @@ def get_network_demands(network_topology, num):
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.75 + random.random() / 4, 3)  # Fidelity range between F=0.75 and 1
-        rate = round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
+        rate = 0.1 # round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -172,9 +172,8 @@ def get_protocol(network_topology, demand):
         return None
 
 
-
 def main():
-    num_network_nodes = 10
+    num_network_nodes = 20
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes)
@@ -228,7 +227,7 @@ def main():
                 logger.info("Completed scheduling in {}s".format(end - start))
                 if schedule:
                     for sub_taskset, sub_schedule, valid in schedule:
-                        logger.info("Created schedule for sub_taskset {}, valid={}".format([t.name for t in sub_taskset], valid))
+                        logger.info("Created schedule for sub_taskset {}, valid={}, length={}".format([t.name for t in sub_taskset], valid, max([slot_info[1] for slot_info in sub_schedule])))
 
                     # Record success
                     scheduler_results.append(all([valid for _, _, valid in schedule]) if schedule else False)

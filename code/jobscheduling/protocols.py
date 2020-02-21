@@ -6,6 +6,7 @@ from jobscheduling.log import LSLogger
 from jobscheduling.qmath import swap_links, unswap_links, distill_links, fidelity_for_distillations, distillations_for_fidelity
 from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicResourceDAGTask
 from jobscheduling.visualize import draw_DAG
+from intervaltree import Interval, IntervalTree
 
 
 logger = LSLogger()
@@ -386,22 +387,53 @@ def schedule_dag_for_resources(dagtask, topology):
 
                     used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
+                if not verify_dag(dagtask, all_node_resources.values()):
+                    import pdb
+                    pdb.set_trace()
                 last_task = stack.pop()
 
     sink_task = dagtask.sinks[0]
     asap_duration = sink_task.a + ceil(sink_task.c)
     asap_decoherence = get_schedule_decoherence(resource_schedules, asap_duration)
-    logger.debug("Scheduling task ALAP")
+    asap_correct = verify_dag(dagtask)
+    logger.info("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_duration, asap_decoherence, asap_correct))
+
+    logger.info("Scheduling task ALAP")
     convert_task_to_alap(dagtask)
-    logger.debug("ASAP Schedule latency {} total decoherence {}".format(asap_duration, asap_decoherence))
+
+    logger.info("Shifting SWAPs and Distillations")
     shift_distillations_and_swaps(dagtask)
+    shift_latency = sink_task.a + ceil(sink_task.c)
+    shift_correct = verify_dag(dagtask)
+    logger.info("Shifted Schedule latency {}, correct={}".format(shift_latency, shift_correct))
+
     return dagtask
+
+
+def verify_dag(dagtask, node_resources=None):
+    resource_intervals = defaultdict(IntervalTree)
+    for subtask in dagtask.subtasks:
+        subtask_interval = Interval(subtask.a, subtask.a + subtask.c)
+        for resource in subtask.resources:
+            if node_resources and (resource not in node_resources):
+                continue
+            if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
+                overlapping = resource_intervals[resource][subtask_interval.begin:subtask_interval.end]
+                print("Subtask {} overlaps at resource {} during interval {}".format(subtask.name, resource, overlapping))
+                return False
+            resource_intervals[resource].add(subtask_interval)
+
+    return True
 
 
 def shift_distillations_and_swaps(dagtask):
     for task in sorted(dagtask.subtasks, key=lambda task: task.a):
         if task.name[0] == "D" or task.name[0] == "S":
             task.a = max([p.a + ceil(p.c) for p in task.parents])
+
+            if not verify_dag(dagtask):
+                import pdb
+                pdb.set_trace()
 
 
 def get_schedule_decoherence(resource_schedules, completion_time):
@@ -410,7 +442,7 @@ def get_schedule_decoherence(resource_schedules, completion_time):
         rs = resource_schedules[r]
         for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
             if t1.name[0] == "L" or t1.name[0] == "D":
-                total_decoherence += (s2 - ceil(t1.a) - s1)
+                total_decoherence += (s2 - ceil(t1.c) - s1)
 
         if rs:
             s, t = rs[-1]
@@ -571,7 +603,8 @@ def convert_task_to_alap(dagtask):
     sink_task = dagtask.sinks[0]
     alap_latency = sink_task.a + ceil(sink_task.c)
     alap_decoherence = get_schedule_decoherence(resource_schedules, alap_latency)
-    logger.debug("ALAP Schedule latency {} total decoherence {}".format(alap_latency, alap_decoherence))
+    alap_correct = verify_dag(dagtask)
+    logger.info("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence, alap_correct))
 
 
 def schedule_task_alap(task, resource_schedules):
