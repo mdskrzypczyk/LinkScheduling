@@ -41,7 +41,7 @@ def generate_non_periodic_dagtask_set(periodic_task_set):
         for i in range(num_tasks):
 
             dag_copy = copy(task)
-            taskset.append(ResourceDAGTask(name="{},{}".format(dag_copy.name, i), a=dag_copy.a + dag_copy.p * i,
+            taskset.append(ResourceDAGTask(name="{}|{}".format(dag_copy.name, i), a=dag_copy.a + dag_copy.p * i,
                                            d=dag_copy.a + dag_copy.p * (i + 1), tasks=dag_copy.subtasks))
 
     return taskset
