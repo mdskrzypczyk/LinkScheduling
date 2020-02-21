@@ -751,6 +751,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
 
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        last_task_start = dict()
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
 
         taskset = self.initialize_taskset(taskset)
@@ -762,17 +763,16 @@ class MultiResourceNPEDFScheduler(Scheduler):
         logger.debug("Sorting tasks by earliest deadlines")
         taskset = list(sorted(taskset, key=lambda task: task.earliest_deadline()))
 
+        earliest = 0
         while taskset:
             next_task = taskset.pop(0)
-            if any([v > 50 for v in instance_count.values()]):
-                import pdb
-                pdb.set_trace()
-            start_offset = self.get_start_time(next_task, resource_occupations)
+            start_offset = self.get_start_time(next_task, resource_occupations, earliest)
             start_time = next_task.a + start_offset
             logger.debug("Computed starting time {}".format(start_time))
 
             # Introduce a new instance into the taskset if necessary
             original_taskname, instance = next_task.name.split('|')
+            last_task_start[original_taskname] = start_time
             instance = int(instance)
             if instance < instance_count[original_taskname]:
                 periodic_task = taskset_lookup[original_taskname]
@@ -791,7 +791,8 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
             # Update windowed resource schedules
             if taskset:
-                min_chop = taskset[0].a
+                min_chop = min(last_task_start.values())
+                earliest = min_chop
                 for resource in next_task.resources:
                     resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
                     resource_occupations[resource] |= resource_interval_tree
@@ -808,9 +809,9 @@ class MultiResourceNPEDFScheduler(Scheduler):
         taskset = original_taskset
         return resource_schedules, valid
 
-    def get_start_time(self, task, resource_occupations):
+    def get_start_time(self, task, resource_occupations, earliest):
         subtasks = list(sorted(task.subtasks, key=lambda subtask: subtask.a))
-        offset = 0
+        offset = max(0, earliest - task.a)
         constraining_subtasks = [subtask for subtask in subtasks if self.subtask_constrained(subtask, resource_occupations, offset)]
 
         # Find the earliest start
@@ -853,7 +854,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
                     overlapping_interval = intervals[0]
                     distances_to_free.append(overlapping_interval.end - subtask_start)
 
-        if distances_to_free == []:
+        if not distances_to_free:
             return True, 0
 
         else:
