@@ -161,12 +161,10 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
         resourceCopy[path[numL - 1]] -= 1
 
         # If we are distilling then the end nodes need to hold one link between protocol steps
-        if num > 1:
+        if num > 0:
             resourceCopy[path[0]] -= 1
             resourceCopy[path[-1]] -= 1
 
-        import pdb
-        pdb.set_trace()
         # Search for protocols on left and right that have above properties
         protocolL = esss(path[:numL], resourceCopy, G, Funswapped, Rlink)
         protocolR = esss(path[-numR:], resourceCopy, G, Funswapped, Rlink)
@@ -587,11 +585,15 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
                 resource_schedules[lr].append(new_slot)
                 resource_schedules[sr].append(new_slot)
 
+            if reassigned_start != last_task.a:
+                import pdb
+                pdb.set_trace()
             last_task.a = reassigned_start
             last_task.resources.remove(lr)
-            last_task.resources.append(sr)
+            last_task.resources = list(sorted(last_task.resources + [sr]))
             logger.debug("Moved {} to {}".format(lr, sr))
             logger.debug("Rescheduled {} with resources {} at t={}".format(last_task.name, last_task.resources, last_task.a))
+
 
     slots = []
     for slot in range(earliest_possible_start, earliest_possible_start + ceil(task.c)):
@@ -647,6 +649,9 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
 
                     if rs:
                         last_task_slot, last_task = rs[-1]
+                        if last_task.name == "D;77;13;12":
+                            import pdb
+                            pdb.set_trace()
                         if (not task_locks_resource(last_task, [storage_r])) and (sr_to_lr[storage_r] is None):
                             if last_task_slot + ceil(locking_task.c) < earliest_storage_time:
                                 storage_time = max(last_task_slot + 1, locking_task.a)
