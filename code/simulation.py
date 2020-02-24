@@ -25,7 +25,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=2, num_storage_q=2):
+def gen_topologies(n, num_comm_q=1, num_storage_q=4):
     d_to_cap = load_link_data()
     link_distance = 5
     link_capability = d_to_cap[str(link_distance)]
@@ -45,8 +45,8 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
         lineG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
             prev_node_id = i - 1
-            for j in range(4):
-                for k in range(4):
+            for j in range(num_comm_q):
+                for k in range(num_comm_q):
                     lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
             lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
@@ -66,8 +66,8 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
         ringG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
             prev_node_id = i - 1
-            for j in range(4):
-                for k in range(4):
+            for j in range(num_comm_q):
+                for k in range(num_comm_q):
                     ringGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
             ringG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
@@ -89,8 +89,8 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
         demoG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
             prev_node_id = i - 1
-            for j in range(4):
-                for k in range(4):
+            for j in range(num_comm_q):
+                for k in range(num_comm_q):
                     demoGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
 
     demoG.add_edge("0", "1", capabilities=d_to_cap["10"], weight=10)
@@ -123,16 +123,16 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
             if j > 0:
                 gridG.add_edge("{},{}".format(i, j), "{},{}".format(i, j-1), capabilities=link_capability,
                                weight=link_distance)
-                for k in range(4):
-                    for l in range(4):
+                for k in range(num_comm_q):
+                    for l in range(num_comm_q):
                         gridGcq.add_edge("{},{}-C{}".format(i, j-1, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
             # Connect left
             if i > 0:
                 gridG.add_edge("{},{}".format(i, j), "{},{}".format(i - 1, j), capabilities=link_capability,
                                weight=link_distance)
-                for k in range(4):
-                    for l in range(4):
+                for k in range(num_comm_q):
+                    for l in range(num_comm_q):
                         gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
 
@@ -156,7 +156,7 @@ def get_network_demands(network_topology, num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.75 + random.random() / 4, 3)  # Fidelity range between F=0.75 and 1
         rate = 0.1 # round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
-        demands.append((src, dst, fidelity, rate))
+        demands.append(('6', '12', 0.77, 0.1))#(src, dst, fidelity, rate))
     return demands
 
 

@@ -323,14 +323,17 @@ def schedule_dag_for_resources(dagtask, topology):
     stack = []
     task = sink
     last_task = None
+    for task in dagtask.subtasks:
+        task.parents = list(sorted(task.parents, key=lambda pt: pt.dist))
+
     while stack or task:
         if task is not None:
             stack.append(task)
-            task = None if not task.parents else sorted(task.parents, key=lambda pt: pt.dist)[1]
+            task = None if not task.parents else task.parents[1]
 
         else:
             peek_task = stack[-1]
-            right_task = None if not peek_task.parents else sorted(peek_task.parents, key=lambda pt: pt.dist)[0]
+            right_task = None if not peek_task.parents else peek_task.parents[0]
             if right_task is not None and last_task != right_task:
                 task = right_task
 
@@ -387,15 +390,19 @@ def schedule_dag_for_resources(dagtask, topology):
 
                     used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
-                if not verify_dag(dagtask, all_node_resources.values()):
+                if used_resources is None:
                     import pdb
                     pdb.set_trace()
+
                 last_task = stack.pop()
 
     sink_task = dagtask.sinks[0]
     asap_duration = sink_task.a + ceil(sink_task.c)
     asap_decoherence = get_schedule_decoherence(resource_schedules, asap_duration)
     asap_correct = verify_dag(dagtask)
+    if not asap_correct:
+        import pdb
+        pdb.set_trace()
     logger.info("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_duration, asap_decoherence, asap_correct))
 
     logger.info("Scheduling task ALAP")
@@ -403,37 +410,82 @@ def schedule_dag_for_resources(dagtask, topology):
 
     logger.info("Shifting SWAPs and Distillations")
     shift_distillations_and_swaps(dagtask)
-    shift_latency = sink_task.a + ceil(sink_task.c)
-    shift_correct = verify_dag(dagtask)
-    logger.info("Shifted Schedule latency {}, correct={}".format(shift_latency, shift_correct))
-
     return dagtask
 
 
 def verify_dag(dagtask, node_resources=None):
     resource_intervals = defaultdict(IntervalTree)
     for subtask in dagtask.subtasks:
-        subtask_interval = Interval(subtask.a, subtask.a + subtask.c)
+        subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
         for resource in subtask.resources:
             if node_resources and (resource not in node_resources):
                 continue
+
             if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
-                overlapping = resource_intervals[resource][subtask_interval.begin:subtask_interval.end]
-                print("Subtask {} overlaps at resource {} during interval {}".format(subtask.name, resource, overlapping))
+                overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
+                print("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
+                import pdb
+                pdb.set_trace()
                 return False
             resource_intervals[resource].add(subtask_interval)
+
+    for resource in resource_intervals.keys():
+        sorted_intervals = sorted(resource_intervals[resource])
+        for iv1, iv2 in zip(sorted_intervals, sorted_intervals[1:]):
+            t1 = iv1.data
+            t2 = iv2.data
+            if t1.name[0] == "L" and t2.name == "L":
+                import pdb
+                pdb.set_trace()
+
+            elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
+                import pdb
+                pdb.set_trace()
 
     return True
 
 
 def shift_distillations_and_swaps(dagtask):
+    resource_schedules = defaultdict(IntervalTree)
+    for link_task in dagtask.sources:
+        begin = link_task.a
+        end = begin + ceil(link_task.c)
+        interval = Interval(begin, end, link_task)
+        for resource in link_task.resources:
+            resource_schedules[resource].add(interval)
+
     for task in sorted(dagtask.subtasks, key=lambda task: task.a):
         if task.name[0] == "D" or task.name[0] == "S":
-            task.a = max([p.a + ceil(p.c) for p in task.parents])
+            parent_task_end = max([p.a + ceil(p.c) - 1 for p in task.parents])
+            resource_availabilities = []
+            for resource in task.resources:
+                interval_set = resource_schedules[resource][parent_task_end]
+                if interval_set:
+                    interval = sorted(interval_set)[0]
+                    resource_availabilities.append(interval.end)
 
-            if not verify_dag(dagtask):
-                import pdb
-                pdb.set_trace()
+            earliest_start = max([parent_task_end] + resource_availabilities)
+            task.a = earliest_start
+            interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
+            for resource in task.resources:
+                resource_schedules[resource].add(interval)
+
+    if not verify_dag(dagtask):
+        import pdb
+        pdb.set_trace()
+
+    resource_schedules_new = {}
+    for resource in resource_schedules.keys():
+        resource_schedule = []
+        for interval in resource_schedules[resource]:
+            resource_schedule.append((interval.begin, interval.data))
+        resource_schedules_new[resource] = resource_schedule
+
+    sink_task = dagtask.sinks[0]
+    shift_latency = sink_task.a + ceil(sink_task.c)
+    shift_decoherence = get_schedule_decoherence(resource_schedules_new, shift_latency)
+    shift_correct = verify_dag(dagtask)
+    logger.info("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence, shift_correct))
 
 
 def get_schedule_decoherence(resource_schedules, completion_time):
@@ -480,6 +532,8 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
             break
 
     if earliest_possible_start == float('inf') and task.name[0] == "L":
+        import pdb
+        pdb.set_trace()
         return None
 
     # If the earliest_resources are locked by their last tasks, we have already confirmed there are storage resources for them
@@ -521,7 +575,7 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
         return earliest, {}
 
     else:
-        occupied_ranges = list(to_ranges(occupied_slots.keys()))
+        occupied_ranges = list(sorted(to_ranges(occupied_slots.keys())))
         _, e = occupied_ranges[-1]
         last_tasks = []
         for r in resource_set:
@@ -551,7 +605,7 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
 
                     if filtered_schedule:
                         last_task_slot, last_task = filtered_schedule[-1]
-                        if not task_locks_resource(last_task, [storage_r]) and sr_to_lr[storage_r] is None:
+                        if (not task_locks_resource(last_task, [storage_r])) and (sr_to_lr[storage_r] is None):
                             lr_to_sr[locked_r] = storage_r
                             sr_to_lr[storage_r] = locked_r
 
@@ -559,7 +613,7 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
                         lr_to_sr[locked_r] = storage_r
                         sr_to_lr[storage_r] = locked_r
 
-                # If non available, return float('inf')
+                # If none available, return float('inf')
                 if lr_to_sr[locked_r] is None:
                     return float('inf'), {}
 
@@ -608,7 +662,6 @@ def convert_task_to_alap(dagtask):
 
 
 def schedule_task_alap(task, resource_schedules):
-
     possible = [task.a]
     child_starts = [ct.a - ceil(task.c) for ct in task.children if set(task.resources) & set(ct.resources)]
     if child_starts:

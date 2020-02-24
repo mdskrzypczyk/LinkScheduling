@@ -88,6 +88,7 @@ class ResourceTask(Task):
     def __init__(self, name, c, a=0, d=None, resources=None):
         super(ResourceTask, self).__init__(name=name, c=c, a=a, d=d)
         self.resources = resources
+        self.locked_resources = None
 
     def __copy__(self):
         return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources)
