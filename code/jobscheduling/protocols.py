@@ -439,6 +439,10 @@ def schedule_dag_for_resources(dagtask, topology):
 def verify_dag(dagtask, node_resources=None):
     resource_intervals = defaultdict(IntervalTree)
     for subtask in dagtask.subtasks:
+        for child in subtask.children:
+            if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
+                import pdb
+                pdb.set_trace()
         subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
         for resource in subtask.resources:
             if node_resources and (resource not in node_resources):
@@ -479,12 +483,13 @@ def shift_distillations_and_swaps(dagtask):
 
     for task in sorted(dagtask.subtasks, key=lambda task: task.a):
         if task.name[0] == "D" or task.name[0] == "S":
-            parent_task_end = max([p.a + ceil(p.c) - 1 for p in task.parents])
+            parent_ends = [p.a + ceil(p.c) for p in task.parents if set(p.resources) & set(task.resources)]
+            parent_task_end = max(parent_ends) if parent_ends else task.a
             resource_availabilities = []
             for resource in task.resources:
-                interval_set = resource_schedules[resource][parent_task_end]
+                interval_set = resource_schedules[resource].envelop(0, parent_task_end)
                 if interval_set:
-                    interval = sorted(interval_set)[0]
+                    interval = sorted(interval_set)[-1]
                     resource_availabilities.append(interval.end)
 
             earliest_start = max([parent_task_end] + resource_availabilities)
@@ -585,9 +590,6 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
                 resource_schedules[lr].append(new_slot)
                 resource_schedules[sr].append(new_slot)
 
-            if reassigned_start != last_task.a:
-                import pdb
-                pdb.set_trace()
             last_task.a = reassigned_start
             last_task.resources.remove(lr)
             last_task.resources = list(sorted(last_task.resources + [sr]))
@@ -609,6 +611,8 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
 
 
 def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules, storage_resources):
+    # Always get the first earliest pair of communication qubits and storage qubits, if no storage qubits left leave
+    # the link in the comm qubits
     occupied_slots = defaultdict(list)
 
     for r in resource_set:
@@ -637,11 +641,11 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
                 return earliest, {}
 
         elif task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks]):
-            locked_resources = set([(r, t) for r, t in last_tasks if task_locks_resource(t, [r])])
+            locked_resources = set([(r, t) for _, t in last_tasks for r in t.resources if r in storage_resources.keys() and task_locks_resource(t, [r])])
+
             lr_to_sr = defaultdict(lambda: None)
             sr_to_lr = defaultdict(lambda: None)
             for locked_r, locking_task in locked_resources:
-                # Find a storage resource to move the locked resource into (check whether the storage resources are also locked)
                 earliest_storage_time = float('inf')
                 earliest_storage_resource = None
                 for storage_r in storage_resources[locked_r]:
@@ -649,10 +653,8 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
 
                     if rs:
                         last_task_slot, last_task = rs[-1]
-                        if last_task.name == "D;77;13;12":
-                            import pdb
-                            pdb.set_trace()
                         if (not task_locks_resource(last_task, [storage_r])) and (sr_to_lr[storage_r] is None):
+                            # Find the first
                             if last_task_slot + ceil(locking_task.c) < earliest_storage_time:
                                 storage_time = max(last_task_slot + 1, locking_task.a)
                                 if storage_time < earliest_storage_time:
