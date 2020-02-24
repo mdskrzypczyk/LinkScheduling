@@ -25,7 +25,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=1, num_storage_q=4):
+def gen_topologies(n, num_comm_q=1, num_storage_q=1):
     d_to_cap = load_link_data()
     link_distance = 5
     link_capability = d_to_cap[str(link_distance)]
@@ -154,9 +154,9 @@ def get_network_demands(network_topology, num):
     demands = []
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
-        fidelity = round(0.75 + random.random() / 4, 3)  # Fidelity range between F=0.75 and 1
-        rate = 0.1 # round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
-        demands.append(('6', '12', 0.77, 0.1))#(src, dst, fidelity, rate))
+        fidelity = round(0.6 + random.random() * (4 / 10), 3)                    # Fidelity range between F=0.6 and 1
+        rate = round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
+        demands.append((src, dst, fidelity, rate))
     return demands
 
 
@@ -188,7 +188,7 @@ def main():
         for i in range(num_tasksets):
             logger.info("Generating taskset {}".format(i))
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 10)
+            demands = get_network_demands(topology, 100)
 
             logger.info("Demands: {}".format(demands))
 

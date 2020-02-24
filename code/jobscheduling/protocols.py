@@ -81,7 +81,7 @@ class SwapProtocol(Protocol):
         return SwapProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
 
 
-def create_protocol(path, G, Fmin, Rmin):
+def create_protocol(path, nodeG, Fmin, Rmin):
     def filter_node(node):
         return node in path
 
@@ -89,9 +89,10 @@ def create_protocol(path, G, Fmin, Rmin):
         return node1 in path and node2 in path
 
     logger.debug("Creating protocol on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
-    subG = nx.subgraph_view(G, filter_node, filter_edge)
+    subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
+    pathResources = dict([(n, len(nodeG.nodes[n]['comm_qs']) + len(nodeG.nodes[n]['storage_qs'])) for n in path])
     try:
-        protocol = esss(path, subG, Fmin, Rmin)
+        protocol = esss(path, pathResources, subG, Fmin, Rmin)
         if type(protocol) != Protocol and protocol is not None:
             return protocol
         else:
@@ -101,12 +102,12 @@ def create_protocol(path, G, Fmin, Rmin):
         raise Exception()
 
 
-def esss(path, G, Fmin, Rmin):
+def esss(path, pathResources, G, Fmin, Rmin):
     logger.debug("ESSS on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
     if len(path) == 2:
         logger.debug("Down to elementary link, finding distillation protocol")
         link_properties = G.get_edge_data(*path)['capabilities']
-        protocol = get_protocol_for_link(link_properties, Fmin, Rmin, path)
+        protocol = get_protocol_for_link(link_properties, Fmin, Rmin, path, pathResources)
         return protocol
 
     else:
@@ -119,7 +120,8 @@ def esss(path, G, Fmin, Rmin):
         while lower < upper:
             numL = (upper + lower + 1) // 2
             numR = len(path) + 1 - numL
-            possible_protocol, Rl, Rr = find_split_path_protocol(path, G, Fmin, Rmin, numL, numR)
+
+            possible_protocol, Rl, Rr = find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR)
 
             if Rl == Rr:
                 logger.debug("Rates on left and right paths balanced")
@@ -140,9 +142,10 @@ def esss(path, G, Fmin, Rmin):
         return protocol
 
 
-def find_split_path_protocol(path, G, Fmin, Rmin, numL, numR):
+def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
     protocols = []
     maxDistillations = 10
+
     for num in range(maxDistillations):
         Rlink = Rmin * (num + 1)
 
@@ -152,9 +155,21 @@ def find_split_path_protocol(path, G, Fmin, Rmin, numL, numR):
             continue
         Funswapped = unswap_links(Fminswap)
 
+        resourceCopy = dict(pathResources)
+
+        # If we are swapping the middle node needs to use one resource to hold an end of the first link
+        resourceCopy[path[numL - 1]] -= 1
+
+        # If we are distilling then the end nodes need to hold one link between protocol steps
+        if num > 1:
+            resourceCopy[path[0]] -= 1
+            resourceCopy[path[-1]] -= 1
+
+        import pdb
+        pdb.set_trace()
         # Search for protocols on left and right that have above properties
-        protocolL = esss(path[:numL], G, Funswapped, Rlink)
-        protocolR = esss(path[-numR:], G, Funswapped, Rlink)
+        protocolL = esss(path[:numL], resourceCopy, G, Funswapped, Rlink)
+        protocolR = esss(path[-numR:], resourceCopy, G, Funswapped, Rlink)
 
         # Add to list of protocols
         if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and type(protocolR) != Protocol:
@@ -172,7 +187,7 @@ def find_split_path_protocol(path, G, Fmin, Rmin, numL, numR):
                 logger.debug("Distilled link F={}".format(Fdistilled))
 
             logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
-                                                                                                 num + 1))
+                                                                                                 num))
             logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
                                                                                       protocolR.F, protocolR.R))
             protocols.append((protocol, protocolL.R, protocolR.R))
@@ -193,8 +208,13 @@ def find_split_path_protocol(path, G, Fmin, Rmin, numL, numR):
         return None, 0, 0
 
 
-def get_protocol_for_link(link_properties, Fmin, Rmin, nodes):
+def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
     if all([R < Rmin for _, R in link_properties]):
+        logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
+        return None
+
+    if any([v < 1 for v in [nodeResources[n] for n in nodes]]):
+        logger.debug("Not enough resources to generate link between nodes {}".format(nodes))
         return None
 
     # Check if any single link generation protocols exist
@@ -204,6 +224,10 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes):
             return LinkProtocol(F=F, R=R, nodes=nodes)
 
     logger.debug("Link not capable of generating without distillation")
+    if any([v < 2 for v in [nodeResources[n] for n in nodes]]):
+        logger.debug("Not enough resources to perform distillation with nodes {}".format(nodes))
+        return None
+
     # Search for the link gen protocol with highest rate that satisfies fidelity
     bestR = Rmin
     bestProtocol = None
@@ -410,6 +434,7 @@ def schedule_dag_for_resources(dagtask, topology):
 
     logger.info("Shifting SWAPs and Distillations")
     shift_distillations_and_swaps(dagtask)
+
     return dagtask
 
 
@@ -470,21 +495,20 @@ def shift_distillations_and_swaps(dagtask):
             for resource in task.resources:
                 resource_schedules[resource].add(interval)
 
-    if not verify_dag(dagtask):
-        import pdb
-        pdb.set_trace()
-
     resource_schedules_new = {}
     for resource in resource_schedules.keys():
         resource_schedule = []
         for interval in resource_schedules[resource]:
             resource_schedule.append((interval.begin, interval.data))
-        resource_schedules_new[resource] = resource_schedule
+        resource_schedules_new[resource] = list(sorted(resource_schedule))
 
     sink_task = dagtask.sinks[0]
     shift_latency = sink_task.a + ceil(sink_task.c)
     shift_decoherence = get_schedule_decoherence(resource_schedules_new, shift_latency)
     shift_correct = verify_dag(dagtask)
+    if not shift_correct:
+        import pdb
+        pdb.set_trace()
     logger.info("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence, shift_correct))
 
 
@@ -493,13 +517,13 @@ def get_schedule_decoherence(resource_schedules, completion_time):
     for r in resource_schedules.keys():
         rs = resource_schedules[r]
         for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
-            if t1.name[0] == "L" or t1.name[0] == "D":
+            if t1.name[0] == "L" or (t1.name[0] == "D" and r in t1.resources[1:4:2]):
                 total_decoherence += (s2 - ceil(t1.c) - s1)
 
         if rs:
             s, t = rs[-1]
-            if t.name[0] == "L" or t.name[0] == "D":
-                total_decoherence += (completion_time - s - ceil(t.c))
+            if t.name[0] == "L" or (t.name[0] == "D" and r in t.resources[1:4:2]):
+                total_decoherence += (completion_time - ceil(t.c) - s)
 
     return total_decoherence
 
@@ -516,11 +540,11 @@ def to_ranges(iterable):
 
 
 def schedule_task_asap(task, task_resources, resource_schedules, storage_resources):
-    earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(task.resources) & set(p.resources)])
     earliest_possible_start = float('inf')
     earliest_resources = None
     earliest_mapping = None
     for resource_set in list(itertools.product(*task_resources)):
+        earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(resource_set) & set(p.resources)])
         possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules, storage_resources)
 
         if earliest_start <= possible_start <= earliest_possible_start and (earliest_mapping is None or len(earliest_mapping.keys()) >= len(locked_storage_mapping.keys())):
@@ -540,12 +564,30 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     if earliest_mapping:
         logger.debug("Changing resources due to task {}".format(task.name))
         # Iterate over the locked resources, update their last task to reference the storage resource
-        for lr, sr in earliest_mapping.items():
-            # Update the resource schedules with the storage resource occupying information
+        task_starts = defaultdict(int)
+        for lr in earliest_mapping.keys():
             lr_schedule = resource_schedules[lr]
             _, last_task = lr_schedule[-1]
+            reassigned_start, sr = earliest_mapping[lr]
+            task_starts[last_task.name] = max(task_starts[last_task.name], reassigned_start)
+
+        for lr in earliest_mapping.keys():
+            # Update the resource schedules with the storage resource occupying information
+            _, sr = earliest_mapping[lr]
+            lr_schedule = resource_schedules[lr]
+            _, last_task = lr_schedule[-1]
+            reassigned_start = task_starts[last_task.name]
             num_slots = ceil(last_task.c)
-            resource_schedules[sr] += lr_schedule[-num_slots:]
+            slots_to_modify = lr_schedule[-num_slots:]
+            resource_schedules[lr] = lr_schedule[:-num_slots]
+            for i in range(num_slots):
+                prev_slot = slots_to_modify[i]
+                slot_num, _ = prev_slot
+                new_slot = (reassigned_start + i, last_task)
+                resource_schedules[lr].append(new_slot)
+                resource_schedules[sr].append(new_slot)
+
+            last_task.a = reassigned_start
             last_task.resources.remove(lr)
             last_task.resources.append(sr)
             logger.debug("Moved {} to {}".format(lr, sr))
@@ -566,6 +608,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
 
 def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules, storage_resources):
     occupied_slots = defaultdict(list)
+
     for r in resource_set:
         rs = resource_schedules[r]
         for slot, t in rs:
@@ -592,34 +635,41 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
                 return earliest, {}
 
         elif task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks]):
-            locked_resources = set([r for r, t in last_tasks if task_locks_resource(t, [r])])
+            locked_resources = set([(r, t) for r, t in last_tasks if task_locks_resource(t, [r])])
             lr_to_sr = defaultdict(lambda: None)
             sr_to_lr = defaultdict(lambda: None)
-            for locked_r in locked_resources:
+            for locked_r, locking_task in locked_resources:
                 # Find a storage resource to move the locked resource into (check whether the storage resources are also locked)
+                earliest_storage_time = float('inf')
+                earliest_storage_resource = None
                 for storage_r in storage_resources[locked_r]:
-                    if lr_to_sr[locked_r]:
-                        continue
                     rs = resource_schedules[storage_r]
-                    filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
 
-                    if filtered_schedule:
-                        last_task_slot, last_task = filtered_schedule[-1]
+                    if rs:
+                        last_task_slot, last_task = rs[-1]
                         if (not task_locks_resource(last_task, [storage_r])) and (sr_to_lr[storage_r] is None):
-                            lr_to_sr[locked_r] = storage_r
-                            sr_to_lr[storage_r] = locked_r
+                            if last_task_slot + ceil(locking_task.c) < earliest_storage_time:
+                                storage_time = max(last_task_slot + 1, locking_task.a)
+                                if storage_time < earliest_storage_time:
+                                    earliest_storage_time = storage_time
+                                    earliest_storage_resource = storage_r
 
-                    elif sr_to_lr[storage_r] is None:
-                        lr_to_sr[locked_r] = storage_r
-                        sr_to_lr[storage_r] = locked_r
+                    elif locking_task.a < earliest_storage_time:
+                        earliest_storage_resource = storage_r
+                        earliest_storage_time = locking_task.a
 
                 # If none available, return float('inf')
-                if lr_to_sr[locked_r] is None:
+                if earliest_storage_resource is None:
                     return float('inf'), {}
+                else:
+                    lr_to_sr[locked_r] = (earliest_storage_time, earliest_storage_resource)
+                    sr_to_lr[earliest_storage_resource] = locked_r
+
+            new_task_start = max([e] + [lr_to_sr[lr][0] + ceil(lt.c) for lr, lt in locked_resources])
 
             # Return the slot where the new action can start
-            if e >= earliest:
-                return e + 1, lr_to_sr
+            if new_task_start >= earliest:
+                return new_task_start + 1, lr_to_sr
             else:
                 return earliest, lr_to_sr
         else:
@@ -658,6 +708,9 @@ def convert_task_to_alap(dagtask):
     alap_latency = sink_task.a + ceil(sink_task.c)
     alap_decoherence = get_schedule_decoherence(resource_schedules, alap_latency)
     alap_correct = verify_dag(dagtask)
+    if not alap_correct:
+        import pdb
+        pdb.set_trace()
     logger.info("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence, alap_correct))
 
 
