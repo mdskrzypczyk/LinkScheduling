@@ -152,11 +152,13 @@ def get_schedulers():
 def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
+    demands = [('11', '15', 0.849, 0.3), ('15', '11', 0.849, 0.5), ('5', '1', 0.857, 0.4), ('17', '13', 0.847, 0.3), ('7', '12', 0.747, 0.5), ('9', '14', 0.755, 0.4), ('15', '19', 0.849, 0.3), ('11', '6', 0.736, 0.3),('15', '9', 0.765, 0.3)]
+    return demands
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (4 / 10), 3)                    # Fidelity range between F=0.6 and 1
         rate = round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
-        demands.append(('16', '12', 0.851, 0.3))#(src, dst, fidelity, rate))
+        demands.append((src, dst, fidelity, rate))
     return demands
 
 
@@ -188,27 +190,37 @@ def main():
         for i in range(num_tasksets):
             logger.info("Generating taskset {}".format(i))
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 10)
+            while True:
+                demands = get_network_demands(topology, 100)
 
-            logger.info("Demands: {}".format(demands))
+                logger.info("Demands: {}".format(demands))
 
-            taskset = []
-            for demand in demands:
-                logger.debug("Constructing protocol for request {}".format(demand))
-                protocol = get_protocol(topology, demand)
-                if protocol is None:
-                    continue
+                taskset = []
+                for demand in demands:
+                    logger.debug("Constructing protocol for request {}".format(demand))
+                    protocol = get_protocol(topology, demand)
+                    if protocol is None:
+                        continue
 
-                logger.debug("Converting protocol for request {} to task".format(demand))
-                task = convert_protocol_to_task(demand, protocol)
+                    try:
+                        logger.debug("Converting protocol for request {} to task".format(demand))
+                        task = convert_protocol_to_task(demand, protocol)
 
-                logger.debug("Scheduling task for request {}".format(demand))
-                scheduled_task = schedule_dag_for_resources(task, topology)
+                        logger.debug("Scheduling task for request {}".format(demand))
 
-                logger.info("Created protocol and task for demand (S={}, D={}, F={}, R={})".format(*demand))
-                taskset.append(scheduled_task)
+                        scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
 
-            logger.info("Created taskset {}".format([t.name for t in taskset]))
+                        if not correct:
+                            logger.error("Failed to construct valid protocol for {}".format(demand))
+                        else:
+                            logger.error("Successfully satisfied demand {}".format(demand))
+                    except:
+                        logger.exception("Exception occured when creating protocol for {}".format(demand))
+
+                    # logger.info("Created protocol and task for demand (S={}, D={}, F={}, R={})".format(*demand))
+                    # taskset.append(scheduled_task)
+
+            xlogger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
         # Use all schedulers

@@ -2,6 +2,7 @@ import logging
 
 LOG_LEVEL = logging.DEBUG
 FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+FILENAME = "log"
 logging.basicConfig(format=FORMAT)
 
 
