@@ -8,7 +8,7 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocols import convert_protocol_to_task, create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol, schedule_dag_for_resources
 from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
 from jobscheduling.visualize import draw_DAG
-
+from math import ceil
 
 logger = LSLogger()
 
@@ -25,7 +25,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=1, num_storage_q=3):
+def gen_topologies(n, num_comm_q=4, num_storage_q=0):
     d_to_cap = load_link_data()
     link_distance = 5
     link_capability = d_to_cap[str(link_distance)]
@@ -155,7 +155,7 @@ def get_network_demands(network_topology, num):
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (4 / 10), 3)                    # Fidelity range between F=0.6 and 1
-        rate = round(0.2 + random.choice([0.1*i for i in range(1, 9)]), 3)       # Rate range between 0.2 and 1
+        rate = 1 / (2**random.choice([i for i in range(20)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -168,12 +168,11 @@ def get_protocol(network_topology, demand):
     if protocol:
         return protocol
     else:
-        logger.warning("Demand (S={}, D={}, F={}, R={}) could not be satisfied!".format(s, d, f, r))
         return None
 
 
 def main():
-    num_network_nodes = 20
+    num_network_nodes = 4
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes)
@@ -181,53 +180,64 @@ def main():
     network_schedulers = get_schedulers()
     schedule_validator = PreemptionBudgetScheduler()
     results = {}
-    num_success = 0
     for topology in network_topologies:
         network_tasksets = []
 
         for i in range(num_tasksets):
             logger.info("Generating taskset {}".format(i))
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            while True:
-                demands = get_network_demands(topology, 100)
+            demands = get_network_demands(topology, 10)
 
-                logger.info("Demands: {}".format(demands))
+            logger.info("Demands: {}".format(demands))
 
-                taskset = []
-                for demand in demands:
-                    logger.debug("Constructing protocol for request {}".format(demand))
-                    protocol = get_protocol(topology, demand)
-                    if protocol is None:
-                        continue
+            taskset = []
+            for demand in demands:
+                logger.info("Constructing protocol for request {}".format(demand))
+                protocol = get_protocol(topology, demand)
+                if protocol is None:
+                    logger.warning("Demand {} could not be satisfied!".format(demand))
+                    continue
 
-                    try:
-                        logger.debug("Converting protocol for request {} to task".format(demand))
-                        task = convert_protocol_to_task(demand, protocol)
+                logger.debug("Converting protocol for request {} to task".format(demand))
+                slot_size = 0.05
+                task = convert_protocol_to_task(demand, protocol, slot_size)
 
-                        logger.debug("Scheduling task for request {}".format(demand))
+                logger.debug("Scheduling task for request {}".format(demand))
 
-                        scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+                scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
 
-                        if not correct:
-                            logger.error("Failed to construct valid protocol for {}".format(demand))
-                            import pdb
-                            pdb.set_trace()
-                        else:
-                            num_success += 1
-                            logger.error("Successfully satisfied demand {}, {}".format(demand, num_success))
-                    except:
-                        logger.exception("Exception occured when creating protocol for {}".format(demand))
-                        import pdb
-                        pdb.set_trace()
+                sink = scheduled_task.sinks[0]
+                latency = (sink.a + ceil(sink.c)) * slot_size
+                achieved_rate = 1 / latency
 
-                    # logger.info("Created protocol and task for demand (S={}, D={}, F={}, R={})".format(*demand))
-                    # taskset.append(scheduled_task)
+                s, d, f, r = demand
+                asap_dec, alap_dec, shift_dec = decoherence_times
+                logger.info("Results for {}:".format(demand))
+                if not correct:
+                    logger.error("Failed to construct valid protocol for {}".format(demand))
+                    import pdb
+                    pdb.set_trace()
+
+                elif achieved_rate < r:
+                    logger.error("Failed to satisfy rate for demand {}, achieved {}".format(demand, achieved_rate))
+
+                elif shift_dec > asap_dec or shift_dec > alap_dec:
+                    logger.error("Shifted protocol has greater decoherence than ALAP or ASAP")
+                    import pdb
+                    pdb.set_trace()
+
+                else:
+                    logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={})".format(*demand))
+                    taskset.append(scheduled_task)
 
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
         # Use all schedulers
         for scheduler_class in network_schedulers:
+            import pdb
+            pdb.set_trace()
+
             scheduler = scheduler_class()
             results_key = str(type(scheduler))
             scheduler_results = []
@@ -250,13 +260,10 @@ def main():
                 else:
                     logger.info("Failed to create a schedule for taskset")
 
-                import pdb
-                pdb.set_trace()
-
             results[results_key] = scheduler_results
 
-    import pdb
-    pdb.set_trace()
+        import pdb
+        pdb.set_trace()
 
     # Plot schedulability ratio vs. utilization for each task set
     # for scheduler_type, scheduler_results in results.items():

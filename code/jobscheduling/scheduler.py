@@ -719,7 +719,6 @@ class NPEDFScheduler(Scheduler):
         valid = True
         for start, end, task in schedule:
             if task.d < end:
-                # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                 valid = False
         taskset = original_taskset
         return schedule, valid
@@ -742,14 +741,17 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
-        dag_instance = ResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=dag_copy.a + dag_copy.p*instance,
+        release_offset = dag_copy.a + dag_copy.p*instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
+        dag_instance = ResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset,
                                        d=dag_copy.a + dag_copy.p*(instance + 1), tasks=dag_copy.subtasks)
         return dag_instance
 
     def schedule_tasks(self, taskset):
         original_taskset = taskset
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
-
+        logger.info("Computed hyperperiod {}".format(hyperperiod))
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
         last_task_start = dict()
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
@@ -761,14 +763,13 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
         # First sort the taskset by activation time
         logger.debug("Sorting tasks by earliest deadlines")
-        taskset = list(sorted(taskset, key=lambda task: task.earliest_deadline()))
+        taskset = list(sorted(taskset, key=lambda task: task.a))
 
+        schedule = []
         earliest = 0
         while taskset:
             next_task = taskset.pop(0)
-            start_offset = self.get_start_time(next_task, resource_occupations, earliest)
-            start_time = next_task.a + start_offset
-            logger.debug("Computed starting time {}".format(start_time))
+            start_time = self.get_start_time(next_task, resource_occupations, earliest)
 
             # Introduce a new instance into the taskset if necessary
             original_taskname, instance = next_task.name.split('|')
@@ -777,17 +778,20 @@ class MultiResourceNPEDFScheduler(Scheduler):
             if instance < instance_count[original_taskname]:
                 periodic_task = taskset_lookup[original_taskname]
                 task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.earliest_deadline()))
+                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.a))
 
             # Add schedule information to resource schedules
             resource_intervals = defaultdict(list)
             for subtask in next_task.subtasks:
-                subtask_start = start_time + subtask.a
+                subtask_start = start_time + subtask.a - next_task.a
                 subtask_end = subtask_start + subtask.c
                 interval = (subtask_start, subtask_end)
                 for resource in subtask.resources:
                     resource_intervals[resource].append(interval)
                     resource_schedules[resource].append((subtask_start, subtask_end, subtask))
+
+            # Add the schedule information to the overall schedule
+            schedule.append((start_time, start_time + next_task.c, next_task))
 
             # Update windowed resource schedules
             if taskset:
@@ -807,7 +811,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
                     valid = False
 
         taskset = original_taskset
-        return resource_schedules, valid
+        return schedule, valid
 
     def get_start_time(self, task, resource_occupations, earliest):
         subtasks = list(sorted(task.subtasks, key=lambda subtask: subtask.a))
@@ -884,6 +888,7 @@ class CEDFScheduler:
     def schedule_tasks(self, taskset):
         ready_queue = PriorityQueue()
         critical_queue = list()
+        task_to_max_start = {}
         schedule = []
 
         # First sort the taskset by activation time
@@ -892,6 +897,7 @@ class CEDFScheduler:
         taskset = list(sorted(taskset, key=lambda task: task.a))
         for task in taskset:
             critical_queue.append((task.d - task.c, task))
+            task_to_max_start[task.name] = task.d - task.c
 
         critical_queue = list(sorted(critical_queue))
 
@@ -914,11 +920,13 @@ class CEDFScheduler:
                 if next_task.a + next_task.c > max_start and next_task != next_critical_task and next_critical_task.a <= max_start:
                     if (next_task.a + next_task.c) > (next_task.d - next_task.c):
                         # Remove next_task from critical queue
-                        self.remove_from_critical_queue(critical_queue, next_task)
+                        max_start = task_to_max_start[next_task.name]
+                        critical_queue.remove((max_start, next_task))
 
                         new_max_start = next_task.a + next_task.c
                         # Reinsert with updated max start time
                         critical_queue.append((new_max_start, next_task))
+                        task_to_max_start[next_task.name] = new_max_start
                         critical_queue = list(sorted(critical_queue))
 
                     next_task.a = next_critical_task.a + next_critical_task.c
@@ -927,7 +935,8 @@ class CEDFScheduler:
 
                 else:
                     # Remove next_task from critical queue
-                    self.remove_from_critical_queue(critical_queue, next_task)
+                    max_start = task_to_max_start[next_task.name]
+                    critical_queue.remove((max_start, next_task))
                     schedule.append((curr_time, curr_time + next_task.c, next_task))
                     curr_time += next_task.c
 

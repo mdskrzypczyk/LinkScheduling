@@ -24,7 +24,7 @@ def generate_non_periodic_task_set(periodic_task_set):
         # Generate a task for each period the task executes
         num_tasks = schedule_length // task.p
         for i in range(num_tasks):
-            taskset.append(Task(name="{},{}".format(task.name, i), c=task.c, a=task.a + task.p*i,
+            taskset.append(Task(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p*i,
                                 d=task.a + task.p * (i + 1)))
 
     return taskset
@@ -39,10 +39,13 @@ def generate_non_periodic_dagtask_set(periodic_task_set):
         # Generate a task for each period the task executes
         num_tasks = schedule_length // task.p
         for i in range(num_tasks):
-
             dag_copy = copy(task)
-            taskset.append(ResourceDAGTask(name="{}|{}".format(dag_copy.name, i), a=dag_copy.a + dag_copy.p * i,
-                                           d=dag_copy.a + dag_copy.p * (i + 1), tasks=dag_copy.subtasks))
+            release_offset = dag_copy.a + dag_copy.p * i
+            for subtask in dag_copy.subtasks:
+                subtask.a += release_offset
+            new_task = ResourceDAGTask(name="{}|{}".format(dag_copy.name, i), a=release_offset,
+                                       d=dag_copy.a + dag_copy.p * (i + 1), tasks=dag_copy.subtasks)
+            taskset.append(new_task)
 
     return taskset
 
@@ -50,13 +53,14 @@ def generate_non_periodic_dagtask_set(periodic_task_set):
 def generate_non_periodic_budget_task_set(periodic_task_set):
     periods = [task.p for task in periodic_task_set]
     schedule_length = get_lcm_for(periods)
+    logger.info("Computed hyperperiod {}".format(schedule_length))
     taskset = []
     for task in periodic_task_set:
         # Generate a task for each period the task executes
         num_tasks = schedule_length // task.p
         for i in range(num_tasks):
             taskset.append(
-                BudgetTask(name="{},{}".format(task.name, i), c=task.c, a=task.a + task.p * i, d=task.a + task.p * (i + 1), k=task.k))
+                BudgetTask(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p * i, d=task.a + task.p * (i + 1), k=task.k))
 
     return taskset
 

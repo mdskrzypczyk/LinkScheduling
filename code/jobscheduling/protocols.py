@@ -44,6 +44,7 @@ class LinkProtocol(Protocol):
 class DistillationProtocol(LinkProtocol):
     name_template = "D{};{};{}"
     count = 0
+    distillation_duration = 0.01
 
     def __init__(self, F, R, protocols, nodes):
         super(DistillationProtocol, self).__init__(F=F, R=R, nodes=nodes)
@@ -54,8 +55,7 @@ class DistillationProtocol(LinkProtocol):
         DistillationProtocol.count += 1
 
     def set_duration(self, R):
-        distillation_duration = 0.01
-        self.duration = distillation_duration
+        self.duration = self.distillation_duration
 
     def __copy__(self):
         return DistillationProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
@@ -64,6 +64,7 @@ class DistillationProtocol(LinkProtocol):
 class SwapProtocol(Protocol):
     name_template = "S{};{}"
     count = 0
+    swap_duration = 0.01
 
     def __init__(self, F, R, protocols, nodes):
         super(SwapProtocol, self).__init__(F=F, R=R, nodes=nodes)
@@ -74,8 +75,7 @@ class SwapProtocol(Protocol):
         SwapProtocol.count += 1
 
     def set_duration(self, R):
-        swap_duration = 0.01
-        self.duration = swap_duration
+        self.duration = self.swap_duration
 
     def __copy__(self):
         return SwapProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
@@ -90,7 +90,7 @@ def create_protocol(path, nodeG, Fmin, Rmin):
 
     logger.debug("Creating protocol on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
     subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
-    pathResources = dict([(n, len(nodeG.nodes[n]['comm_qs']) + len(nodeG.nodes[n]['storage_qs'])) for n in path])
+    pathResources = dict([(n, {"comm": len(nodeG.nodes[n]['comm_qs']), "total": len(nodeG.nodes[n]['comm_qs']) + len(nodeG.nodes[n]['storage_qs'])}) for n in path])
     try:
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
         if type(protocol) != Protocol and protocol is not None:
@@ -146,28 +146,37 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
     protocols = []
     maxDistillations = 10
 
-    for num in range(maxDistillations):
-        Rlink = Rmin * (num + 1)
+    resourceCopy = dict(pathResources)
 
+    # If we are swapping the middle node needs to use one resource to hold an end of the first link
+    resourceCopy[path[numL - 1]]['total'] -= 1
+
+    # Assume we allocate half the comm resources of pivot node to either link
+    resourceCopy[path[numL - 1]]['comm'] = max(resourceCopy[path[numL - 1]]['comm'] // 2, 1)
+
+    for num in range(maxDistillations):
         # Compute minimum fidelity in order for num distillations to achieve Fmin
         Fminswap = fidelity_for_distillations(num, Fmin)
         if Fminswap == 0:
             continue
         Funswapped = unswap_links(Fminswap)
 
-        resourceCopy = dict(pathResources)
+        # Calculate the needed rates of the links
+        if num > 0:
+            Rlink = Rmin * (num + 1) / resourceCopy[path[numL - 1]]['comm'] / 2
+        else:
+            Rlink = Rmin
 
-        # If we are swapping the middle node needs to use one resource to hold an end of the first link
-        resourceCopy[path[numL - 1]] -= 1
+        pathResourcesCopy = dict(resourceCopy)
 
         # If we are distilling then the end nodes need to hold one link between protocol steps
         if num > 0:
-            resourceCopy[path[0]] -= 1
-            resourceCopy[path[-1]] -= 1
+            pathResourcesCopy[path[0]]['total'] -= 1
+            pathResourcesCopy[path[-1]]['total'] -= 1
 
         # Search for protocols on left and right that have above properties
-        protocolL = esss(path[:numL], resourceCopy, G, Funswapped, Rlink)
-        protocolR = esss(path[-numR:], resourceCopy, G, Funswapped, Rlink)
+        protocolL = esss(path[:numL], pathResourcesCopy, G, Funswapped, Rlink)
+        protocolR = esss(path[-numR:], pathResourcesCopy, G, Funswapped, Rlink)
 
         # Add to list of protocols
         if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and type(protocolR) != Protocol:
@@ -211,7 +220,7 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
         logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
         return None
 
-    if any([v < 1 for v in [nodeResources[n] for n in nodes]]):
+    if any([v < 1 for v in [nodeResources[n]['total'] for n in nodes]]):
         logger.debug("Not enough resources to generate link between nodes {}".format(nodes))
         return None
 
@@ -222,29 +231,34 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
             return LinkProtocol(F=F, R=R, nodes=nodes)
 
     logger.debug("Link not capable of generating without distillation")
-    if any([v < 2 for v in [nodeResources[n] for n in nodes]]):
+    if any([v < 2 for v in [nodeResources[n]['total'] for n in nodes]]):
         logger.debug("Not enough resources to perform distillation with nodes {}".format(nodes))
         return None
 
     # Search for the link gen protocol with highest rate that satisfies fidelity
     bestR = Rmin
     bestProtocol = None
+
+    # Can only generate as fast as the most constrained node
+    minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
     for F, R in link_properties:
         currF = F
-        currR = R
         currProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
-        numGens = 1
-        while currR >= Rmin and currF < Fmin:
-            linkProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
-            currF = distill_links(currF, F)
-            numGens += 1
-            currR = R / numGens
-            currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol], nodes=nodes)
+        numGens = distillations_for_fidelity(F, Fmin)
 
-        if currProtocol.F >= Fmin and currProtocol.R >= bestR:
-            logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
-            bestR = currProtocol.R
-            bestProtocol = currProtocol
+        if numGens != float('inf'):
+            generationLatency = 1 / (R / ceil(numGens / minNodeComms))
+            distillLatency = numGens * DistillationProtocol.distillation_duration
+            currR = 1 / (generationLatency + distillLatency)
+            linkProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
+            for i in range(numGens):
+                currF = distill_links(currF, F)
+                currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol], nodes=nodes)
+
+            if (currProtocol.F > Fmin and currProtocol.R >= bestR) or (currProtocol.F >= Fmin and currProtocol.R > bestR):
+                logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+                bestR = currProtocol.R
+                bestProtocol = currProtocol
 
     return bestProtocol
 
@@ -416,40 +430,28 @@ def schedule_dag_for_resources(dagtask, topology):
                 last_task = stack.pop()
 
     sink_task = dagtask.sinks[0]
-    asap_duration = sink_task.a + ceil(sink_task.c)
+    asap_latency = sink_task.a + ceil(sink_task.c)
     resource_schedules = defaultdict(list)
     for task in dagtask.subtasks:
-        interval = (task.a, task)
+        slots = [(task.a + i, task) for i in range(ceil(task.c))]
         for resource in task.resources:
-            resource_schedules[resource].append(interval)
+            resource_schedules[resource] += slots
 
     for resource in resource_schedules.keys():
         resource_schedules[resource] = list(sorted(resource_schedules[resource]))
-    asap_decoherence = get_schedule_decoherence(resource_schedules, asap_duration)
+
+    asap_decoherence = get_schedule_decoherence(resource_schedules, asap_latency)
     asap_correct = verify_dag(dagtask)
-    # if not asap_correct:
-    #     import pdb
-    #     pdb.set_trace()
-    logger.info("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_duration, asap_decoherence, asap_correct))
+    logger.debug("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_latency, asap_decoherence, asap_correct))
 
-    logger.info("Scheduling task ALAP")
+    logger.debug("Scheduling task ALAP")
     alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(dagtask)
-    # if not alap_correct:
-    #     import pdb
-    #     pdb.set_trace()
-    logger.info("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence, alap_correct))
+    logger.debug("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence, alap_correct))
 
-    logger.info("Shifting SWAPs and Distillations")
+    logger.debug("Shifting SWAPs and Distillations")
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(dagtask)
-    # if not shift_correct:
-    #     import pdb
-    #     pdb.set_trace()
-    logger.info("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence,
+    logger.debug("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence,
                                                                                       shift_correct))
-
-    # if shift_decoherence > alap_decoherence or shift_decoherence > asap_decoherence:
-    #     import pdb
-    #     pdb.set_trace()
 
     return dagtask, (asap_decoherence, alap_decoherence, shift_decoherence), asap_correct and alap_correct and shift_correct
 
@@ -483,10 +485,6 @@ def verify_dag(dagtask, node_resources=None):
             elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
                 valid = False
 
-    # if not valid:
-    #     import pdb
-    #     pdb.set_trace()
-
     return valid
 
 
@@ -514,16 +512,15 @@ def shift_distillations_and_swaps(dagtask):
             task.a = earliest_start
             interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
             for resource in task.resources:
-                # if resource_schedules[resource].overlap(interval.begin, interval.end):
-                #     import pdb
-                #     pdb.set_trace()
                 resource_schedules[resource].add(interval)
 
     resource_schedules_new = {}
     for resource in resource_schedules.keys():
         resource_schedule = []
         for interval in resource_schedules[resource]:
-            resource_schedule.append((interval.begin, interval.data))
+            task = interval.data
+            slots = [(task.a + i, task) for i in range(ceil(task.c))]
+            resource_schedule += slots
         resource_schedules_new[resource] = list(sorted(resource_schedule))
 
     sink_task = dagtask.sinks[0]
@@ -542,12 +539,12 @@ def get_schedule_decoherence(resource_schedules, completion_time):
         rs = resource_schedules[r]
         for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
             if (t1.name[0] == "L" or (t1.name[0] == "D" and r in t1.resources[1:4:2])) and t2 != t1 and s1 + ceil(t1.c) != s2:
-                resource_decoherence += (s2 - ceil(t1.c) - s1)
+                resource_decoherence += (s2 - 1 - s1)
 
         if rs:
             s, t = rs[-1]
             if t.name[0] == "L" or (t.name[0] == "D" and r in t.resources[1:4:2]):
-                resource_decoherence += (completion_time - ceil(t.c) - s)
+                resource_decoherence += (completion_time - 1 - s)
 
         resource_decoherences[r] = resource_decoherence
         total_decoherence += resource_decoherence
@@ -585,8 +582,6 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
 
 
     if earliest_possible_start == float('inf') and task.name[0] == "L":
-        # import pdb
-        # pdb.set_trace()
         return None
 
     # If the earliest_resources are locked by their last tasks, we have already confirmed there are storage resources for them
