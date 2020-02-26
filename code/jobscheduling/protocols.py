@@ -427,15 +427,13 @@ def schedule_dag_for_resources(dagtask, topology):
         resource_schedules[resource] = list(sorted(resource_schedules[resource]))
     asap_decoherence = get_schedule_decoherence(resource_schedules, asap_duration)
     asap_correct = verify_dag(dagtask)
-    draw_DAG(dagtask, dagtask.name + ":ASAP")
-    if not asap_correct:
-        import pdb
-        pdb.set_trace()
+    # if not asap_correct:
+    #     import pdb
+    #     pdb.set_trace()
     logger.info("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_duration, asap_decoherence, asap_correct))
 
     logger.info("Scheduling task ALAP")
     alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(dagtask)
-    draw_DAG(dagtask, dagtask.name + ":ALAP")
     # if not alap_correct:
     #     import pdb
     #     pdb.set_trace()
@@ -443,7 +441,6 @@ def schedule_dag_for_resources(dagtask, topology):
 
     logger.info("Shifting SWAPs and Distillations")
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(dagtask)
-    draw_DAG(dagtask, dagtask.name + ":SHIFT")
     # if not shift_correct:
     #     import pdb
     #     pdb.set_trace()
@@ -464,8 +461,6 @@ def verify_dag(dagtask, node_resources=None):
         for child in subtask.children:
             if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
                 valid = False
-                # import pdb
-                # pdb.set_trace()
         subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
         for resource in subtask.resources:
             if node_resources and (resource not in node_resources):
@@ -483,13 +478,9 @@ def verify_dag(dagtask, node_resources=None):
             t1 = iv1.data
             t2 = iv2.data
             if t1.name[0] == "L" and t2.name == "L":
-                # import pdb
-                # pdb.set_trace()
                 valid = False
 
             elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
-                # import pdb
-                # pdb.set_trace()
                 valid = False
 
     # if not valid:
@@ -579,10 +570,11 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     earliest_possible_start = float('inf')
     earliest_resources = None
     earliest_mapping = None
+
     for resource_set in list(itertools.product(*task_resources)):
         earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(resource_set) & set(p.resources)])
-        possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules, storage_resources)
 
+        possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules, storage_resources)
         if earliest_start <= possible_start < earliest_possible_start and (earliest_mapping is None or len(earliest_mapping.keys()) >= len(locked_storage_mapping.keys())):
             earliest_possible_start = possible_start
             earliest_resources = resource_set
@@ -590,6 +582,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
 
         if possible_start == earliest_start:
             break
+
 
     if earliest_possible_start == float('inf') and task.name[0] == "L":
         # import pdb
@@ -629,13 +622,40 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
             logger.debug("Moved {} to {}".format(lr, sr))
             logger.debug("Rescheduled {} with resources {} at t={}".format(last_task.name, last_task.resources, last_task.a))
 
-
+    earliest_resources = list(set(earliest_resources))
     slots = []
     for slot in range(earliest_possible_start, earliest_possible_start + ceil(task.c)):
         slots.append((slot, task))
 
+    sr_mapping = defaultdict(lambda: (float('inf'), None))
+    if task.name[0] == "L" and earliest_mapping == {}:
+        for lr in earliest_resources:
+            for sr in storage_resources[lr]:
+                rs = resource_schedules[sr]
+                if rs:
+                    last_slot, last_task = rs[-1]
+                    earliest_slot, _ = sr_mapping[lr]
+                    if not task_locks_resource(last_task, [sr]) and last_slot + 1 < earliest_slot:
+                        sr_mapping[lr] = (last_slot, sr)
+
+                else:
+                    sr_mapping[lr] = (-1, sr)
+
+            _, sr = sr_mapping[lr]
+
+        for t, sr in sr_mapping.values():
+            t = max([s[0] for s in sr_mapping.values()])
+            if sr is not None and t + 1 == earliest_possible_start:
+                earliest_resources.append(sr)
+
     for r in list(set(earliest_resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
+
+    if task.name[0] == "L" and earliest_mapping == {}:
+        for lr in sr_mapping.keys():
+            t = max([s[0] for s in sr_mapping.values()])
+            if t + 1 == earliest_possible_start:
+                earliest_resources.remove(lr)
 
     task.a = slots[0][0]
     task.resources = list(sorted(set(earliest_resources)))
@@ -659,12 +679,32 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
     else:
         occupied_ranges = list(sorted(to_ranges(occupied_slots.keys())))
         _, e = occupied_ranges[-1]
+
+        # Find an immediate mapping to storage resources
+        if task.name[0] == "L":
+            sr_mapping = defaultdict(lambda: (float('inf'), None))
+            for lr in resource_set:
+                for sr in storage_resources[lr]:
+                    rs = resource_schedules[sr]
+                    if rs:
+                        last_slot, last_task = rs[-1]
+                        earliest_slot, _ = sr_mapping[lr]
+                        if not task_locks_resource(last_task, [sr]) and last_slot + 1 < earliest_slot:
+                            sr_mapping[lr] = (last_slot, sr)
+
+                    else:
+                        sr_mapping[lr] = (-1, sr)
+
+            if all([sr is not None for _, sr in sr_mapping.values()]):
+                earliest_resource_time = max([e] + [t for t, _ in sr_mapping.values()])
+                return earliest_resource_time + 1, {}
+
         last_tasks = []
         for r in resource_set:
             rs = resource_schedules[r]
-            filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
-            if filtered_schedule:
-                last_task_slot, last_task = filtered_schedule[-1]
+            # filtered_schedule = list(sorted(filter(lambda slot_info: slot_info[0] <= e, rs)))
+            if rs:
+                last_task_slot, last_task = rs[-1]
                 last_tasks.append((r, last_task))
 
         if not (task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks])):
@@ -676,18 +716,19 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
         elif task.name[0] == "L" and any([task_locks_resource(t, [r]) for r, t in last_tasks]):
             all_locked_resources = set([(r, t) for _, t in last_tasks for r in t.resources if r in storage_resources.keys() and task_locks_resource(t, [r])])
             must_map_resources = set([(r, t) for r, t in last_tasks if task_locks_resource(t, [r])])
-            optional_map_resources = all_locked_resources - must_map_resources
+            optional_map_resources = set([(r, t) for r, t in all_locked_resources if resource_schedules[r][-1][1] == t]) - must_map_resources
 
+            mapping = defaultdict(dict)
             lr_to_sr = defaultdict(lambda: None)
             sr_to_lr = defaultdict(lambda: None)
             remapped_locked_resources = set()
             for locked_r, locking_task in sorted(must_map_resources):
-                if locking_task.name == "D;77;14;15":
-                    import pdb
-                    pdb.set_trace()
                 earliest_storage_time = float('inf')
                 earliest_storage_resource = None
                 for storage_r in storage_resources[locked_r]:
+                    if storage_r in sr_to_lr.keys():
+                        continue
+
                     rs = resource_schedules[storage_r]
 
                     if rs:
@@ -709,10 +750,43 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
 
                 elif earliest_storage_resource:
                     lr_to_sr[locked_r] = (earliest_storage_time, earliest_storage_resource)
+                    mapping[locking_task.name][locked_r] = (earliest_storage_time, earliest_storage_resource)
                     sr_to_lr[earliest_storage_resource] = locked_r
                     remapped_locked_resources |= {(locked_r, locking_task)}
 
-            new_task_start = max([e] + [lr_to_sr[lr][0] + ceil(lt.c) for lr, lt in remapped_locked_resources])
+            for locked_r, locking_task in sorted(optional_map_resources):
+                if locked_r in lr_to_sr.keys():
+                    continue
+
+                earliest_storage_time = float('inf')
+                earliest_storage_resource = None
+                for storage_r in storage_resources[locked_r]:
+                    if storage_r in sr_to_lr.keys():
+                        continue
+
+                    rs = resource_schedules[storage_r]
+
+                    if rs:
+                        last_task_slot, last_task = rs[-1]
+                        if (not task_locks_resource(last_task, [storage_r])) and (sr_to_lr[storage_r] is None):
+                            if last_task_slot + ceil(locking_task.c) < earliest_storage_time:
+                                storage_time = max(last_task_slot + 1, locking_task.a)
+                                if storage_time < earliest_storage_time:
+                                    earliest_storage_time = storage_time
+                                    earliest_storage_resource = storage_r
+
+                    elif locking_task.a < earliest_storage_time:
+                        earliest_storage_resource = storage_r
+                        earliest_storage_time = locking_task.a
+
+                # If none available, return float('inf')
+                if earliest_storage_resource:
+                    lr_to_sr[locked_r] = (earliest_storage_time, earliest_storage_resource)
+                    mapping[locking_task.name][locked_r] = (earliest_storage_time, earliest_storage_resource)
+                    sr_to_lr[earliest_storage_resource] = locked_r
+                    remapped_locked_resources |= {(locked_r, locking_task)}
+
+            new_task_start = max([e] + [lr_to_sr[lr][0] + ceil(lt.c) - 1 for lr, lt in remapped_locked_resources])
 
             # Return the slot where the new action can start
             if new_task_start >= earliest:

@@ -25,7 +25,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=2, num_storage_q=2):
+def gen_topologies(n, num_comm_q=1, num_storage_q=3):
     d_to_cap = load_link_data()
     link_distance = 5
     link_capability = d_to_cap[str(link_distance)]
@@ -152,8 +152,6 @@ def get_schedulers():
 def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
-    demands = [('11', '15', 0.849, 0.3), ('15', '11', 0.849, 0.5), ('5', '1', 0.857, 0.4), ('17', '13', 0.847, 0.3), ('7', '12', 0.747, 0.5), ('9', '14', 0.755, 0.4), ('15', '19', 0.849, 0.3), ('11', '6', 0.736, 0.3),('15', '9', 0.765, 0.3)]
-    return demands
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (4 / 10), 3)                    # Fidelity range between F=0.6 and 1
@@ -183,7 +181,7 @@ def main():
     network_schedulers = get_schedulers()
     schedule_validator = PreemptionBudgetScheduler()
     results = {}
-
+    num_success = 0
     for topology in network_topologies:
         network_tasksets = []
 
@@ -212,15 +210,20 @@ def main():
 
                         if not correct:
                             logger.error("Failed to construct valid protocol for {}".format(demand))
+                            import pdb
+                            pdb.set_trace()
                         else:
-                            logger.error("Successfully satisfied demand {}".format(demand))
+                            num_success += 1
+                            logger.error("Successfully satisfied demand {}, {}".format(demand, num_success))
                     except:
                         logger.exception("Exception occured when creating protocol for {}".format(demand))
+                        import pdb
+                        pdb.set_trace()
 
                     # logger.info("Created protocol and task for demand (S={}, D={}, F={}, R={})".format(*demand))
                     # taskset.append(scheduled_task)
 
-            xlogger.info("Created taskset {}".format([t.name for t in taskset]))
+            logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
         # Use all schedulers
