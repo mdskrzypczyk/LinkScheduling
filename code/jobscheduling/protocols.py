@@ -242,6 +242,8 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
     # Can only generate as fast as the most constrained node
     minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
     for F, R in link_properties:
+        if R < Rmin:
+            continue
         currF = F
         currProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
         numGens = distillations_for_fidelity(F, Fmin)
@@ -463,6 +465,20 @@ def verify_dag(dagtask, node_resources=None):
         for child in subtask.children:
             if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
                 valid = False
+
+        if subtask.name[0] == "L" and len(set(subtask.resources)) != 2:
+            import pdb
+            pdb.set_trace()
+
+        if subtask.name[0] == "S" and len(set(subtask.resources)) != 2:
+            import pdb
+            pdb.set_trace()
+
+        if subtask.name[0] == "D" and len(set(subtask.resources)) != 4:
+            import pdb
+            pdb.set_trace()
+
+
         subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
         for resource in subtask.resources:
             if node_resources and (resource not in node_resources):
@@ -580,7 +596,6 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
         if possible_start == earliest_start:
             break
 
-
     if earliest_possible_start == float('inf') and task.name[0] == "L":
         return None
 
@@ -625,6 +640,11 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     sr_mapping = defaultdict(lambda: (float('inf'), None))
     if task.name[0] == "L" and earliest_mapping == {}:
         for lr in earliest_resources:
+            rs = resource_schedules[lr]
+            if rs:
+                last_slot, last_task = rs[-1]
+                if task_locks_resource(last_task, [lr]):
+                    continue
             for sr in storage_resources[lr]:
                 rs = resource_schedules[sr]
                 if rs:
@@ -633,14 +653,21 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
                     if not task_locks_resource(last_task, [sr]) and last_slot + 1 < earliest_slot:
                         sr_mapping[lr] = (last_slot, sr)
 
-                else:
+                elif -1 < sr_mapping[lr][0]:
                     sr_mapping[lr] = (-1, sr)
 
-            _, sr = sr_mapping[lr]
+            rs = resource_schedules[lr]
+            if rs:
+                last_slot, last_task = rs[-1]
+            else:
+                last_slot = 0
+
+            if sr_mapping[lr][1] is None:
+                sr_mapping[lr] = (last_slot, lr)
 
         for t, sr in sr_mapping.values():
             t = max([s[0] for s in sr_mapping.values()])
-            if sr is not None and t + 1 == earliest_possible_start:
+            if sr is not None and t + 1 <= earliest_possible_start:
                 earliest_resources.append(sr)
 
     for r in list(set(earliest_resources)):
@@ -649,7 +676,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     if task.name[0] == "L" and earliest_mapping == {}:
         for lr in sr_mapping.keys():
             t = max([s[0] for s in sr_mapping.values()])
-            if t + 1 == earliest_possible_start:
+            if t + 1 <= earliest_possible_start:
                 earliest_resources.remove(lr)
 
     task.a = slots[0][0]
@@ -679,6 +706,11 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
         if task.name[0] == "L":
             sr_mapping = defaultdict(lambda: (float('inf'), None))
             for lr in resource_set:
+                rs = resource_schedules[lr]
+                if rs:
+                    last_slot, last_task = rs[-1]
+                    if task_locks_resource(last_task, [lr]):
+                        continue
                 for sr in storage_resources[lr]:
                     rs = resource_schedules[sr]
                     if rs:
@@ -687,8 +719,17 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
                         if not task_locks_resource(last_task, [sr]) and last_slot + 1 < earliest_slot:
                             sr_mapping[lr] = (last_slot, sr)
 
-                    else:
+                    elif -1 < sr_mapping[lr][0]:
                         sr_mapping[lr] = (-1, sr)
+
+                rs = resource_schedules[lr]
+                if rs:
+                    last_slot, last_task = rs[-1]
+                else:
+                    last_slot = 0
+
+                if sr_mapping[lr][1] is None:
+                    sr_mapping[lr] = (last_slot, lr)
 
             if all([sr is not None for _, sr in sr_mapping.values()]):
                 earliest_resource_time = max([e] + [t for t, _ in sr_mapping.values()])
