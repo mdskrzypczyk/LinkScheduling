@@ -155,7 +155,7 @@ def get_network_demands(network_topology, num):
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (4 / 10), 3)                    # Fidelity range between F=0.6 and 1
-        rate = 1 / (2**random.choice([i for i in range(20)]))       # Rate range between 0.2 and 1
+        rate = 10 / (2**random.choice([i for i in range(18)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -172,7 +172,7 @@ def get_protocol(network_topology, demand):
 
 
 def main():
-    num_network_nodes = 4
+    num_network_nodes = 20
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes)

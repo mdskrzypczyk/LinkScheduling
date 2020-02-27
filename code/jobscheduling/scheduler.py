@@ -753,7 +753,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
         logger.info("Computed hyperperiod {}".format(hyperperiod))
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
-        last_task_start = dict()
+        last_task_start = defaultdict(int)
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
 
         taskset = self.initialize_taskset(taskset)
@@ -769,10 +769,13 @@ class MultiResourceNPEDFScheduler(Scheduler):
         earliest = 0
         while taskset:
             next_task = taskset.pop(0)
-            start_time = self.get_start_time(next_task, resource_occupations, earliest)
+            original_taskname, instance = next_task.name.split('|')
+            last_start = last_task_start[original_taskname]
+
+            start_time = self.get_start_time(next_task, resource_occupations, max(earliest, last_start))
 
             # Introduce a new instance into the taskset if necessary
-            original_taskname, instance = next_task.name.split('|')
+
             last_task_start[original_taskname] = start_time
             instance = int(instance)
             if instance < instance_count[original_taskname]:
@@ -795,7 +798,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
             # Update windowed resource schedules
             if taskset:
-                min_chop = min(last_task_start.values())
+                min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
                 earliest = min_chop
                 for resource in next_task.resources:
                     resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
