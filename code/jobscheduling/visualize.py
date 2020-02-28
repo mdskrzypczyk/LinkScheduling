@@ -10,7 +10,7 @@ def draw_DAG(dag, name=None, view=False):
 
     for task in dag.subtasks:
         name = "{},A={},C={}".format(task.name, round(task.a, 3), round(task.c, 3))
-        dot.node(name, name)
+        dot.node(name, name[0])
 
     for task in dag.subtasks:
         name = "{},A={},C={}".format(task.name, round(task.a, 3), round(task.c, 3))

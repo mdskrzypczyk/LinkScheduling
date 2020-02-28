@@ -5,7 +5,8 @@ import time
 from math import sqrt
 from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
-from jobscheduling.protocols import convert_protocol_to_task, create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol, schedule_dag_for_resources
+from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
+from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
 from jobscheduling.visualize import draw_DAG
 from math import ceil
@@ -25,10 +26,9 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=1, num_storage_q=8):
+def gen_topologies(n, num_comm_q=20, num_storage_q=0):
     d_to_cap = load_link_data()
-    link_distance = 5
-    link_capability = d_to_cap[str(link_distance)]
+    link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
     # Line
     lineGcq = nx.Graph()
     lineG = nx.Graph()
@@ -48,9 +48,13 @@ def gen_topologies(n, num_comm_q=1, num_storage_q=8):
             for j in range(num_comm_q):
                 for k in range(num_comm_q):
                     lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
+
+            link_distance, link_capability = random.choice(link_capabilities)
             lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
     # Ring
+    link_distance = 5
+    link_capability = d_to_cap[str(link_distance)]
     ringGcq = nx.Graph()
     ringG = nx.Graph()
     for i in range(n):
@@ -153,9 +157,9 @@ def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
     for num_demands in range(num):
-        src, dst = random.sample(nodeG.nodes, 2)
-        fidelity = round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
-        rate = 10 / (2**random.choice([i for i in range(18)]))       # Rate range between 0.2 and 1
+        src, dst = ['0', '2'] #random.sample(nodeG.nodes, 2)
+        fidelity = 0.8# round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
+        rate = 0.05# 10 / (2**random.choice([i for i in range(12)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -172,7 +176,7 @@ def get_protocol(network_topology, demand):
 
 
 def main():
-    num_network_nodes = 12
+    num_network_nodes = 4
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes)
@@ -186,7 +190,7 @@ def main():
         for i in range(num_tasksets):
             logger.info("Generating taskset {}".format(i))
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 100000)
+            demands = get_network_demands(topology, 100)
 
             logger.info("Demands: {}".format(demands))
 
@@ -231,6 +235,9 @@ def main():
                     num_succ += 1
                     logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
                     taskset.append(scheduled_task)
+
+            import pdb
+            pdb.set_trace()
 
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)

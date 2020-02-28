@@ -1,277 +1,14 @@
-import networkx as nx
+import itertools
 from collections import defaultdict
 from math import ceil
-from copy import copy
 from jobscheduling.log import LSLogger
-from jobscheduling.qmath import swap_links, unswap_links, distill_links, fidelity_for_distillations, distillations_for_fidelity
+from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicResourceDAGTask
 from jobscheduling.visualize import draw_DAG
 from intervaltree import Interval, IntervalTree
 
 
 logger = LSLogger()
-
-
-class Protocol:
-    def __init__(self, F, R, nodes):
-        self.F = F
-        self.R = R
-        self.nodes = nodes
-        self.set_duration(R)
-        self.dist = 0
-
-    def set_duration(self, R):
-        if R == 0:
-            self.duration = float('inf')
-        else:
-            self.duration = 1 / R
-
-
-class LinkProtocol(Protocol):
-    name_template = "LG{};{};{}"
-    count = 0
-
-    def __init__(self, F, R, nodes):
-        super(LinkProtocol, self).__init__(F=F, R=R, nodes=nodes)
-        self.name = self.name_template.format(self.count, *nodes)
-        self.dist = self.duration
-        LinkProtocol.count += 1
-
-    def __copy__(self):
-        return LinkProtocol(F=self.F, R=self.R, nodes=self.nodes)
-
-
-class DistillationProtocol(LinkProtocol):
-    name_template = "D{};{};{}"
-    count = 0
-    distillation_duration = 0.01
-
-    def __init__(self, F, R, protocols, nodes):
-        super(DistillationProtocol, self).__init__(F=F, R=R, nodes=nodes)
-        self.protocols = list(sorted(protocols, key=lambda p: p.R))
-        self.durations = [protocol.duration for protocol in self.protocols]
-        self.dist = max([protocol.dist for protocol in self.protocols]) + self.duration
-        self.name = self.name_template.format(self.count, *nodes)
-        DistillationProtocol.count += 1
-
-    def set_duration(self, R):
-        self.duration = self.distillation_duration
-
-    def __copy__(self):
-        return DistillationProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
-
-
-class SwapProtocol(Protocol):
-    name_template = "S{};{}"
-    count = 0
-    swap_duration = 0.01
-
-    def __init__(self, F, R, protocols, nodes):
-        super(SwapProtocol, self).__init__(F=F, R=R, nodes=nodes)
-        self.protocols = list(sorted(protocols, key=lambda p: p.R))
-        self.durations = [protocol.duration for protocol in self.protocols]
-        self.dist = max([protocol.dist for protocol in self.protocols]) + self.duration
-        self.name = self.name_template.format(self.count, *nodes)
-        SwapProtocol.count += 1
-
-    def set_duration(self, R):
-        self.duration = self.swap_duration
-
-    def __copy__(self):
-        return SwapProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
-
-
-def create_protocol(path, nodeG, Fmin, Rmin):
-    def filter_node(node):
-        return node in path
-
-    def filter_edge(node1, node2):
-        return node1 in path and node2 in path
-
-    logger.debug("Creating protocol on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
-    subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
-    pathResources = dict([(n, {"comm": len(nodeG.nodes[n]['comm_qs']), "total": len(nodeG.nodes[n]['comm_qs']) + len(nodeG.nodes[n]['storage_qs'])}) for n in path])
-    try:
-        protocol = esss(path, pathResources, subG, Fmin, Rmin)
-        if type(protocol) != Protocol and protocol is not None:
-            return protocol
-        else:
-            return None
-    except:
-        logger.exception("Failed to create protocol for path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
-        raise Exception()
-
-
-def esss(path, pathResources, G, Fmin, Rmin):
-    logger.debug("ESSS on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
-    if len(path) == 2:
-        logger.debug("Down to elementary link, finding distillation protocol")
-        link_properties = G.get_edge_data(*path)['capabilities']
-        protocol = get_protocol_for_link(link_properties, Fmin, Rmin, path, pathResources)
-        return protocol
-
-    else:
-        # Start by dividing the path in two
-        lower = 1
-        upper = len(path) - 1
-        protocol = None
-        rate = 0
-        fidelity = 0
-        while lower < upper:
-            numL = (upper + lower + 1) // 2
-            numR = len(path) + 1 - numL
-
-            possible_protocol, Rl, Rr = find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR)
-
-            if Rl == Rr:
-                logger.debug("Rates on left and right paths balanced")
-                return possible_protocol
-            elif Rl < Rr:
-                logger.debug("Rate on left path lower, extending right path")
-                upper -= 1
-            else:
-                logger.debug("Rate on right path lower, extending left path")
-                lower += 1
-
-            if possible_protocol and possible_protocol.F >= Fmin and possible_protocol.R >= Rmin:
-                if possible_protocol.R >= rate and possible_protocol.F >= fidelity:
-                    protocol = possible_protocol
-                    rate = protocol.R
-                    fidelity = protocol.F
-
-        return protocol
-
-
-def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
-    protocols = []
-    maxDistillations = 10
-
-    resourceCopy = dict(pathResources)
-
-    # If we are swapping the middle node needs to use one resource to hold an end of the first link
-    resourceCopy[path[numL - 1]]['total'] -= 1
-
-    # Assume we allocate half the comm resources of pivot node to either link
-    resourceCopy[path[numL - 1]]['comm'] = max(resourceCopy[path[numL - 1]]['comm'] // 2, 1)
-
-    for num in range(maxDistillations):
-        # Compute minimum fidelity in order for num distillations to achieve Fmin
-        Fminswap = fidelity_for_distillations(num, Fmin)
-        if Fminswap == 0:
-            continue
-        Funswapped = unswap_links(Fminswap)
-
-        # Calculate the needed rates of the links
-        if num > 0:
-            Rlink = Rmin * (num + 1) / resourceCopy[path[numL - 1]]['comm'] / 2
-        else:
-            Rlink = Rmin
-
-        pathResourcesCopy = dict(resourceCopy)
-
-        # If we are distilling then the end nodes need to hold one link between protocol steps
-        if num > 0:
-            pathResourcesCopy[path[0]]['total'] -= 1
-            pathResourcesCopy[path[-1]]['total'] -= 1
-
-        # Search for protocols on left and right that have above properties
-        protocolL = esss(path[:numL], pathResourcesCopy, G, Funswapped, Rlink)
-        protocolR = esss(path[-numR:], pathResourcesCopy, G, Funswapped, Rlink)
-
-        # Add to list of protocols
-        if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and type(protocolR) != Protocol:
-            logger.debug("Constructing protocol")
-            Fswap = swap_links(protocolL.F, protocolR.F)
-            Rswap = min(protocolL.R, protocolR.R)
-            swap_protocol = SwapProtocol(F=Fswap, R=Rswap, protocols=[protocolL, protocolR], nodes=[path[-numR]])
-            protocol = copy(swap_protocol)
-            logger.debug("Swapped link F={}".format(Fswap))
-            for i in range(num):
-                Fdistilled = distill_links(protocol.F, Fswap)
-                Rdistilled = Rswap / (i + 2)
-                protocol = DistillationProtocol(F=Fdistilled, R=Rdistilled, protocols=[protocol, copy(swap_protocol)],
-                                                nodes=[path[0], path[-1]])
-                logger.debug("Distilled link F={}".format(Fdistilled))
-
-            logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
-                                                                                                 num))
-            logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
-                                                                                      protocolR.F, protocolR.R))
-            protocols.append((protocol, protocolL.R, protocolR.R))
-
-        else:
-            Rl = 0 if not protocolL else protocolL.R
-            Rr = 0 if not protocolR else protocolR.R
-            protocols.append((Protocol(F=0, R=0, nodes=None), Rl, Rr))
-
-    # Choose protocol with maximum rate > Rmin
-    if protocols:
-        protocol, Rl, Rr = sorted(protocols, key=lambda p: p[0].R)[-1]
-        logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
-                                                                                             num + 1))
-        return protocol, Rl, Rr
-
-    else:
-        return None, 0, 0
-
-
-def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
-    if all([R < Rmin for _, R in link_properties]):
-        logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
-        return None
-
-    if any([v < 1 for v in [nodeResources[n]['total'] for n in nodes]]):
-        logger.debug("Not enough resources to generate link between nodes {}".format(nodes))
-        return None
-
-    # Check if any single link generation protocols exist
-    for F, R in link_properties:
-        if R >= Rmin and F >= Fmin:
-            logger.debug("Link capable of generating without distillation using F={},R={}".format(F, R))
-            return LinkProtocol(F=F, R=R, nodes=nodes)
-
-    logger.debug("Link not capable of generating without distillation")
-    if any([v < 2 for v in [nodeResources[n]['total'] for n in nodes]]):
-        logger.debug("Not enough resources to perform distillation with nodes {}".format(nodes))
-        return None
-
-    # Search for the link gen protocol with highest rate that satisfies fidelity
-    bestR = Rmin
-    bestProtocol = None
-
-    # Can only generate as fast as the most constrained node
-    minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
-    for F, R in link_properties:
-        if R < Rmin:
-            continue
-        currF = F
-        currProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
-        numGens = distillations_for_fidelity(F, Fmin)
-
-        if numGens != float('inf'):
-            generationLatency = 1 / (R / ceil(numGens / minNodeComms))
-            distillLatency = numGens * DistillationProtocol.distillation_duration
-            currR = 1 / (generationLatency + distillLatency)
-            linkProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
-            for i in range(numGens):
-                currF = distill_links(currF, F)
-                currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol], nodes=nodes)
-
-            if (currProtocol.F > Fmin and currProtocol.R >= bestR) or (currProtocol.F >= Fmin and currProtocol.R > bestR):
-                logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
-                bestR = currProtocol.R
-                bestProtocol = currProtocol
-
-    return bestProtocol
-
-
-def protocol(protocol):
-    q = [protocol]
-    while q:
-        p = q.pop(0)
-        print(p.name, p.F, p.R)
-        if type(p) == SwapProtocol or type(p) == DistillationProtocol:
-            q += p.protocols
 
 
 def print_resource_schedules(resource_schedules):
@@ -350,18 +87,39 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
 
 def schedule_dag_for_resources(dagtask, topology):
     logger.debug("Scheduling task ASAP")
+    asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(dagtask, topology)
+    logger.debug("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_latency, asap_decoherence,
+                                                                                    asap_correct))
+
+    logger.debug("Scheduling task ALAP")
+    alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(dagtask)
+    logger.debug("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence,
+                                                                                    alap_correct))
+
+    logger.debug("Shifting SWAPs and Distillations")
+    shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(dagtask)
+    logger.debug("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence,
+                                                                                       shift_correct))
+
+    decoherences = (asap_decoherence, alap_decoherence, shift_decoherence)
+    correct = (asap_correct and alap_correct and shift_correct)
+    return dagtask, decoherences, correct
+
+
+def schedule_dag_asap(dagtask, topology):
     comm_q_topology, node_topology = topology
     [sink] = dagtask.sinks
     nodes = dagtask.resources
     node_comm_resources = dict([(n, node_topology.nodes[n]["comm_qs"]) for n in nodes])
     node_storage_resources = dict([(n, node_topology.nodes[n]["storage_qs"]) for n in nodes])
-    comm_to_storage_resources = dict([(comm_name, node_storage_resources[n])for n in nodes for comm_name in node_topology.nodes[n]["comm_qs"]])
-    all_node_resources = dict([(n, node_topology.nodes[n]["comm_qs"] + node_topology.nodes[n]["storage_qs"]) for n in nodes])
+    comm_to_storage_resources = dict(
+        [(comm_name, node_storage_resources[n]) for n in nodes for comm_name in node_topology.nodes[n]["comm_qs"]])
+    all_node_resources = dict(
+        [(n, node_topology.nodes[n]["comm_qs"] + node_topology.nodes[n]["storage_qs"]) for n in nodes])
     resource_schedules = defaultdict(list)
     stack = []
     task = sink
     last_task = None
-    scheduled_tasks = []
     for task in dagtask.subtasks:
         task.parents = list(sorted(task.parents, key=lambda pt: (pt.dist, pt.name)))
 
@@ -377,57 +135,10 @@ def schedule_dag_for_resources(dagtask, topology):
                 task = right_task
 
             else:
-                if peek_task.name[0] == "L":
-                    possible_task_resources = [node_comm_resources[n] for n in peek_task.resources]
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
-
-                elif peek_task.name[0] == "S":
-                    [task_node] = peek_task.resources
-                    possible_task_resources = []
-                    for pt in peek_task.parents:
-                        if pt.name[0] == "S":
-                            q = [pt]
-
-                            while q:
-                                search_task = q.pop(0)
-                                for p in search_task.parents:
-                                    if p.name[0] == "S":
-                                        q.append(p)
-                                    elif p.name[0] == "D":
-                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] if r in all_node_resources[task_node]]
-                                    else:
-                                        possible_task_resources += [[r] for r in p.resources if r in all_node_resources[task_node]]
-                        elif pt.name[0] == "D":
-                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2] if r in all_node_resources[task_node]]
-                        else:
-                            possible_task_resources += [[r] for r in pt.resources if r in all_node_resources[task_node]]
-
-
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
-
-                else:
-                    # Find the resources that are being distilled
-                    possible_task_resources = []
-                    task_nodes = peek_task.resources
-                    for pt in peek_task.parents:
-                        if pt.name[0] == "S":
-                            q = [pt]
-
-                            while q:
-                                search_task = q.pop(0)
-                                for p in search_task.parents:
-                                    if p.name[0] == "S":
-                                        q.append(p)
-                                    elif p.name[0] == "D":
-                                        possible_task_resources += [[r] for r in list(sorted(p.resources))[1:4:2] for tn in task_nodes if r in all_node_resources[tn]]
-                                    else:
-                                        possible_task_resources += [[r] for tn in task_nodes for sp in search_task.parents for r in sp.resources if r in all_node_resources[tn]]
-                        elif pt.name[0] == "D":
-                            possible_task_resources += [[r] for r in list(sorted(pt.resources))[1:4:2]]
-                        else:
-                            possible_task_resources += [[r] for tn in task_nodes for r in pt.resources if r in all_node_resources[tn]]
-
-                    used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
+                possible_task_resources = get_possible_resources_for_task(peek_task, node_comm_resources,
+                                                                          all_node_resources)
+                used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules,
+                                                    comm_to_storage_resources)
 
                 last_task = stack.pop()
 
@@ -444,139 +155,47 @@ def schedule_dag_for_resources(dagtask, topology):
 
     asap_decoherence = get_schedule_decoherence(resource_schedules, asap_latency)
     asap_correct = verify_dag(dagtask)
-    logger.debug("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_latency, asap_decoherence, asap_correct))
-
-    logger.debug("Scheduling task ALAP")
-    alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(dagtask)
-    logger.debug("ALAP Schedule latency {} total decoherence {}, correct={}".format(alap_latency, alap_decoherence, alap_correct))
-
-    logger.debug("Shifting SWAPs and Distillations")
-    shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(dagtask)
-    logger.debug("Shifted Schedule latency {} total decoherence {}, correct={}".format(shift_latency, shift_decoherence,
-                                                                                      shift_correct))
-
-    return dagtask, (asap_decoherence, alap_decoherence, shift_decoherence), asap_correct and alap_correct and shift_correct
+    return asap_latency, asap_decoherence, asap_correct
 
 
-def verify_dag(dagtask, node_resources=None):
-    resource_intervals = defaultdict(IntervalTree)
-    valid = True
-    for subtask in dagtask.subtasks:
-        for child in subtask.children:
-            if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
-                valid = False
+def get_possible_resources_for_task(task, node_comm_resources, all_node_resources):
+    if task.name[0] == "L":
+        possible_task_resources = [node_comm_resources[n] for n in task.resources]
 
-        if subtask.name[0] == "L" and len(set(subtask.resources)) != 2:
-            import pdb
-            pdb.set_trace()
+    else:
+        possible_task_resources = get_resources_from_parents(task, all_node_resources)
 
-        if subtask.name[0] == "S" and len(set(subtask.resources)) != 2:
-            import pdb
-            pdb.set_trace()
-
-        if subtask.name[0] == "D" and len(set(subtask.resources)) != 4:
-            import pdb
-            pdb.set_trace()
+    return possible_task_resources
 
 
-        subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
-        for resource in subtask.resources:
-            if node_resources and (resource not in node_resources):
-                continue
+def get_resources_from_parents(task, all_node_resources):
+    possible_task_resources = []
+    task_nodes = task.resources
 
-            if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
-                overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
-                print("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
-                valid = False
-            resource_intervals[resource].add(subtask_interval)
+    for pt in task.parents:
+        if pt.name[0] == "S":
+            q = [pt]
+            while q:
+                search_task = q.pop(0)
+                if search_task.name[0] == "S":
+                    for p in search_task.parents:
+                        q.append(p)
+                else:
+                    possible_task_resources += get_resources_for_task_nodes(search_task, task_nodes, all_node_resources)
+        else:
+            possible_task_resources += get_resources_for_task_nodes(pt, task_nodes, all_node_resources)
 
-    for resource in resource_intervals.keys():
-        sorted_intervals = sorted(resource_intervals[resource])
-        for iv1, iv2 in zip(sorted_intervals, sorted_intervals[1:]):
-            t1 = iv1.data
-            t2 = iv2.data
-            if t1.name[0] == "L" and t2.name == "L":
-                valid = False
-
-            elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
-                valid = False
-
-    return valid
+    return possible_task_resources
 
 
-def shift_distillations_and_swaps(dagtask):
-    resource_schedules = defaultdict(IntervalTree)
-    for link_task in dagtask.sources:
-        begin = link_task.a
-        end = begin + ceil(link_task.c)
-        interval = Interval(begin, end, link_task)
-        for resource in link_task.resources:
-            resource_schedules[resource].add(interval)
-
-    for task in sorted(dagtask.subtasks, key=lambda task: task.a):
-        if task.name[0] == "D" or task.name[0] == "S":
-            parent_ends = [p.a + ceil(p.c) for p in task.parents if set(p.resources) & set(task.resources)]
-            parent_task_end = max(parent_ends) if parent_ends else task.a
-            resource_availabilities = []
-            for resource in task.resources:
-                interval_set = resource_schedules[resource].envelop(0, task.a)
-                if interval_set:
-                    interval = sorted(interval_set)[-1]
-                    resource_availabilities.append(interval.end)
-
-            earliest_start = max([parent_task_end] + resource_availabilities)
-            task.a = earliest_start
-            interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
-            for resource in task.resources:
-                resource_schedules[resource].add(interval)
-
-    resource_schedules_new = {}
-    for resource in resource_schedules.keys():
-        resource_schedule = []
-        for interval in resource_schedules[resource]:
-            task = interval.data
-            slots = [(task.a + i, task) for i in range(ceil(task.c))]
-            resource_schedule += slots
-        resource_schedules_new[resource] = list(sorted(resource_schedule))
-
-    sink_task = dagtask.sinks[0]
-    shift_latency = sink_task.a + ceil(sink_task.c)
-    shift_decoherence = get_schedule_decoherence(resource_schedules_new, shift_latency)
-    shift_correct = verify_dag(dagtask)
-
-    return shift_latency, shift_decoherence, shift_correct
-
-
-def get_schedule_decoherence(resource_schedules, completion_time):
-    total_decoherence = 0
-    resource_decoherences = {}
-    for r in sorted(resource_schedules.keys()):
-        resource_decoherence = 0
-        rs = resource_schedules[r]
-        for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
-            if (t1.name[0] == "L" or (t1.name[0] == "D" and r in t1.resources[1:4:2])) and t2 != t1 and s1 + ceil(t1.c) != s2:
-                resource_decoherence += (s2 - 1 - s1)
-
-        if rs:
-            s, t = rs[-1]
-            if t.name[0] == "L" or (t.name[0] == "D" and r in t.resources[1:4:2]):
-                resource_decoherence += (completion_time - 1 - s)
-
-        resource_decoherences[r] = resource_decoherence
-        total_decoherence += resource_decoherence
-
-    return total_decoherence
-
-
-import itertools
-
-
-def to_ranges(iterable):
-    iterable = sorted(set(iterable))
-    for key, group in itertools.groupby(enumerate(iterable),
-                                        lambda t: t[1] - t[0]):
-        group = list(group)
-        yield group[0][1], group[-1][1]
+def get_resources_for_task_nodes(task, task_nodes, all_node_resources):
+    if task.name[0] == "D":
+        return [[r] for r in list(sorted(task.resources))[1:4:2] for tn in task_nodes if r in all_node_resources[tn]]
+    elif task.name[0] == "L":
+        return [[r] for tn in task_nodes for r in task.resources if r in all_node_resources[tn]]
+    else:
+        import pdb
+        pdb.set_trace()
 
 
 def schedule_task_asap(task, task_resources, resource_schedules, storage_resources):
@@ -833,6 +452,14 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
             return float('inf'), {}
 
 
+def to_ranges(iterable):
+    iterable = sorted(set(iterable))
+    for key, group in itertools.groupby(enumerate(iterable),
+                                        lambda t: t[1] - t[0]):
+        group = list(group)
+        yield group[0][1], group[-1][1]
+
+
 def task_locks_resource(task, resources):
     link_lock = (task.name[0] == "L" and any([r in task.resources for r in resources]))
     distill_lock = (task.name[0] == "D" and any([r in list(sorted(task.resources))[1:4:2] for r in resources]))
@@ -904,3 +531,111 @@ def get_latest_slot_for_resources(latest, task, schedule_set):
         return occupied_ranges[-1][0] - ceil(task.c)
 
 
+def shift_distillations_and_swaps(dagtask):
+    resource_schedules = defaultdict(IntervalTree)
+    for link_task in dagtask.sources:
+        begin = link_task.a
+        end = begin + ceil(link_task.c)
+        interval = Interval(begin, end, link_task)
+        for resource in link_task.resources:
+            resource_schedules[resource].add(interval)
+
+    for task in sorted(dagtask.subtasks, key=lambda task: task.a):
+        if task.name[0] == "D" or task.name[0] == "S":
+            parent_ends = [p.a + ceil(p.c) for p in task.parents if set(p.resources) & set(task.resources)]
+            parent_task_end = max(parent_ends) if parent_ends else task.a
+            resource_availabilities = []
+            for resource in task.resources:
+                interval_set = resource_schedules[resource].envelop(0, task.a)
+                if interval_set:
+                    interval = sorted(interval_set)[-1]
+                    resource_availabilities.append(interval.end)
+
+            earliest_start = max([parent_task_end] + resource_availabilities)
+            task.a = earliest_start
+            interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
+            for resource in task.resources:
+                resource_schedules[resource].add(interval)
+
+    resource_schedules_new = {}
+    for resource in resource_schedules.keys():
+        resource_schedule = []
+        for interval in resource_schedules[resource]:
+            task = interval.data
+            slots = [(task.a + i, task) for i in range(ceil(task.c))]
+            resource_schedule += slots
+        resource_schedules_new[resource] = list(sorted(resource_schedule))
+
+    sink_task = dagtask.sinks[0]
+    shift_latency = sink_task.a + ceil(sink_task.c)
+    shift_decoherence = get_schedule_decoherence(resource_schedules_new, shift_latency)
+    shift_correct = verify_dag(dagtask)
+
+    return shift_latency, shift_decoherence, shift_correct
+
+
+def verify_dag(dagtask, node_resources=None):
+    resource_intervals = defaultdict(IntervalTree)
+    valid = True
+    for subtask in dagtask.subtasks:
+        for child in subtask.children:
+            if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
+                valid = False
+
+        if subtask.name[0] == "L" and len(set(subtask.resources)) != 2:
+            import pdb
+            pdb.set_trace()
+
+        if subtask.name[0] == "S" and len(set(subtask.resources)) != 2:
+            import pdb
+            pdb.set_trace()
+
+        if subtask.name[0] == "D" and len(set(subtask.resources)) != 4:
+            import pdb
+            pdb.set_trace()
+
+
+        subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
+        for resource in subtask.resources:
+            if node_resources and (resource not in node_resources):
+                continue
+
+            if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
+                overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
+                print("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
+                valid = False
+            resource_intervals[resource].add(subtask_interval)
+
+    for resource in resource_intervals.keys():
+        sorted_intervals = sorted(resource_intervals[resource])
+        for iv1, iv2 in zip(sorted_intervals, sorted_intervals[1:]):
+            t1 = iv1.data
+            t2 = iv2.data
+            if t1.name[0] == "L" and t2.name == "L":
+                valid = False
+
+            elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
+                valid = False
+
+    return valid
+
+
+def get_schedule_decoherence(resource_schedules, completion_time):
+    total_decoherence = 0
+    resource_decoherences = {}
+    for r in sorted(resource_schedules.keys()):
+        resource_decoherence = 0
+        rs = resource_schedules[r]
+        for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
+            if (t1.name[0] == "L" or (t1.name[0] == "D" and r in t1.resources[1:4:2])) and t2 != t1 and s1 + ceil(t1.c) != s2:
+                resource_decoherence += (s2 - 1 - s1)
+
+        if rs:
+            s, t = rs[-1]
+            if t.name[0] == "L" or (t.name[0] == "D" and r in t.resources[1:4:2]):
+                resource_decoherence += (completion_time - 1 - s)
+
+        resource_decoherences[r] = resource_decoherence
+        total_decoherence += resource_decoherence
+
+    return total_decoherence

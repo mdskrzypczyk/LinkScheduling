@@ -333,12 +333,14 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
             task = tasks.get(original_task.name, copy(original_task))
             tasks[task.name] = task
 
+            for original_child_task in original_task.children:
+                q.append(original_child_task)
+
+        for original_task in self.subtasks:
+            task = tasks[original_task.name]
             for original_parent_task in original_task.parents:
                 parent_task = tasks[original_parent_task.name]
                 parent_task.add_child(task)
                 task.add_parent(parent_task)
-
-            for original_child_task in original_task.children:
-                q.append(original_child_task)
 
         return PeriodicResourceDAGTask(name=self.name, tasks=list(tasks.values()), p=self.p)
