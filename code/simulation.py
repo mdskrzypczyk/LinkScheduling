@@ -183,6 +183,7 @@ def main():
     num_network_nodes = 8
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
+    utilizations = [0.1*i for i in range(1, 10)]
     network_topologies = gen_topologies(num_network_nodes)
 
     network_schedulers = get_schedulers()
@@ -191,89 +192,91 @@ def main():
     for topology in network_topologies:
         network_tasksets = []
 
-        for i in range(num_tasksets):
-            logger.info("Generating taskset {}".format(i))
-            # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 100)
-
-            logger.info("Demands: {}".format(demands))
-
-            taskset = []
-            num_succ = 0
-            for demand in demands:
-                logger.info("Constructing protocol for request {}".format(demand))
-                protocol = get_protocol(topology, demand)
-                if protocol is None:
-                    logger.warning("Demand {} could not be satisfied!".format(demand))
-                    continue
-
-                logger.debug("Converting protocol for request {} to task".format(demand))
-                slot_size = 0.05
-                task = convert_protocol_to_task(demand, protocol, slot_size)
-
-                logger.debug("Scheduling task for request {}".format(demand))
-
-                scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
-
-                sink = scheduled_task.sinks[0]
-                latency = (sink.a + ceil(sink.c)) * slot_size
-                achieved_rate = 1 / latency
-
-                s, d, f, r = demand
-                asap_dec, alap_dec, shift_dec = decoherence_times
-                logger.info("Results for {}:".format(demand))
-                if not correct:
-                    logger.error("Failed to construct valid protocol for {}".format(demand))
-                    import pdb
-                    pdb.set_trace()
-
-                elif achieved_rate < r:
-                    logger.error("Failed to satisfy rate for demand {}, achieved {}".format(demand, achieved_rate))
-
-                elif shift_dec > asap_dec or shift_dec > alap_dec:
-                    logger.error("Shifted protocol has greater decoherence than ALAP or ASAP")
-                    import pdb
-                    pdb.set_trace()
-
-                else:
-                    num_succ += 1
-                    logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
-                    taskset.append(scheduled_task)
-
-            import pdb
-            pdb.set_trace()
-
-            logger.info("Created taskset {}".format([t.name for t in taskset]))
-            network_tasksets.append(taskset)
-
-        # Use all schedulers
-        for scheduler_class in network_schedulers:
-            import pdb
-            pdb.set_trace()
-
-            scheduler = scheduler_class()
-            results_key = str(type(scheduler))
-            scheduler_results = []
-
-            # Run scheduler on all task sets
+        for u in utilizations:
             for i in range(num_tasksets):
-                taskset = network_tasksets[i]
-                logger.info("Scheduling tasks with {}".format(type(scheduler).__name__))
-                start = time.time()
-                schedule = scheduler.schedule_tasks(taskset)
-                end = time.time()
-                logger.info("Completed scheduling in {}s".format(end - start))
-                if schedule:
-                    for sub_taskset, sub_schedule, valid in schedule:
-                        logger.info("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
+                logger.info("Generating taskset {}".format(i))
 
-                    # Record success
-                    scheduler_results.append(all([valid for _, _, valid in schedule]) if schedule else False)
+                # Generate task sets according to some utilization characteristics and preemption budget allowances
+                demands = get_network_demands(topology, 100)
 
-                else:
-                    logger.info("Failed to create a schedule for taskset")
+                logger.info("Demands: {}".format(demands))
 
-            results[results_key] = scheduler_results
+                taskset = []
+                num_succ = 0
+                for demand in demands:
+                    logger.info("Constructing protocol for request {}".format(demand))
+                    protocol = get_protocol(topology, demand)
+                    if protocol is None:
+                        logger.warning("Demand {} could not be satisfied!".format(demand))
+                        continue
+
+                    logger.debug("Converting protocol for request {} to task".format(demand))
+                    slot_size = 0.05
+                    task = convert_protocol_to_task(demand, protocol, slot_size)
+
+                    logger.debug("Scheduling task for request {}".format(demand))
+
+                    scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+
+                    sink = scheduled_task.sinks[0]
+                    latency = (sink.a + ceil(sink.c)) * slot_size
+                    achieved_rate = 1 / latency
+
+                    s, d, f, r = demand
+                    asap_dec, alap_dec, shift_dec = decoherence_times
+                    logger.info("Results for {}:".format(demand))
+                    if not correct:
+                        logger.error("Failed to construct valid protocol for {}".format(demand))
+                        import pdb
+                        pdb.set_trace()
+
+                    elif achieved_rate < r:
+                        logger.error("Failed to satisfy rate for demand {}, achieved {}".format(demand, achieved_rate))
+
+                    elif shift_dec > asap_dec or shift_dec > alap_dec:
+                        logger.error("Shifted protocol has greater decoherence than ALAP or ASAP")
+                        import pdb
+                        pdb.set_trace()
+
+                    else:
+                        num_succ += 1
+                        logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
+                        taskset.append(scheduled_task)
+
+                import pdb
+                pdb.set_trace()
+
+                logger.info("Created taskset {}".format([t.name for t in taskset]))
+                network_tasksets.append(taskset)
+
+            # Use all schedulers
+            for scheduler_class in network_schedulers:
+                import pdb
+                pdb.set_trace()
+
+                scheduler = scheduler_class()
+                results_key = str(type(scheduler))
+                scheduler_results = []
+
+                # Run scheduler on all task sets
+                for i in range(num_tasksets):
+                    taskset = network_tasksets[i]
+                    logger.info("Scheduling tasks with {}".format(type(scheduler).__name__))
+                    start = time.time()
+                    schedule = scheduler.schedule_tasks(taskset)
+                    end = time.time()
+                    logger.info("Completed scheduling in {}s".format(end - start))
+                    if schedule:
+                        for sub_taskset, sub_schedule, valid in schedule:
+                            logger.info("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
+
+                        # Record success
+                        scheduler_results.append(all([valid for _, _, valid in schedule]) if schedule else False)
+
+                    else:
+                        logger.info("Failed to create a schedule for taskset")
+
+                results[results_key] = scheduler_results
 
         import pdb
         pdb.set_trace()
