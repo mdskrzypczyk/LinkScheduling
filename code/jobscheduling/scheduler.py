@@ -879,7 +879,12 @@ class MultiResourceNPEDFScheduler(Scheduler):
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
-            start_time = self.get_start_time(next_task, global_resource_occupations, max([next_task.a, earliest, last_start]))
+            task_resource_occupations = {}
+            for resource in next_task.resources:
+                task_resource_occupations[resource] = IntervalTree(global_resource_occupations[resource])
+                task_resource_occupations[resource].chop(0, max([next_task.a, earliest, last_start]))
+
+            start_time = self.get_start_time(next_task, task_resource_occupations, max([next_task.a, earliest, last_start]))
 
             # Introduce a new instance into the taskset if necessary
             last_task_start[original_taskname] = start_time

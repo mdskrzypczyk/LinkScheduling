@@ -89,13 +89,13 @@ class BudgetTask(Task):
 
 
 class ResourceTask(Task):
-    def __init__(self, name, c, a=0, d=None, resources=None):
+    def __init__(self, name, c, a=0, d=None, resources=None, locked_resources=None):
         super(ResourceTask, self).__init__(name=name, c=c, a=a, d=d)
         self.resources = resources
-        self.locked_resources = None
+        self.locked_resources = locked_resources
 
     def __copy__(self):
-        return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources)
+        return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, locked_resources=self.locked_resources)
 
 
 class PeriodicTask(Task):
@@ -117,12 +117,12 @@ class PeriodicBudgetTask(BudgetTask):
 
 
 class PeriodicResourceTask(ResourceTask):
-    def __init__(self, name, c, p=None, resources=None):
-        super(PeriodicResourceTask, self).__init__(name=name, c=c, resources=resources)
+    def __init__(self, name, c, p=None, resources=None, locked_resources=None):
+        super(PeriodicResourceTask, self).__init__(name=name, c=c, resources=resources, locked_resources=locked_resources)
         self.p = p
 
     def __copy__(self):
-        return PeriodicResourceTask(name=self.name, c=self.c, resources=self.resources)
+        return PeriodicResourceTask(name=self.name, c=self.c, resources=self.resources, locked_resources=self.locked_resources)
 
 
 class DAGSubTask(Task):
@@ -138,8 +138,8 @@ class DAGSubTask(Task):
 
 
 class DAGResourceSubTask(ResourceTask):
-    def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None, dist=0):
-        super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources)
+    def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None, locked_resources=None, dist=0):
+        super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources, locked_resources=locked_resources)
         self.d = d
         if parents is None:
             parents = []
@@ -156,7 +156,7 @@ class DAGResourceSubTask(ResourceTask):
         self.children = list(set(self.children + [task]))
 
     def __copy__(self):
-        return DAGResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, dist=self.dist)
+        return DAGResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, dist=self.dist, locked_resources=self.locked_resources)
 
 
 def get_dag_exec_time(sources):
@@ -273,6 +273,8 @@ class ResourceDAGTask(ResourceTask):
         self.resources = set()
         for task in tasks:
             self.resources |= set(task.resources)
+            if task.locked_resources:
+                self.resources |= set(task.locked_resources)
 
     def assign_subtask_deadlines(self):
         q = [t for t in self.sinks]
@@ -321,6 +323,8 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
         self.resources = set()
         for task in tasks:
             self.resources |= set(task.resources)
+            if task.locked_resources:
+                self.resources |= set(task.locked_resources)
 
     def get_resources(self):
         return self.resources

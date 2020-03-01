@@ -190,9 +190,9 @@ def get_resources_from_parents(task, all_node_resources):
 
 def get_resources_for_task_nodes(task, task_nodes, all_node_resources):
     if task.name[0] == "D":
-        return [[r] for r in list(sorted(task.resources))[1:4:2] for tn in task_nodes if r in all_node_resources[tn]]
+        return [[r] for r in list(sorted(task.locked_resources)) for tn in task_nodes if r in all_node_resources[tn]]
     elif task.name[0] == "L":
-        return [[r] for tn in task_nodes for r in task.resources if r in all_node_resources[tn]]
+        return [[r] for tn in task_nodes for r in task.locked_resources if r in all_node_resources[tn]]
     else:
         import pdb
         pdb.set_trace()
@@ -292,15 +292,19 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     for r in list(set(earliest_resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
-    if task.name[0] == "L" and earliest_mapping == {}:
-        for lr in sr_mapping.keys():
-            t = max([s[0] for s in sr_mapping.values()])
-            if t + 1 <= earliest_possible_start:
-                earliest_resources.remove(lr)
-
     task.a = slots[0][0]
     task.resources = list(sorted(set(earliest_resources)))
-    logger.debug("Scheduled {} with resources {} at t={}".format(task.name, task.resources, task.a))
+    if task.name[0] == "L" and earliest_mapping == {}:
+        task.locked_resources = list(task.resources)
+        for lr in sr_mapping.keys():
+            t = max([s[0] for s in sr_mapping.values()])
+            if sr_mapping[lr][1] != lr and t + 1 <= earliest_possible_start:
+                task.locked_resources.remove(lr)
+
+    elif task.name[0] == "D":
+        task.locked_resources = task.resources[1:4:2]
+
+    logger.debug("Scheduled {} with resources {} and locked resources {} at t={}".format(task.name, task.resources, task.locked_resources, task.a))
     return list(set(earliest_resources))
 
 
@@ -461,8 +465,8 @@ def to_ranges(iterable):
 
 
 def task_locks_resource(task, resources):
-    link_lock = (task.name[0] == "L" and any([r in task.resources for r in resources]))
-    distill_lock = (task.name[0] == "D" and any([r in list(sorted(task.resources))[1:4:2] for r in resources]))
+    link_lock = (task.name[0] == "L" and any([r in task.locked_resources for r in resources]))
+    distill_lock = (task.name[0] == "D" and any([r in list(sorted(task.locked_resources)) for r in resources]))
     return link_lock or distill_lock
 
 
@@ -582,7 +586,7 @@ def verify_dag(dagtask, node_resources=None):
             if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
                 valid = False
 
-        if subtask.name[0] == "L" and len(set(subtask.resources)) != 2:
+        if subtask.name[0] == "L" and (len(set(subtask.locked_resources)) != 2 or len(set(subtask.resources)) not in [2, 3, 4]):
             import pdb
             pdb.set_trace()
 
@@ -590,7 +594,7 @@ def verify_dag(dagtask, node_resources=None):
             import pdb
             pdb.set_trace()
 
-        if subtask.name[0] == "D" and len(set(subtask.resources)) != 4:
+        if subtask.name[0] == "D" and (len(set(subtask.resources)) != 4 or len(set(subtask.locked_resources)) != 2):
             import pdb
             pdb.set_trace()
 
