@@ -126,6 +126,7 @@ def esss(path, pathResources, G, Fmin, Rmin):
             numL = (upper + lower + 1) // 2
             numR = len(path) + 1 - numL
 
+            logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL]))
             possible_protocol, Rl, Rr = find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR)
 
             if Rl == Rr:
@@ -149,7 +150,6 @@ def esss(path, pathResources, G, Fmin, Rmin):
 
 def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
     protocols = []
-    maxDistillations = 10
 
     resourceCopy = dict(pathResources)
 
@@ -158,12 +158,13 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
     # Assume we allocate half the comm resources of pivot node to either link
     # resourceCopy[path[numL - 1]]['comm'] = max(resourceCopy[path[numL - 1]]['comm'] // 2, 1)
-
-    for num in range(maxDistillations):
+    num = 0
+    while True:
         # Compute minimum fidelity in order for num distillations to achieve Fmin
         Fminswap = fidelity_for_distillations(num, Fmin)
         if Fminswap == 0:
-            continue
+            break
+
         Funswapped = unswap_links(Fminswap)
 
         # Calculate the needed rates of the links
@@ -185,35 +186,35 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
         # Add to list of protocols
         if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and type(protocolR) != Protocol:
-            logger.debug("Constructing protocol")
             Fswap = swap_links(protocolL.F, protocolR.F)
             Rswap = min(protocolL.R, protocolR.R)
             swap_protocol = SwapProtocol(F=Fswap, R=Rswap, protocols=[protocolL, protocolR], nodes=[path[-numR]])
             protocol = copy(swap_protocol)
-            logger.debug("Swapped link F={}".format(Fswap))
             for i in range(num):
                 Fdistilled = distill_links(protocol.F, Fswap)
                 Rdistilled = Rswap / (i + 2)
                 protocol = DistillationProtocol(F=Fdistilled, R=Rdistilled, protocols=[protocol, copy(swap_protocol)],
                                                 nodes=[path[0], path[-1]])
-                logger.debug("Distilled link F={}".format(Fdistilled))
 
             logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
                                                                                                  num))
             logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
                                                                                       protocolR.F, protocolR.R))
             protocols.append((protocol, protocolL.R, protocolR.R))
+            num += 1
 
         else:
             Rl = 0 if not protocolL else protocolL.R
             Rr = 0 if not protocolR else protocolR.R
             protocols.append((Protocol(F=0, R=0, nodes=None), Rl, Rr))
+            break
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
         protocol, Rl, Rr = sorted(protocols, key=lambda p: p[0].R)[-1]
         logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
                                                                                              num + 1))
+
         return protocol, Rl, Rr
 
     else:
@@ -221,6 +222,7 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
 
 def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
+    logger.debug("Getting protocol on link {} with Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
     if all([R < Rmin for _, R in link_properties]):
         logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
         return None
@@ -235,7 +237,7 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
             logger.debug("Link capable of generating without distillation using F={},R={}".format(F, R))
             return LinkProtocol(F=F, R=R, nodes=nodes)
 
-    logger.debug("Link not capable of generating without distillation")
+    # logger.debug("Link not capable of generating without distillation")
     if any([v < 2 for v in [nodeResources[n]['total'] for n in nodes]]):
         logger.debug("Not enough resources to perform distillation with nodes {}".format(nodes))
         return None
@@ -266,5 +268,8 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
                 logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
                 bestR = currProtocol.R
                 bestProtocol = currProtocol
+
+    if bestProtocol is None:
+        logger.debug("Failed to find distillation protocol")
 
     return bestProtocol

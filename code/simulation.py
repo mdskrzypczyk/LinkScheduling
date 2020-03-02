@@ -8,7 +8,7 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
-from jobscheduling.visualize import draw_DAG
+from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline
 from math import ceil
 
 logger = LSLogger()
@@ -159,7 +159,7 @@ def get_network_demands(network_topology, num):
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
-        rate = 10 / (2**random.choice([i for i in range(12)]))       # Rate range between 0.2 and 1
+        rate = 10 / (2**random.choice([i for i in range(5, 9)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
 
@@ -169,14 +169,24 @@ def get_protocol(network_topology, demand):
     _, nodeG = network_topology
     path = nx.shortest_path(G=nodeG, source=s, target=d, weight="weight")
     protocol = create_protocol(path, nodeG, f, r)
+
     if protocol:
+        logger.debug("Found protocol that satisfies demands")
         return protocol
-    else:
-        protocol = create_protocol(path, nodeG, f, 0)
-        if protocol:
-            return protocol
-        else:
-            return None
+
+    logger.debug("Trying to find protocol without rate constraint")
+    protocol = create_protocol(path, nodeG, f, 0)
+    if protocol:
+        logger.warning("Found protocol without rate constraint")
+        return protocol
+
+    logger.debug("Trying to find protocol without fidelity/rate constraints")
+    protocol = create_protocol(path, nodeG, 0.5, 0)
+    if protocol:
+        logger.warning("Found protocol without fidelity/rate constraint")
+        return protocol
+
+    return None
 
 
 def main():
@@ -192,91 +202,97 @@ def main():
     for topology in network_topologies:
         network_tasksets = []
 
-        for u in utilizations:
+        for i in range(num_tasksets):
+            logger.info("Generating taskset {}".format(i))
+
+            # Generate task sets according to some utilization characteristics and preemption budget allowances
+            demands = get_network_demands(topology, 200)
+
+            logger.info("Demands: {}".format(demands))
+
+            taskset = []
+            num_succ = 0
+            for demand in demands:
+                logger.info("Constructing protocol for request {}".format(demand))
+                protocol = get_protocol(topology, demand)
+                if protocol is None:
+                    logger.warning("Demand {} could not be satisfied!".format(demand))
+                    continue
+
+                logger.debug("Converting protocol for request {} to task".format(demand))
+                slot_size = 0.05
+                task = convert_protocol_to_task(demand, protocol, slot_size)
+
+                logger.debug("Scheduling task for request {}".format(demand))
+
+                scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+
+                sink = scheduled_task.sinks[0]
+                latency = (sink.a + ceil(sink.c)) * slot_size
+                achieved_rate = 1 / latency
+
+                s, d, f, r = demand
+                asap_dec, alap_dec, shift_dec = decoherence_times
+                logger.info("Results for {}:".format(demand))
+                if not correct:
+                    logger.error("Failed to construct valid protocol for {}".format(demand))
+                    import pdb
+                    pdb.set_trace()
+
+                elif shift_dec > asap_dec or shift_dec > alap_dec:
+                    logger.error("Shifted protocol has greater decoherence than ALAP or ASAP")
+                    import pdb
+                    pdb.set_trace()
+
+                else:
+                    num_succ += 1
+                    logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
+                    taskset.append(scheduled_task)
+
+            logger.info("Created taskset {}".format([t.name for t in taskset]))
+            network_tasksets.append(taskset)
+
+        # Use all schedulers
+        for scheduler_class in network_schedulers:
+            scheduler = scheduler_class()
+            results_key = type(scheduler).__name__
+            scheduler_results = []
+
+            # Run scheduler on all task sets
             for i in range(num_tasksets):
-                logger.info("Generating taskset {}".format(i))
-
-                # Generate task sets according to some utilization characteristics and preemption budget allowances
-                demands = get_network_demands(topology, 100)
-
-                logger.info("Demands: {}".format(demands))
-
-                taskset = []
-                num_succ = 0
-                for demand in demands:
-                    logger.info("Constructing protocol for request {}".format(demand))
-                    protocol = get_protocol(topology, demand)
-                    if protocol is None:
-                        logger.warning("Demand {} could not be satisfied!".format(demand))
-                        continue
-
-                    logger.debug("Converting protocol for request {} to task".format(demand))
-                    slot_size = 0.05
-                    task = convert_protocol_to_task(demand, protocol, slot_size)
-
-                    logger.debug("Scheduling task for request {}".format(demand))
-
-                    scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
-
-                    sink = scheduled_task.sinks[0]
-                    latency = (sink.a + ceil(sink.c)) * slot_size
-                    achieved_rate = 1 / latency
-
-                    s, d, f, r = demand
-                    asap_dec, alap_dec, shift_dec = decoherence_times
-                    logger.info("Results for {}:".format(demand))
-                    if not correct:
-                        logger.error("Failed to construct valid protocol for {}".format(demand))
-                        import pdb
-                        pdb.set_trace()
-
-                    elif achieved_rate < r:
-                        logger.error("Failed to satisfy rate for demand {}, achieved {}".format(demand, achieved_rate))
-
-                    elif shift_dec > asap_dec or shift_dec > alap_dec:
-                        logger.error("Shifted protocol has greater decoherence than ALAP or ASAP")
-                        import pdb
-                        pdb.set_trace()
-
-                    else:
-                        num_succ += 1
-                        logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
-                        taskset.append(scheduled_task)
-
-                import pdb
-                pdb.set_trace()
-
-                logger.info("Created taskset {}".format([t.name for t in taskset]))
-                network_tasksets.append(taskset)
-
-            # Use all schedulers
-            for scheduler_class in network_schedulers:
-                import pdb
-                pdb.set_trace()
-
-                scheduler = scheduler_class()
-                results_key = str(type(scheduler))
-                scheduler_results = []
-
-                # Run scheduler on all task sets
-                for i in range(num_tasksets):
-                    taskset = network_tasksets[i]
-                    logger.info("Scheduling tasks with {}".format(type(scheduler).__name__))
-                    start = time.time()
-                    schedule = scheduler.schedule_tasks(taskset)
-                    end = time.time()
-                    logger.info("Completed scheduling in {}s".format(end - start))
+                taskset = network_tasksets[i]
+                running_taskset = []
+                last_succ_schedule = None
+                start = time.time()
+                for task in taskset:
+                    logger.debug("Scheduling tasks with {}".format(results_key))
+                    schedule = scheduler.schedule_tasks(running_taskset + [task])
                     if schedule:
                         for sub_taskset, sub_schedule, valid in schedule:
-                            logger.info("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
+                            logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
 
                         # Record success
-                        scheduler_results.append(all([valid for _, _, valid in schedule]) if schedule else False)
+                        if all([valid for _, _, valid in schedule]):
+                            running_taskset.append(task)
+                            last_succ_schedule = schedule
 
                     else:
                         logger.info("Failed to create a schedule for taskset")
+                        import pdb
+                        pdb.set_trace()
 
+                end = time.time()
+                logger.info("{} completed scheduling in {}s".format(results_key, end - start))
+
+                scheduler_results = len(running_taskset)
                 results[results_key] = scheduler_results
+                logger.info("{} scheduled {} tasks".format(results_key, scheduler_results))
+                for sub_taskset, sub_schedule, _ in last_succ_schedule:
+                    resource_timeline(sub_taskset, sub_schedule)
+                    schedule_timeline(sub_taskset, sub_schedule)
+
+                import pdb
+                pdb.set_trace()
 
         import pdb
         pdb.set_trace()

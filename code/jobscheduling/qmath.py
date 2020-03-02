@@ -36,6 +36,7 @@ def distillations_for_fidelity(Finitial, Ftarget):
         return float('inf')
     else:
         num = 0
+        newF = 0
         currF = Finitial
         while Ftarget > currF:
             newF = distill_links(currF, Finitial)

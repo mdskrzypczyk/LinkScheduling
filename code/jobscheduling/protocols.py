@@ -13,7 +13,7 @@ logger = LSLogger()
 
 def print_resource_schedules(resource_schedules):
     schedule_length = max([rs[-1][0] + 1 for rs in resource_schedules.values() if rs])
-    timeline_string = "R" + " "*max([len(r) + 1 for r in resource_schedules.keys()])
+    timeline_string = " R" + " "*max([len(r) + 1 for r in resource_schedules.keys()])
     timeline_string += ''.join(["|{:>3} ".format(i) for i in range(schedule_length)])
     print(timeline_string)
     for r in sorted(resource_schedules.keys()):
@@ -153,7 +153,7 @@ def schedule_dag_asap(dagtask, topology):
     for resource in resource_schedules.keys():
         resource_schedules[resource] = list(sorted(resource_schedules[resource]))
 
-    asap_decoherence = get_schedule_decoherence(resource_schedules, asap_latency)
+    asap_decoherence = get_schedule_decoherence(dagtask.get_resource_schedules(), asap_latency)
     asap_correct = verify_dag(dagtask)
     return asap_latency, asap_decoherence, asap_correct
 
@@ -494,7 +494,7 @@ def convert_task_to_alap(dagtask):
 
     sink_task = dagtask.sinks[0]
     alap_latency = sink_task.a + ceil(sink_task.c)
-    alap_decoherence = get_schedule_decoherence(resource_schedules, alap_latency)
+    alap_decoherence = get_schedule_decoherence(dagtask.get_resource_schedules(), alap_latency)
     alap_correct = verify_dag(dagtask)
     return alap_latency, alap_decoherence, alap_correct
 
@@ -572,7 +572,7 @@ def shift_distillations_and_swaps(dagtask):
 
     sink_task = dagtask.sinks[0]
     shift_latency = sink_task.a + ceil(sink_task.c)
-    shift_decoherence = get_schedule_decoherence(resource_schedules_new, shift_latency)
+    shift_decoherence = get_schedule_decoherence(dagtask.get_resource_schedules(), shift_latency)
     shift_correct = verify_dag(dagtask)
 
     return shift_latency, shift_decoherence, shift_correct
@@ -587,17 +587,13 @@ def verify_dag(dagtask, node_resources=None):
                 valid = False
 
         if subtask.name[0] == "L" and (len(set(subtask.locked_resources)) != 2 or len(set(subtask.resources)) not in [2, 3, 4]):
-            import pdb
-            pdb.set_trace()
+            valid = False
 
         if subtask.name[0] == "S" and len(set(subtask.resources)) != 2:
-            import pdb
-            pdb.set_trace()
+            valid = False
 
         if subtask.name[0] == "D" and (len(set(subtask.resources)) != 4 or len(set(subtask.locked_resources)) != 2):
-            import pdb
-            pdb.set_trace()
-
+            valid = False
 
         subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
         for resource in subtask.resources:
@@ -618,7 +614,7 @@ def verify_dag(dagtask, node_resources=None):
             if t1.name[0] == "L" and t2.name == "L":
                 valid = False
 
-            elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.resources[1:4:2] for r in t2.resources]):
+            elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.locked_resources for r in t2.locked_resources]):
                 valid = False
 
     return valid
@@ -630,14 +626,9 @@ def get_schedule_decoherence(resource_schedules, completion_time):
     for r in sorted(resource_schedules.keys()):
         resource_decoherence = 0
         rs = resource_schedules[r]
-        for (s1, t1), (s2, t2) in zip(rs, rs[1:]):
-            if (t1.name[0] == "L" or (t1.name[0] == "D" and r in t1.resources[1:4:2])) and t2 != t1 and s1 + ceil(t1.c) != s2:
-                resource_decoherence += (s2 - 1 - s1)
-
-        if rs:
-            s, t = rs[-1]
-            if t.name[0] == "L" or (t.name[0] == "D" and r in t.resources[1:4:2]):
-                resource_decoherence += (completion_time - 1 - s)
+        for slot, task in rs:
+            if task.name[0] == "O":
+                resource_decoherence += 1
 
         resource_decoherences[r] = resource_decoherence
         total_decoherence += resource_decoherence

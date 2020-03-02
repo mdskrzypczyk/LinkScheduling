@@ -727,112 +727,6 @@ class NPEDFScheduler(Scheduler):
         pass
 
 
-class MultiResourceBlockNPEDFScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
-    def create_new_task_instance(self, periodic_task, instance):
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p*instance
-        task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                     d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
-        return task_instance
-
-    def schedule_tasks(self, taskset):
-        original_taskset = taskset
-        hyperperiod = get_lcm_for([t.p for t in original_taskset])
-        logger.info("Computed hyperperiod {}".format(hyperperiod))
-        taskset_lookup = dict([(t.name, t) for t in original_taskset])
-        last_task_start = defaultdict(int)
-        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
-
-        taskset = self.initialize_taskset(taskset)
-
-        resource_schedules = defaultdict(list)
-        global_resource_occupations = defaultdict(IntervalTree)
-
-        # First sort the taskset by activation time
-        logger.debug("Sorting tasks by earliest deadlines")
-        taskset = list(sorted(taskset, key=lambda task: task.a))
-
-        schedule = []
-        earliest = 0
-        while taskset:
-            next_task = taskset.pop(0)
-            original_taskname, instance = next_task.name.split('|')
-            last_start = last_task_start[original_taskname]
-
-            start_time = self.get_start_time(next_task, global_resource_occupations, max([next_task.a, earliest, last_start]))
-
-            # Introduce a new instance into the taskset if necessary
-            last_task_start[original_taskname] = start_time
-            instance = int(instance)
-
-            if instance < instance_count[original_taskname]:
-                periodic_task = taskset_lookup[original_taskname]
-                task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.a))
-
-            # Add schedule information to resource schedules
-            resource_intervals = defaultdict(list)
-            task_start = start_time
-            task_end = task_start + next_task.c
-            interval = (task_start, task_end)
-            for resource in next_task.resources:
-                resource_intervals[resource].append(interval)
-                resource_schedules[resource].append((task_start, task_end, next_task))
-
-            # Add the schedule information to the overall schedule
-            schedule.append((start_time, start_time + next_task.c, next_task))
-
-            # Update windowed resource schedules
-            if taskset:
-                min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
-                earliest = min_chop
-                for resource in next_task.resources:
-                    resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
-                    global_resource_occupations[resource] |= resource_interval_tree
-                    global_resource_occupations[resource].chop(0, min_chop)
-                    global_resource_occupations[resource].merge_overlaps(strict=False)
-
-        # Check validity
-        valid = True
-        for rn, rs in resource_schedules.items():
-            for start, end, task in rs:
-                if task.d < end:
-                    valid = False
-
-        taskset = original_taskset
-        return schedule, valid
-
-    def get_start_time(self, task, resource_occupations, earliest):
-        offset = max(0, earliest - task.a)
-
-        # Find the earliest start
-        offset = task.a + self.find_earliest_start(constraining_subtasks, resource_occupations)
-        while True:
-            # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained resource can be scheduled
-            scheduleable, step = self.attempt_schedule(constraining_subtasks, offset, resource_occupations)
-
-            if scheduleable:
-                return offset
-
-            else:
-                # See if we can remove any of the constrained subtasks if we have to move forward by step
-                offset += step
-                constraining_subtasks = [subtask for subtask in constraining_subtasks if self.subtask_constrained(subtask, resource_occupations, offset)]
-
-    def find_earliest_start(self):
-        pass
-
 
 class MultiResourceNPEDFScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
@@ -858,7 +752,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
     def schedule_tasks(self, taskset):
         original_taskset = taskset
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
-        logger.info("Computed hyperperiod {}".format(hyperperiod))
+        logger.debug("Computed hyperperiod {}".format(hyperperiod))
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
         last_task_start = defaultdict(int)
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
@@ -1128,14 +1022,122 @@ class MultipleResourceOptimalBlockScheduler(Scheduler):
         return schedules
 
 
+class MultiResourceBlockNPEDFScheduler(Scheduler):
+    def preprocess_taskset(self, taskset):
+        return taskset
+
+    def initialize_taskset(self, tasks):
+        initial_tasks = []
+        for task in tasks:
+            task_instance = self.create_new_task_instance(task, 0)
+            initial_tasks.append(task_instance)
+
+        return initial_tasks
+
+    def create_new_task_instance(self, periodic_task, instance):
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p*instance
+        task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
+                                     d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
+        return task_instance
+
+    def schedule_tasks(self, taskset):
+        original_taskset = taskset
+        hyperperiod = get_lcm_for([t.p for t in original_taskset])
+        logger.debug("Computed hyperperiod {}".format(hyperperiod))
+        taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        last_task_start = defaultdict(int)
+        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
+
+        taskset = self.initialize_taskset(taskset)
+
+        resource_schedules = defaultdict(list)
+        global_resource_occupations = defaultdict(IntervalTree)
+
+        # First sort the taskset by activation time
+        logger.debug("Sorting tasks by earliest deadlines")
+        taskset = list(sorted(taskset, key=lambda task: task.a))
+
+        schedule = []
+        earliest = 0
+        while taskset:
+            next_task = taskset.pop(0)
+            original_taskname, instance = next_task.name.split('|')
+            last_start = last_task_start[original_taskname]
+
+            start_time = self.get_start_time(next_task, global_resource_occupations, max([next_task.a, earliest, last_start]))
+
+            # Introduce a new instance into the taskset if necessary
+            last_task_start[original_taskname] = start_time
+            instance = int(instance)
+
+            if instance < instance_count[original_taskname]:
+                periodic_task = taskset_lookup[original_taskname]
+                task_instance = self.create_new_task_instance(periodic_task, instance + 1)
+                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.a))
+
+            # Add schedule information to resource schedules
+            resource_intervals = defaultdict(list)
+            task_start = start_time
+            task_end = task_start + next_task.c
+            interval = (task_start, task_end)
+            for resource in next_task.resources:
+                resource_intervals[resource].append(interval)
+                resource_schedules[resource].append((task_start, task_end, next_task))
+
+            # Add the schedule information to the overall schedule
+            schedule.append((start_time, start_time + next_task.c, next_task))
+
+            # Update windowed resource schedules
+            if taskset:
+                min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
+                earliest = min_chop
+                for resource in next_task.resources:
+                    resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
+                    global_resource_occupations[resource] |= resource_interval_tree
+                    global_resource_occupations[resource].chop(0, min_chop)
+                    global_resource_occupations[resource].merge_overlaps(strict=False)
+
+        # Check validity
+        valid = True
+        for rn, rs in resource_schedules.items():
+            for start, end, task in rs:
+                if task.d < end:
+                    valid = False
+
+        taskset = original_taskset
+        return schedule, valid
+
+    def get_start_time(self, task, resource_occupations, earliest):
+        # Find the earliest start
+        offset = self.find_earliest_start(task, resource_occupations, earliest)
+        return offset
+
+    def find_earliest_start(self, task, resource_occupations, earliest):
+        start = earliest
+        distance_to_free = float('inf')
+        while distance_to_free != 0:
+            sched_interval = Interval(start, start + task.c)
+
+            distance_to_free = 0
+            for resource in task.resources:
+                intervals = sorted(resource_occupations[resource][sched_interval.begin:sched_interval.end])
+                if intervals:
+                    overlapping_interval = intervals[0]
+                    distance_to_free = max(distance_to_free, overlapping_interval.end - start)
+
+            start += distance_to_free
+
+        return start
+
+
 class MultipleResourceBlockNPEDFScheduler(Scheduler):
     def schedule_tasks(self, dagset):
         # Convert DAGs into tasks
         tasks = {}
         resources = set()
         for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
-                                              resources=dag_task.resources)
+            block_task = PeriodicResourceDAGTask(name=dag_task.name, tasks=dag_task.subtasks, p=dag_task.p)
             tasks[block_task.name] = block_task
             resources |= block_task.resources
 
@@ -1156,7 +1158,7 @@ class MultipleResourceBlockNPEDFScheduler(Scheduler):
             tasksets.append(taskset)
 
         # For each set of tasks use NPEDFScheduler
-        scheduler = PeriodicNPEDFScheduler()
+        scheduler = MultiResourceBlockNPEDFScheduler()
         schedules = []
         for taskset in tasksets:
             schedule, valid = scheduler.schedule_tasks(taskset)

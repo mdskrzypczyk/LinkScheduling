@@ -1,5 +1,5 @@
 from functools import reduce    # need this line if you're using Python3.x
-from math import gcd
+from math import gcd, ceil
 from jobscheduling.log import LSLogger
 from collections import defaultdict
 from copy import copy
@@ -18,7 +18,7 @@ def get_lcm_for(values):
 def generate_non_periodic_task_set(periodic_task_set):
     periods = [task.p for task in periodic_task_set]
     schedule_length = get_lcm_for(periods)
-    logger.info("Computed hyperperiod {}".format(schedule_length))
+    logger.debug("Computed hyperperiod {}".format(schedule_length))
     taskset = []
     for task in periodic_task_set:
         # Generate a task for each period the task executes
@@ -33,7 +33,7 @@ def generate_non_periodic_task_set(periodic_task_set):
 def generate_non_periodic_dagtask_set(periodic_task_set):
     periods = [task.p for task in periodic_task_set]
     schedule_length = get_lcm_for(periods)
-    logger.info("Computed hyperperiod {}".format(schedule_length))
+    logger.debug("Computed hyperperiod {}".format(schedule_length))
     taskset = []
     for task in periodic_task_set:
         # Generate a task for each period the task executes
@@ -53,7 +53,7 @@ def generate_non_periodic_dagtask_set(periodic_task_set):
 def generate_non_periodic_budget_task_set(periodic_task_set):
     periods = [task.p for task in periodic_task_set]
     schedule_length = get_lcm_for(periods)
-    logger.info("Computed hyperperiod {}".format(schedule_length))
+    logger.debug("Computed hyperperiod {}".format(schedule_length))
     taskset = []
     for task in periodic_task_set:
         # Generate a task for each period the task executes
@@ -96,6 +96,13 @@ class ResourceTask(Task):
 
     def __copy__(self):
         return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, locked_resources=self.locked_resources)
+
+    def get_resource_schedules(self):
+        resource_schedules = defaultdict(list)
+        slots = [(self.a + i, self) for i in range(ceil(self.c))]
+        for resource in self.resources:
+            resource_schedules[resource] += (slots)
+        return dict(resource_schedules)
 
 
 class PeriodicTask(Task):
@@ -297,6 +304,18 @@ class ResourceDAGTask(ResourceTask):
     def earliest_deadline(self):
         return min([subtask.d for subtask in self.sources])
 
+    def get_resource_schedules(self):
+        full_resource_schedules = defaultdict(list)
+        for task in self.subtasks:
+            resource_schedules = task.get_resource_schedules()
+            for resource, slots in resource_schedules.items():
+                full_resource_schedules[resource] += slots
+
+        for resource in full_resource_schedules.keys():
+            full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
+
+        return dict(full_resource_schedules)
+
     def __copy__(self):
         tasks = {}
         q = [t for t in self.sources]
@@ -328,6 +347,32 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
 
     def get_resources(self):
         return self.resources
+
+    def get_resource_schedules(self):
+        full_resource_schedules = defaultdict(list)
+        for task in self.subtasks:
+            resource_schedules = task.get_resource_schedules()
+            for resource, slots in resource_schedules.items():
+                full_resource_schedules[resource] += slots
+
+        for resource in full_resource_schedules.keys():
+            full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
+            additional_slots = []
+            for (s1, t1), (s2, t2) in zip(full_resource_schedules[resource], full_resource_schedules[resource][1:]):
+                if t1 != t2 and s2 - s1 > 1 and resource in t1.locked_resources:
+                    occ_task = ResourceTask(name="Occupation", c=s2-s1, a=s1 + 1, resources=resource)
+                    additional_slots += [(s1 + i, occ_task) for i in range(1, s2-s1)]
+
+            last_slot, last_task = full_resource_schedules[resource][-1]
+            completion_time = self.c
+            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
+                occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1, resources=resource)
+                additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
+
+            full_resource_schedules[resource] += additional_slots
+            full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
+
+        return dict(full_resource_schedules)
 
     def __copy__(self):
         tasks = {}
