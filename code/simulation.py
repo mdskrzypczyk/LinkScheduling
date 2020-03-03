@@ -8,7 +8,7 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
-from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline
+from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
 
 logger = LSLogger()
@@ -148,7 +148,7 @@ def get_schedulers():
         # MultipleResourceOptimalBlockScheduler,
         MultipleResourceBlockNPEDFScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
-        MultipleResourceBlockCEDFScheduler
+        # MultipleResourceBlockCEDFScheduler
     ]
     return schedulers
 
@@ -266,7 +266,7 @@ def main():
                 start = time.time()
                 for task in taskset:
                     logger.debug("Scheduling tasks with {}".format(results_key))
-                    schedule = scheduler.schedule_tasks(running_taskset + [task])
+                    schedule = scheduler.schedule_tasks(running_taskset + [task], topology)
                     if schedule:
                         for sub_taskset, sub_schedule, valid in schedule:
                             logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
@@ -288,8 +288,7 @@ def main():
                 results[results_key] = scheduler_results
                 logger.info("{} scheduled {} tasks".format(results_key, scheduler_results))
                 for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                    resource_timeline(sub_taskset, sub_schedule)
-                    schedule_timeline(sub_taskset, sub_schedule)
+                    schedule_and_resource_timelines(sub_taskset, sub_schedule)
 
                 import pdb
                 pdb.set_trace()

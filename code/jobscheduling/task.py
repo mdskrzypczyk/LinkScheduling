@@ -166,18 +166,8 @@ class DAGResourceSubTask(ResourceTask):
         return DAGResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, dist=self.dist, locked_resources=self.locked_resources)
 
 
-def get_dag_exec_time(sources):
-    max_time = 0
-    if sources is None:
-        return max_time
-
-    for source in sources:
-        source_time = source.c
-        max_child_time = get_dag_exec_time(source.children)
-        if source_time + max_child_time > max_time:
-            max_time = source_time + max_child_time
-
-    return max_time
+def get_dag_exec_time(dag):
+    return max([sink.a + sink.c for sink in dag.sinks]) - min([source.a for source in dag.sources])
 
 
 class DAGTask(Task):
@@ -192,7 +182,7 @@ class DAGTask(Task):
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
-        c = get_dag_exec_time(self.sources)
+        c = get_dag_exec_time(self)
 
         if d is None:
             if not all([t.d is None for t in self.sinks]):
@@ -232,7 +222,7 @@ class PeriodicDAGTask(PeriodicTask):
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
-        c = get_dag_exec_time(self.sources)
+        c = get_dag_exec_time(self)
 
         super(PeriodicDAGTask, self).__init__(name=name, c=c, p=p)
 
@@ -268,7 +258,7 @@ class ResourceDAGTask(ResourceTask):
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
-        c = get_dag_exec_time(self.sources)
+        c = get_dag_exec_time(self)
         if d is None:
             if not all([t.d is None for t in self.sinks]):
                 d = max([t.d for t in self.sinks])

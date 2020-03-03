@@ -91,3 +91,66 @@ def resource_timeline(taskset, schedule):
     ax.set_yticks(list(range(1, len(resources) + 1)))
     ax.set_yticklabels([r for r in resources])
     plt.show()
+
+def schedule_and_resource_timelines(taskset, schedule):
+    task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
+    task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
+
+    verts = []
+    colors = []
+    resources = set()
+    for d in schedule:
+        s, e, t = d
+        resources |= set(t.resources)
+        name = get_original_taskname(t)
+        v = [
+            (s, task_cats[name] - .4),
+            (s, task_cats[name] + .4),
+            (e, task_cats[name] + .4),
+            (e, task_cats[name] - .4),
+            (s, task_cats[name] - .4)
+        ]
+        verts.append(v)
+        colors.append(task_colormapping[name])
+
+    task_bars = PolyCollection(verts, facecolors=colors)
+
+    resources = list(sorted(resources))
+    resource_cats = dict([(r, i + 1) for i, r in enumerate(resources)])
+
+    verts = []
+    colors = []
+    for d in schedule:
+        task_start, _, t = d
+        name = get_original_taskname(t)
+        subtasks = [t] if not hasattr(t, 'subtasks') else t.subtasks
+        for subtask in subtasks:
+            s = task_start + (subtask.a - t.a)
+            e = s + subtask.c
+            for r in subtask.resources:
+                v = [
+                    (s, resource_cats[r] - .4),
+                    (s, resource_cats[r] + .4),
+                    (e, resource_cats[r] + .4),
+                    (e, resource_cats[r] - .4),
+                    (s, resource_cats[r] - .4)
+                ]
+                verts.append(v)
+                colors.append(task_colormapping[name])
+
+    resource_bars = PolyCollection(verts, facecolors=colors)
+
+    fig, axs = plt.subplots(2)
+    axs[0].add_collection(task_bars)
+    axs[0].autoscale()
+
+    axs[0].set_yticks(list(range(1, len(taskset) + 1)))
+    axs[0].set_yticklabels([t.name for t in taskset])
+
+    axs[1].add_collection(resource_bars)
+    axs[1].autoscale()
+
+    axs[1].set_yticks(list(range(1, len(resources) + 1)))
+    axs[1].set_yticklabels([r for r in resources])
+
+    plt.show()

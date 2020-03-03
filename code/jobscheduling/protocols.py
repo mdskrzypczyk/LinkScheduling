@@ -103,6 +103,7 @@ def schedule_dag_for_resources(dagtask, topology):
 
     decoherences = (asap_decoherence, alap_decoherence, shift_decoherence)
     correct = (asap_correct and alap_correct and shift_correct)
+    dagtask.c = shift_latency
     return dagtask, decoherences, correct
 
 
