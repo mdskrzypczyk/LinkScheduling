@@ -3,6 +3,8 @@ from math import gcd, ceil
 from jobscheduling.log import LSLogger
 from collections import defaultdict
 from copy import copy
+from intervaltree import IntervalTree, Interval
+import itertools
 
 logger = LSLogger()
 
@@ -13,6 +15,14 @@ def lcm(a, b):
 
 def get_lcm_for(values):
     return reduce(lambda x, y: lcm(x, y), values)
+
+
+def to_ranges(iterable):
+    iterable = sorted(set(iterable))
+    for key, group in itertools.groupby(enumerate(iterable),
+                                        lambda t: t[1] - t[0]):
+        group = list(group)
+        yield group[0][1], group[-1][1]
 
 
 def generate_non_periodic_task_set(periodic_task_set):
@@ -103,6 +113,25 @@ class ResourceTask(Task):
         for resource in self.resources:
             resource_schedules[resource] += (slots)
         return dict(resource_schedules)
+
+    def get_resource_intervals(self):
+        resource_intervals = defaultdict(IntervalTree)
+        interval = Interval(self.a, self.a+self.c)
+        for resource in self.resources:
+            resource_intervals[resource].add(interval)
+        return resource_intervals
+
+    def remap_resources(self, resource_relations):
+        new_resources = []
+        for resource in self.resources:
+            new_resources.append(resource_relations[resource])
+
+        new_locked_resources = []
+        for resource in self.locked_resources:
+            new_locked_resources.append(resource_relations[resource])
+
+        self.resources = new_resources
+        self.locked_resources = new_locked_resources
 
 
 class PeriodicTask(Task):
@@ -303,8 +332,47 @@ class ResourceDAGTask(ResourceTask):
 
         for resource in full_resource_schedules.keys():
             full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
+            additional_slots = []
+            for (s1, t1), (s2, t2) in zip(full_resource_schedules[resource], full_resource_schedules[resource][1:]):
+                if t1 != t2 and s2 - s1 > 1 and resource in t1.locked_resources:
+                    occ_task = ResourceTask(name="Occupation", c=s2 - s1, a=s1 + 1, resources=resource)
+                    additional_slots += [(s1 + i, occ_task) for i in range(1, s2 - s1)]
+
+            last_slot, last_task = full_resource_schedules[resource][-1]
+            completion_time = self.c
+            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
+                occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1,
+                                        resources=resource)
+                additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
+
+            full_resource_schedules[resource] += additional_slots
+            full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
 
         return dict(full_resource_schedules)
+
+    def get_resource_intervals(self):
+        resource_schedules = self.get_resource_schedules()
+        resource_intervals = defaultdict(IntervalTree)
+        for resource, schedule in resource_schedules.items():
+            s, t = schedule[0]
+            interval = Interval(begin=s, end=s+1, data=t)
+            for s, t in schedule[1:]:
+                if t == interval.data:
+                    interval = Interval(begin=interval.begin, end=s+1, data=t)
+                else:
+                    if resource_intervals[resource].overlap(interval.begin, interval.end):
+                        import pdb
+                        pdb.set_trace()
+                    resource_intervals[resource].add(interval)
+                    interval = Interval(begin=s, end=s+1, data=t)
+
+            if resource_intervals[resource].overlap(interval.begin, interval.end):
+                import pdb
+                pdb.set_trace()
+
+            resource_intervals[resource].add(interval)
+
+        return resource_intervals
 
     def __copy__(self):
         tasks = {}

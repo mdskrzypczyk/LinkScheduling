@@ -189,6 +189,25 @@ def get_protocol(network_topology, demand):
     return None
 
 
+from collections import defaultdict
+from intervaltree import IntervalTree, Interval
+
+
+def verify_schedule(tasks, schedule):
+    global_resource_intervals = defaultdict(IntervalTree)
+    for start, end, t in schedule:
+        task_resource_intervals = t.get_resource_intervals()
+        for resource, itree in task_resource_intervals.items():
+            offset_itree = IntervalTree([Interval(i.begin + start, i.end + start) for i in itree])
+            for interval in offset_itree:
+                if global_resource_intervals[resource].overlap(interval.begin, interval.end):
+                    import pdb
+                    pdb.set_trace()
+                    return False
+                global_resource_intervals[resource].add(interval)
+
+    return True
+
 def main():
     num_network_nodes = 8
     num_tasksets = 1
@@ -206,7 +225,7 @@ def main():
             logger.info("Generating taskset {}".format(i))
 
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 200)
+            demands = get_network_demands(topology, 100)
 
             logger.info("Demands: {}".format(demands))
 
@@ -274,6 +293,7 @@ def main():
                         # Record success
                         if all([valid for _, _, valid in schedule]):
                             running_taskset.append(task)
+                            print(len(running_taskset))
                             last_succ_schedule = schedule
 
                     else:

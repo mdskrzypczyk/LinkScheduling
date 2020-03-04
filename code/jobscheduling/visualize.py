@@ -123,11 +123,12 @@ def schedule_and_resource_timelines(taskset, schedule):
     for d in schedule:
         task_start, _, t = d
         name = get_original_taskname(t)
-        subtasks = [t] if not hasattr(t, 'subtasks') else t.subtasks
-        for subtask in subtasks:
-            s = task_start + (subtask.a - t.a)
-            e = s + subtask.c
-            for r in subtask.resources:
+        resource_intervals = t.get_resource_intervals()
+        for r, itree in resource_intervals.items():
+            itree.merge_overlaps(strict=False)
+            for interval in itree:
+                s = interval.begin + task_start - t.a
+                e = interval.end + task_start - t.a
                 v = [
                     (s, resource_cats[r] - .4),
                     (s, resource_cats[r] + .4),
