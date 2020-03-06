@@ -143,6 +143,7 @@ def schedule_dag_asap(dagtask, topology):
 
                 last_task = stack.pop()
 
+    dagtask.resources = list(set([r for subtask in dagtask.subtasks for r in subtask.resources]))
     sink_task = dagtask.sinks[0]
     asap_latency = sink_task.a + ceil(sink_task.c)
     resource_schedules = defaultdict(list)

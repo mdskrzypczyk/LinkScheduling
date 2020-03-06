@@ -7,7 +7,10 @@ from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
-from jobscheduling.scheduler import MultipleResourceOptimalBlockScheduler, MultipleResourceBlockNPEDFScheduler, MultipleResourceBlockCEDFScheduler, MultipleResourceNonBlockNPEDFScheduler, PreemptionBudgetScheduler, pretty_print_schedule
+from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
+from jobscheduling.schedulers.CEDF import MultipleResourceBlockCEDFScheduler
+from jobscheduling.schedulers.BlockNPEDF import MultipleResourceBlockNPEDFScheduler
+from jobscheduling.schedulers.PBEDF import PreemptionBudgetScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
 
@@ -26,7 +29,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=2, num_storage_q=2):
+def gen_topologies(n, num_comm_q=1, num_storage_q=1):
     d_to_cap = load_link_data()
     link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
     # Line
@@ -148,7 +151,7 @@ def get_schedulers():
         # MultipleResourceOptimalBlockScheduler,
         MultipleResourceBlockNPEDFScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
-        # MultipleResourceBlockCEDFScheduler
+        MultipleResourceBlockCEDFScheduler
     ]
     return schedulers
 
@@ -209,7 +212,7 @@ def verify_schedule(tasks, schedule):
     return True
 
 def main():
-    num_network_nodes = 8
+    num_network_nodes = 4
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
@@ -270,6 +273,14 @@ def main():
 
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
+
+        import pdb
+        from jobscheduling.task import find_dag_task_preemption_points
+        from jobscheduling.protocols import print_resource_schedules
+        for dagtask in taskset:
+            print_resource_schedules(dagtask.get_resource_schedules())
+            print(find_dag_task_preemption_points(dagtask))
+            pdb.set_trace()
 
         # Use all schedulers
         for scheduler_class in network_schedulers:

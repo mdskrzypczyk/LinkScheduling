@@ -70,9 +70,34 @@ def generate_non_periodic_budget_task_set(periodic_task_set):
         num_tasks = schedule_length // task.p
         for i in range(num_tasks):
             taskset.append(
-                BudgetTask(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p * i, d=task.a + task.p * (i + 1), k=task.k))
+                BudgetTask(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p * i,
+                           d=task.a + task.p * (i + 1), k=task.k))
 
     return taskset
+
+
+def find_dag_task_preemption_points(budget_dag_task, resources=None):
+    if resources is None:
+        resources = budget_dag_task.resources
+
+    resource_intervals = budget_dag_task.get_resource_intervals(separate_occupation=True)
+    global_itree = IntervalTree()
+    for resource in resources:
+        global_itree |= resource_intervals[resource]
+
+    global_itree.merge_overlaps()
+    preemption_points = list(sorted([interval.end for interval in global_itree if interval.end < budget_dag_task.c]))
+    points_to_locked_resources = defaultdict(list)
+    for point in preemption_points:
+        for resource, itree in resource_intervals.items():
+            intervals = sorted(itree[0:point])
+            if intervals:
+                last_task = intervals[-1].data
+                if last_task.locked_resources and resource in last_task.locked_resources:
+                    points_to_locked_resources[point].append(resource)
+
+    preemption_points = list(points_to_locked_resources.items())
+    return preemption_points
 
 
 class Task:
@@ -105,7 +130,8 @@ class ResourceTask(Task):
         self.locked_resources = locked_resources
 
     def __copy__(self):
-        return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, locked_resources=self.locked_resources)
+        return ResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources,
+                            locked_resources=self.locked_resources)
 
     def get_resource_schedules(self):
         resource_schedules = defaultdict(list)
@@ -134,6 +160,17 @@ class ResourceTask(Task):
         self.locked_resources = new_locked_resources
 
 
+class BudgetResourceTask(ResourceTask):
+    def __init__(self, name, c, a=0, d=None, k=0, resources=None, locked_resources=None):
+        super(BudgetResourceTask, self).__init__(name=name, c=c, a=a, d=d, resources=resources,
+                                                 locked_resources=locked_resources)
+        self.k = k
+
+    def __copy__(self):
+        return BudgetResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k, resources=self.resources,
+                                  locked_resources=self.locked_resources)
+
+
 class PeriodicTask(Task):
     def __init__(self, name, c, a=0, p=None):
         super(PeriodicTask, self).__init__(name=name, a=a, c=c)
@@ -154,11 +191,24 @@ class PeriodicBudgetTask(BudgetTask):
 
 class PeriodicResourceTask(ResourceTask):
     def __init__(self, name, c, p=None, resources=None, locked_resources=None):
-        super(PeriodicResourceTask, self).__init__(name=name, c=c, resources=resources, locked_resources=locked_resources)
+        super(PeriodicResourceTask, self).__init__(name=name, c=c, resources=resources,
+                                                   locked_resources=locked_resources)
         self.p = p
 
     def __copy__(self):
-        return PeriodicResourceTask(name=self.name, c=self.c, resources=self.resources, locked_resources=self.locked_resources)
+        return PeriodicResourceTask(name=self.name, c=self.c, resources=self.resources,
+                                    locked_resources=self.locked_resources)
+
+
+class PeriodicBudgetResourceTask(PeriodicResourceTask):
+    def __init__(self, name, c, p=None, k=0, resources=None, locked_resources=None):
+        super(PeriodicBudgetResourceTask, self).__init__(name=name, c=c, p=p, resources=resources,
+                                                         locked_resources=locked_resources)
+        self.k = k
+
+    def __copy__(self):
+        return PeriodicBudgetResourceTask(name=self.name, c=self.c, p=self.p, k=self.k, resources=self.resources,
+                                          locked_resources=self.locked_resources)
 
 
 class DAGSubTask(Task):
@@ -175,7 +225,8 @@ class DAGSubTask(Task):
 
 class DAGResourceSubTask(ResourceTask):
     def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None, locked_resources=None, dist=0):
-        super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources, locked_resources=locked_resources)
+        super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources,
+                                                 locked_resources=locked_resources)
         self.d = d
         if parents is None:
             parents = []
@@ -192,7 +243,22 @@ class DAGResourceSubTask(ResourceTask):
         self.children = list(set(self.children + [task]))
 
     def __copy__(self):
-        return DAGResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources, dist=self.dist, locked_resources=self.locked_resources)
+        return DAGResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, resources=self.resources,
+                                  dist=self.dist, locked_resources=self.locked_resources)
+
+
+class DAGBudgetResourceSubTask(DAGResourceSubTask):
+    def __init__(self, name, c=1, a=0, d=None, k=0, parents=None, children=None, resources=None, locked_resources=None, dist=0):
+        super(DAGBudgetResourceSubTask, self).__init__(name=name, c=c, a=a, d=d, parents=parents, children=children,
+                                                       resources=resources, locked_resources=locked_resources,
+                                                       dist=dist)
+        self.k = k
+
+    def __copy__(self):
+        return DAGBudgetResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k, parents=self.parents,
+                                        children=self.children, resources=self.resources,
+                                        locked_resources=self.locked_resources, dist=self.dist)
+
 
 
 def get_dag_exec_time(dag):
@@ -335,14 +401,15 @@ class ResourceDAGTask(ResourceTask):
             additional_slots = []
             for (s1, t1), (s2, t2) in zip(full_resource_schedules[resource], full_resource_schedules[resource][1:]):
                 if t1 != t2 and s2 - s1 > 1 and resource in t1.locked_resources:
-                    occ_task = ResourceTask(name="Occupation", c=s2 - s1, a=s1 + 1, resources=resource)
+                    occ_task = ResourceTask(name="Occupation", c=s2 - s1, a=s1 + 1, resources=[resource],
+                                            locked_resources=[resource])
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2 - s1)]
 
             last_slot, last_task = full_resource_schedules[resource][-1]
             completion_time = self.c
             if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
                 occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1,
-                                        resources=resource)
+                                        resources=[resource], locked_resources=[resource])
                 additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
 
             full_resource_schedules[resource] += additional_slots
@@ -350,21 +417,21 @@ class ResourceDAGTask(ResourceTask):
 
         return dict(full_resource_schedules)
 
-    def get_resource_intervals(self):
+    def get_resource_intervals(self, separate_occupation=False):
         resource_schedules = self.get_resource_schedules()
         resource_intervals = defaultdict(IntervalTree)
         for resource, schedule in resource_schedules.items():
             s, t = schedule[0]
-            interval = Interval(begin=s, end=s+1, data=t)
+            interval = Interval(begin=s, end=s + 1, data=t)
             for s, t in schedule[1:]:
-                if t == interval.data:
-                    interval = Interval(begin=interval.begin, end=s+1, data=t)
+                if t == interval.data and (not separate_occupation or t.name[0] != "O"):
+                    interval = Interval(begin=interval.begin, end=s + 1, data=t)
                 else:
                     if resource_intervals[resource].overlap(interval.begin, interval.end):
                         import pdb
                         pdb.set_trace()
                     resource_intervals[resource].add(interval)
-                    interval = Interval(begin=s, end=s+1, data=t)
+                    interval = Interval(begin=s, end=s + 1, data=t)
 
             if resource_intervals[resource].overlap(interval.begin, interval.end):
                 import pdb
@@ -393,6 +460,30 @@ class ResourceDAGTask(ResourceTask):
         return ResourceDAGTask(name=self.name, tasks=list(tasks.values()), a=self.a, d=self.d)
 
 
+class BudgetResourceDAGTask(ResourceDAGTask):
+    def __init__(self, name, tasks, a=0, d=None, k=0):
+        super(BudgetResourceDAGTask, self).__init__(name=name, tasks=tasks, a=a, d=d)
+        self.k = k
+
+    def __copy__(self):
+        tasks = {}
+        q = [t for t in self.sources]
+        while q:
+            original_task = q.pop(0)
+            task = tasks.get(original_task.name, copy(original_task))
+            tasks[task.name] = task
+
+            for original_parent_task in original_task.parents:
+                parent_task = tasks[original_parent_task.name]
+                parent_task.add_child(task)
+                task.add_parent(parent_task)
+
+            for original_child_task in original_task.children:
+                q.append(original_child_task)
+
+        return BudgetResourceDAGTask(name=self.name, tasks=list(tasks.values()), a=self.a, d=self.d, k=self.k)
+
+
 class PeriodicResourceDAGTask(PeriodicDAGTask):
     def __init__(self, name, tasks, p):
         super(PeriodicResourceDAGTask, self).__init__(name=name, tasks=tasks, p=p)
@@ -418,19 +509,43 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
             additional_slots = []
             for (s1, t1), (s2, t2) in zip(full_resource_schedules[resource], full_resource_schedules[resource][1:]):
                 if t1 != t2 and s2 - s1 > 1 and resource in t1.locked_resources:
-                    occ_task = ResourceTask(name="Occupation", c=s2-s1, a=s1 + 1, resources=resource)
+                    occ_task = ResourceTask(name="Occupation", c=s2-s1, a=s1 + 1, resources=[resource], locked_resources=[resource])
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2-s1)]
 
             last_slot, last_task = full_resource_schedules[resource][-1]
             completion_time = self.c
             if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
-                occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1, resources=resource)
+                occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1, resources=[resource], locked_resources=[resource])
                 additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
 
             full_resource_schedules[resource] += additional_slots
             full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
 
         return dict(full_resource_schedules)
+
+    def get_resource_intervals(self, separate_occupation=False):
+        resource_schedules = self.get_resource_schedules()
+        resource_intervals = defaultdict(IntervalTree)
+        for resource, schedule in resource_schedules.items():
+            s, t = schedule[0]
+            interval = Interval(begin=s, end=s+1, data=t)
+            for s, t in schedule[1:]:
+                if t == interval.data and (not separate_occupation or t.name[0] != "O"):
+                    interval = Interval(begin=interval.begin, end=s+1, data=t)
+                else:
+                    if resource_intervals[resource].overlap(interval.begin, interval.end):
+                        import pdb
+                        pdb.set_trace()
+                    resource_intervals[resource].add(interval)
+                    interval = Interval(begin=s, end=s+1, data=t)
+
+            if resource_intervals[resource].overlap(interval.begin, interval.end):
+                import pdb
+                pdb.set_trace()
+
+            resource_intervals[resource].add(interval)
+
+        return resource_intervals
 
     def __copy__(self):
         tasks = {}
