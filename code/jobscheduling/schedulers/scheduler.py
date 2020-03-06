@@ -43,7 +43,7 @@ def verify_schedule(tasks, schedule):
 
         # Check that the task's execution period adhere's to it's release and deadline times
         if start < t.a or end > t.d:
-            logger.warning("Found task {} that does not adhere to release/deadline constraints".format(t.name))
+            logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
             return False
 
         # Check that the start and end periods align with the tasks runtime

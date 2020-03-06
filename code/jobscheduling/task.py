@@ -86,7 +86,7 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
         global_itree |= resource_intervals[resource]
 
     global_itree.merge_overlaps()
-    preemption_points = list(sorted([interval.end for interval in global_itree if interval.end < budget_dag_task.c]))
+    preemption_points = list(sorted([interval.end for interval in global_itree if interval.end < budget_dag_task.a + budget_dag_task.c]))
     points_to_locked_resources = defaultdict(list)
     for point in preemption_points:
         for resource, itree in resource_intervals.items():
@@ -566,3 +566,29 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
                 task.add_parent(parent_task)
 
         return PeriodicResourceDAGTask(name=self.name, tasks=list(tasks.values()), p=self.p)
+
+
+class PeriodicBudgetResourceDAGTask(PeriodicResourceDAGTask):
+    def __init__(self, name, tasks, p, k=0):
+        super(PeriodicBudgetResourceDAGTask, self).__init__(name=name, tasks=tasks, p=p)
+        self.k = k
+
+    def __copy__(self):
+        tasks = {}
+        q = [t for t in self.sources]
+        while q:
+            original_task = q.pop(0)
+            task = tasks.get(original_task.name, copy(original_task))
+            tasks[task.name] = task
+
+            for original_child_task in original_task.children:
+                q.append(original_child_task)
+
+        for original_task in self.subtasks:
+            task = tasks[original_task.name]
+            for original_parent_task in original_task.parents:
+                parent_task = tasks[original_parent_task.name]
+                parent_task.add_child(task)
+                task.add_parent(parent_task)
+
+        return PeriodicBudgetResourceDAGTask(name=self.name, tasks=list(tasks.values()), p=self.p, k=self.k)

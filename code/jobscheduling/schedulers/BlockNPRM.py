@@ -10,7 +10,7 @@ from jobscheduling.task import get_lcm_for, ResourceTask, PeriodicResourceDAGTas
 logger = LSLogger()
 
 
-class MultiResourceBlockCEDFScheduler(Scheduler):
+class MultiResourceBlockNPRMScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
         return taskset
 
@@ -34,100 +34,29 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
         logger.debug("Computed hyperperiod {}".format(hyperperiod))
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
-        last_task_start = defaultdict(int)
+        last_task_start = dict([(t.name, 0) for t in original_taskset])
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
 
         taskset = self.initialize_taskset(taskset)
-        node_resources = topology[1].nodes
-
-        resource_critical_queue = defaultdict(list)
-        task_to_max_start = {}
-
-        for task in taskset:
-            original_taskname, _ = task.name.split('|')
-            task_to_max_start[original_taskname] = task.d - task.c
-            entry = (task.d - task.c, task)
-            for resource in task.resources:
-                resource_critical_queue[resource].append(entry)
 
         resource_schedules = defaultdict(list)
         global_resource_occupations = defaultdict(IntervalTree)
+        node_resources = topology[1].nodes
 
         # First sort the taskset by activation time
         logger.debug("Sorting tasks by earliest deadlines")
-        taskset = list(sorted(taskset, key=lambda task: task.d))
+        taskset = list(sorted(taskset, key=lambda task: taskset_lookup[task.name.split('|')[0]].p))
 
         schedule = []
         earliest = 0
         while taskset:
-            next_task = taskset[0]
-            next_task_original_name, instance = next_task.name.split('|')
-            next_task_last_start = last_task_start[next_task_original_name]
-
-            # Help out the scheduling by informing the earliest point at which the new task instance can be scheduled
-            next_task_earliest_start = max(next_task.a, next_task_last_start)
-
-            # Find the start time of this task
-            next_task_start_time = self.get_start_time(next_task, self.global_resource_occupations, node_resources, next_task_earliest_start)
-
-            # Find the next critical task with earliest that shares resources with next_task
-            max_start = float('inf')
-            next_critical_task = None
-            for resource in next_task.resources:
-                ms, nct = resource_critical_queue[resource][0]
-                if ms < max_start or next_critical_task is None:
-                    max_start = ms
-                    next_critical_task = nct
-
-            next_critical_task_original_name, instance = next_critical_task.name.split('|')
-            next_critical_task_last_start = last_task_start[next_critical_task_original_name]
-
-            next_task_earliest_start = max(next_critical_task.a, next_critical_task_last_start)
-            next_critical_task_start_time = self.get_start_time(next_critical_task, self.global_resource_occupations, node_resources, next_task_earliest_start)
-
-
-            # Check if starting next_task would cause next_critical_task to miss its latest start time
-            # Need to check if there is empty space in resource schedules?
-            if start_time + next_task.c > max_start and next_task != next_critical_task and next_critical_task_start_time <= max_start:
-                if (start_time + next_task.c) > (next_task.d - next_task.c):
-                    # Remove next_task from critical queue
-                    max_start = task_to_max_start[original_taskname]
-                    for resource in next_task.resources:
-                        critical_queue[resource].remove((max_start, next_task))
-
-                    new_max_start = next_task.a + next_task.c
-                    # Reinsert with updated max start time
-                    critical_queue.append((new_max_start, next_task))
-                    task_to_max_start[next_task.name] = new_max_start
-                    critical_queue = list(sorted(critical_queue))
-
-                next_task.a = next_critical_task.a + next_critical_task.c
-                taskset.append(next_task)
-                taskset = list(sorted(taskset, key=lambda task: task.a))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            next_task = taskset.pop(0)
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
-            start_time = self.get_start_time(next_task, global_resource_occupations, max([next_task.a, earliest, last_start]))
+            start_time = self.get_start_time(next_task, global_resource_occupations, node_resources, max([next_task.a, earliest, last_start]))
+            if start_time + next_task.c > next_task.d:
+                return None, False
 
             # Introduce a new instance into the taskset if necessary
             last_task_start[original_taskname] = start_time
@@ -136,7 +65,7 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             if instance < instance_count[original_taskname]:
                 periodic_task = taskset_lookup[original_taskname]
                 task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.a))
+                taskset = list(sorted(taskset + [task_instance], key=lambda task: taskset_lookup[task.name.split('|')[0]].p))
 
             # Add schedule information to resource schedules
             resource_intervals = defaultdict(list)
@@ -170,18 +99,21 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
         taskset = original_taskset
         return schedule, valid
 
-    def get_start_time(self, task, resource_occupations, earliest):
+    def get_start_time(self, task, resource_occupations, node_resources, earliest):
         # Find the earliest start
-        offset = self.find_earliest_start(task, resource_occupations, earliest)
+        offset = self.find_earliest_start(task, resource_occupations, node_resources, earliest)
         return offset
 
-    def find_earliest_start(self, task, resource_occupations, earliest):
+    def find_earliest_start(self, task, resource_occupations, node_resources, earliest):
         start = earliest
         distance_to_free = float('inf')
         while distance_to_free != 0:
-            sched_interval = Interval(start, start + task.c)
+            offset = start - task.a
+            resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+            task.resources = list(set(resource_relations.values()))
 
             distance_to_free = 0
+            sched_interval = Interval(start, start + task.c)
             for resource in task.resources:
                 intervals = sorted(resource_occupations[resource][sched_interval.begin:sched_interval.end])
                 if intervals:
@@ -192,8 +124,52 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
         return start
 
+    def map_task_resources(self, task, resource_occupations, node_resources, offset):
+        resource_relations = {}
+        for resource in task.resources:
+            resource_node, resource_id = resource.split('-')
+            resource_type = resource_id[0]
+            resource_string = self.get_resource_string(resource)
+            if not resource_relations.get(resource_string):
+                resource_relations[resource_string] = list(node_resources[resource_node][
+                                                               'comm_qs' if resource_type == "C" else "storage_qs"])
 
-class MultipleResourceBlockCEDFScheduler(Scheduler):
+        virtual_to_map = {}
+        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
+        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
+        for resource, itree in resource_intervals:
+            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
+            available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
+                                                                offset_itree)
+            dist, mapped = available_resources[0]
+            virtual_to_map[resource] = mapped
+            resource_string = self.get_resource_string(resource)
+            resource_relations[resource_string].remove(mapped)
+
+        return virtual_to_map
+
+    def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
+        resource_string = self.get_resource_string(resource)
+        possible_resources = resource_relations[resource_string]
+        available_resources = []
+        for pr in possible_resources:
+            dist = 0
+            for interval in itree:
+                intervals = sorted(resource_occupations[pr][interval.begin:interval.end])
+                if intervals:
+                    overlapping_interval = intervals[0]
+                    dist = max(dist, overlapping_interval.end - interval.begin)
+            available_resources.append((dist, pr))
+
+        return list(sorted(available_resources))
+
+    def get_resource_string(self, resource):
+        resource_node, resource_id = resource.split('-')
+        resource_type = resource_id[0]
+        return resource_node + resource_type
+
+
+class MultipleResourceBlockNPRMScheduler(Scheduler):
     def schedule_tasks(self, dagset, topology):
         # Convert DAGs into tasks
         tasks = {}
@@ -220,10 +196,10 @@ class MultipleResourceBlockCEDFScheduler(Scheduler):
             tasksets.append(taskset)
 
         # For each set of tasks use NPEDFScheduler
-        scheduler = MultiResourceBlockNPEDFScheduler()
+        scheduler = MultiResourceBlockNPRMScheduler()
         schedules = []
         for taskset in tasksets:
-            schedule, valid = scheduler.schedule_tasks(taskset)
+            schedule, valid = scheduler.schedule_tasks(taskset, topology)
             schedules.append((taskset, schedule, valid))
 
         # Set of schedules is the schedule for each group of resources

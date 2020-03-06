@@ -8,9 +8,11 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
-from jobscheduling.schedulers.CEDF import MultipleResourceBlockCEDFScheduler
+from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
 from jobscheduling.schedulers.BlockNPEDF import MultipleResourceBlockNPEDFScheduler
+from jobscheduling.schedulers.BlockNPRM import MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.PBEDF import PreemptionBudgetScheduler
+from jobscheduling.schedulers.BlockPBEDF import MultipleResourceBlockPreemptionBudgetScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
 
@@ -148,10 +150,11 @@ def gen_topologies(n, num_comm_q=1, num_storage_q=1):
 
 def get_schedulers():
     schedulers = [
-        # MultipleResourceOptimalBlockScheduler,
-        MultipleResourceBlockNPEDFScheduler,
-        MultipleResourceNonBlockNPEDFScheduler,
-        MultipleResourceBlockCEDFScheduler
+        # MultipleResourceBlockNPEDFScheduler,
+        # MultipleResourceBlockNPRMScheduler,
+        # MultipleResourceNonBlockNPEDFScheduler,
+        # MultipleResourceNonBlockNPRMScheduler,
+        MultipleResourceBlockPreemptionBudgetScheduler
     ]
     return schedulers
 
@@ -274,14 +277,6 @@ def main():
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
-        import pdb
-        from jobscheduling.task import find_dag_task_preemption_points
-        from jobscheduling.protocols import print_resource_schedules
-        for dagtask in taskset:
-            print_resource_schedules(dagtask.get_resource_schedules())
-            print(find_dag_task_preemption_points(dagtask))
-            pdb.set_trace()
-
         # Use all schedulers
         for scheduler_class in network_schedulers:
             scheduler = scheduler_class()
@@ -298,14 +293,15 @@ def main():
                     logger.debug("Scheduling tasks with {}".format(results_key))
                     schedule = scheduler.schedule_tasks(running_taskset + [task], topology)
                     if schedule:
-                        for sub_taskset, sub_schedule, valid in schedule:
-                            logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
-
                         # Record success
                         if all([valid for _, _, valid in schedule]):
                             running_taskset.append(task)
                             print(len(running_taskset))
                             last_succ_schedule = schedule
+                            for sub_taskset, sub_schedule, valid in schedule:
+                                logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(
+                                    len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
+
 
                     else:
                         logger.info("Failed to create a schedule for taskset")
@@ -319,7 +315,7 @@ def main():
                 results[results_key] = scheduler_results
                 logger.info("{} scheduled {} tasks".format(results_key, scheduler_results))
                 for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                    schedule_and_resource_timelines(sub_taskset, sub_schedule)
+                    schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 
                 import pdb
                 pdb.set_trace()

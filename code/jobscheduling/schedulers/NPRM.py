@@ -11,47 +11,7 @@ from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, Reso
 logger = LSLogger()
 
 
-class NPEDFScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def schedule_tasks(self, taskset):
-        original_taskset = taskset
-        taskset = self.preprocess_taskset(taskset)
-        queue = PriorityQueue()
-        schedule = []
-
-        # First sort the taskset by activation time
-        taskset = list(sorted(taskset, key=lambda task: task.a))
-
-        # Let time evolve and simulate scheduling, start at first task
-        curr_time = taskset[0].a
-        while taskset or not queue.empty():
-            while taskset and taskset[0].a <= curr_time:
-                task = taskset.pop(0)
-                queue.put((task.d, task))
-
-            if not queue.empty():
-                priority, next_task = queue.get()
-                schedule.append((curr_time, curr_time + next_task.c, next_task))
-                curr_time += next_task.c
-
-            elif taskset:
-                curr_time = taskset[0].a
-
-        # Check validity
-        valid = True
-        for start, end, task in schedule:
-            if task.d < end:
-                valid = False
-        taskset = original_taskset
-        return schedule, valid
-
-    def check_feasibility(self, taskset):
-        pass
-
-
-class MultiResourceNPEDFScheduler(Scheduler):
+class MultiResourceNPRMScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
         return taskset
 
@@ -86,7 +46,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
         # Initialize the active taskset to one instance of all periodic tasks, track the last time each instance started
         taskset = self.initialize_taskset(taskset)
-        last_task_start = defaultdict(int)
+        last_task_start = dict([(t.name, 0) for t in original_taskset])
 
         # Track the occupation periods of the resources
         global_resource_occupations = defaultdict(IntervalTree)
@@ -94,7 +54,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
         # Sort the initial taskset by deadline
         logger.debug("Sorting tasks by earliest deadlines")
-        taskset = list(sorted(taskset, key=lambda task: task.d))
+        taskset = list(sorted(taskset, key=lambda task: taskset_lookup[task.name.split('|')[0]].p))
 
         # Track the schedule
         schedule = []
@@ -120,7 +80,7 @@ class MultiResourceNPEDFScheduler(Scheduler):
             if instance < instance_count[original_taskname]:
                 periodic_task = taskset_lookup[original_taskname]
                 task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.d))
+                taskset = list(sorted(taskset + [task_instance], key=lambda task: taskset_lookup[task.name.split('|')[0]].p))
 
             # Construct the intervals that the resources are in use by this task
             resource_interval_trees = {}
@@ -266,16 +226,11 @@ class MultiResourceNPEDFScheduler(Scheduler):
         return False
 
 
-class PeriodicNPEDFScheduler(NPEDFScheduler):
-    def preprocess_taskset(self, taskset):
-        return generate_non_periodic_task_set(taskset)
-
-
-class PeriodicMultipleResourceNPEDFScheduler(MultiResourceNPEDFScheduler):
+class PeriodicMultipleResourceNPRMScheduler(MultiResourceNPRMScheduler):
     pass
 
 
-class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
+class MultipleResourceNonBlockNPRMScheduler(Scheduler):
     def schedule_tasks(self, dagset, topology):
         # Convert DAGs into tasks
         tasks = {}
@@ -302,7 +257,7 @@ class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
             tasksets.append(taskset)
 
         # For each set of tasks use NPEDFScheduler
-        scheduler = PeriodicMultipleResourceNPEDFScheduler()
+        scheduler = PeriodicMultipleResourceNPRMScheduler()
         schedules = []
         for taskset in tasksets:
             schedule, valid = scheduler.schedule_tasks(taskset, topology)

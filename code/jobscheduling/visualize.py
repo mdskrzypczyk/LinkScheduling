@@ -92,7 +92,7 @@ def resource_timeline(taskset, schedule):
     ax.set_yticklabels([r for r in resources])
     plt.show()
 
-def schedule_and_resource_timelines(taskset, schedule):
+def schedule_and_resource_timelines(taskset, schedule, plot_title=None):
     task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
 
@@ -154,4 +154,6 @@ def schedule_and_resource_timelines(taskset, schedule):
     axs[1].set_yticks(list(range(1, len(resources) + 1)))
     axs[1].set_yticklabels([r for r in resources])
 
+    if plot_title:
+        plt.title(plot_title)
     plt.show()

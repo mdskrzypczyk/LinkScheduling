@@ -1,6 +1,3 @@
-from collections import defaultdict
-from copy import copy
-from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler
