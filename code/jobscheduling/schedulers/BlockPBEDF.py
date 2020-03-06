@@ -5,7 +5,7 @@ from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, find_dag_task_preemption_points, BudgetTask, BudgetResourceDAGTask, PeriodicBudgetResourceDAGTask
+from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, find_dag_task_preemption_points, BudgetTask, BudgetResourceTask, PeriodicBudgetResourceDAGTask
 
 
 logger = LSLogger()
@@ -265,9 +265,9 @@ class MultiResourceBlockPreemptionBudgetScheduler(Scheduler):
         release_offset = dag_copy.a + dag_copy.p * instance
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
-        dag_instance = BudgetResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset,
-                                             d=dag_copy.a + dag_copy.p * (instance + 1), tasks=dag_copy.subtasks,
-                                             k=periodic_task.k)
+        dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
+                                          d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources,
+                                          k=periodic_task.k)
         return dag_instance
 
     def schedule_tasks(self, taskset, topology):
@@ -298,6 +298,8 @@ class MultiResourceBlockPreemptionBudgetScheduler(Scheduler):
             start_time = self.get_start_time(next_task, global_resource_occupations, node_resources,
                                              max([next_task.a, earliest, last_start]))
             if start_time + next_task.c > next_task.d:
+                from jobscheduling.visualize import schedule_and_resource_timelines
+                from jobscheduling.protocols import print_resource_schedules
                 import pdb
                 pdb.set_trace()
                 return None, False

@@ -90,7 +90,7 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
                     global_resource_occupations[resource].merge_overlaps(strict=False)
 
         # Check validity
-        valid = verify_schedule()
+        valid = verify_schedule(original_taskset, schedule)
 
         taskset = original_taskset
         return schedule, valid
