@@ -179,7 +179,7 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
             # TODO: What task should be selected?
             j_starts = []
-            for resource in taskset_lookup[original_taskname].resources:
+            for resource in task_i.resources:
                 sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
                 j_start = self.get_start_time(task_i, global_resource_occupations, node_resources, max([sj_min, earliest, last_start]))
                 if j_start + task_j.c > task_j.d:
