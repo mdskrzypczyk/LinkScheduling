@@ -11,46 +11,6 @@ from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, Reso
 logger = LSLogger()
 
 
-class NPEDFScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def schedule_tasks(self, taskset):
-        original_taskset = taskset
-        taskset = self.preprocess_taskset(taskset)
-        queue = PriorityQueue()
-        schedule = []
-
-        # First sort the taskset by activation time
-        taskset = list(sorted(taskset, key=lambda task: task.a))
-
-        # Let time evolve and simulate scheduling, start at first task
-        curr_time = taskset[0].a
-        while taskset or not queue.empty():
-            while taskset and taskset[0].a <= curr_time:
-                task = taskset.pop(0)
-                queue.put((task.d, task))
-
-            if not queue.empty():
-                priority, next_task = queue.get()
-                schedule.append((curr_time, curr_time + next_task.c, next_task))
-                curr_time += next_task.c
-
-            elif taskset:
-                curr_time = taskset[0].a
-
-        # Check validity
-        valid = True
-        for start, end, task in schedule:
-            if task.d < end:
-                valid = False
-        taskset = original_taskset
-        return schedule, valid
-
-    def check_feasibility(self, taskset):
-        pass
-
-
 class MultiResourceNPEDFScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
         return taskset
@@ -264,11 +224,6 @@ class MultiResourceNPEDFScheduler(Scheduler):
                 return True
 
         return False
-
-
-class PeriodicNPEDFScheduler(NPEDFScheduler):
-    def preprocess_taskset(self, taskset):
-        return generate_non_periodic_task_set(taskset)
 
 
 class PeriodicMultipleResourceNPEDFScheduler(MultiResourceNPEDFScheduler):

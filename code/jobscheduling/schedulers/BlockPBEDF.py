@@ -25,7 +25,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
         self.schedule = []
 
         # First sort the taskset by activation time
-        self.taskset = list(sorted(taskset, key=lambda task: task.a))
+        self.taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
 
         # Let time evolve and simulate scheduling, start at first task
         self.curr_time = taskset[0].a
@@ -146,7 +146,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
 
         valid = self.check_feasible(self.schedule, taskset_copy)
         taskset = original_taskset
-        return self.schedule, valid
+        return [(taskset, self.schedule, valid)]
 
     def check_feasible(self, schedule, taskset):
         # Check validity

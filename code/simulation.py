@@ -9,8 +9,9 @@ from jobscheduling.protocolgen import create_protocol, LinkProtocol, Distillatio
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
-from jobscheduling.schedulers.BlockNPEDF import MultipleResourceBlockNPEDFScheduler
-from jobscheduling.schedulers.BlockNPRM import MultipleResourceBlockNPRMScheduler
+from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
+from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
+from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler
 from jobscheduling.schedulers.PBEDF import PreemptionBudgetScheduler
 from jobscheduling.schedulers.BlockPBEDF import MultipleResourceBlockPreemptionBudgetScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
@@ -150,6 +151,9 @@ def gen_topologies(n, num_comm_q=1, num_storage_q=1):
 
 def get_schedulers():
     schedulers = [
+        UniResourceBlockNPEDFScheduler,
+        UniResourceCEDFScheduler,
+        UniResourceBlockNPRMScheduler,
         # MultipleResourceBlockNPEDFScheduler,
         # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
@@ -215,7 +219,7 @@ def verify_schedule(tasks, schedule):
     return True
 
 def main():
-    num_network_nodes = 4
+    num_network_nodes = 20
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
@@ -231,7 +235,7 @@ def main():
             logger.info("Generating taskset {}".format(i))
 
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 100)
+            demands = get_network_demands(topology, 200)
 
             logger.info("Demands: {}".format(demands))
 

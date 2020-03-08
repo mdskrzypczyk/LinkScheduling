@@ -2,12 +2,87 @@ import networkx as nx
 from copy import copy
 from collections import defaultdict
 from intervaltree import Interval, IntervalTree
+from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, ResourceTask, PeriodicResourceDAGTask
+from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, ResourceTask, PeriodicResourceDAGTask
 
 
 logger = LSLogger()
+
+
+class UniResourceBlockNPEDFScheduler(Scheduler):
+    def preprocess_taskset(self, taskset):
+        return taskset
+
+    def create_new_task_instance(self, periodic_task, instance):
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p*instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
+        dag_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
+                                    d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
+        return dag_instance
+
+    def initialize_taskset(self, tasks):
+        initial_tasks = []
+        for task in tasks:
+            task_instance = self.create_new_task_instance(task, 0)
+            initial_tasks.append(task_instance)
+
+        return initial_tasks
+
+    def schedule_tasks(self, taskset, topology):
+        original_taskset = taskset
+        taskset = self.preprocess_taskset(taskset)
+        queue = PriorityQueue()
+        schedule = []
+
+        # First sort the taskset by activation time
+        hyperperiod = get_lcm_for([t.p for t in original_taskset])
+        taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
+        taskset = self.initialize_taskset(taskset)
+        taskset = sorted(taskset, key=lambda task: (task.a, task.d))
+
+        # Let time evolve and simulate scheduling, start at first task
+        curr_time = taskset[0].a
+        while taskset or not queue.empty():
+            while taskset and taskset[0].a <= curr_time:
+                task = taskset.pop(0)
+                queue.put((task.d, task))
+
+            if not queue.empty():
+                priority, next_task = queue.get()
+                schedule.append((curr_time, curr_time + next_task.c, next_task))
+                original_taskname, instance = next_task.name.split('|')
+                instance = int(instance)
+                if instance < instance_count[original_taskname]:
+                    periodic_task = taskset_lookup[original_taskname]
+                    task_instance = self.create_new_task_instance(periodic_task, instance + 1)
+                    taskset = list(sorted(taskset + [task_instance], key=lambda task: (task.a, task.d)))
+
+                curr_time += next_task.c
+
+            elif taskset:
+                curr_time = taskset[0].a
+
+        # Check validity
+        valid = True
+        for start, end, task in schedule:
+            if task.d < end:
+                valid = False
+        taskset = original_taskset
+
+        return [(taskset, schedule, valid)]
+
+    def check_feasibility(self, taskset):
+        pass
+
+
+class PeriodicUniResourceBlockNPEDFScheduler(UniResourceBlockNPEDFScheduler):
+    def preprocess_taskset(self, taskset):
+        return generate_non_periodic_task_set(taskset)
 
 
 class MultiResourceBlockNPEDFScheduler(Scheduler):

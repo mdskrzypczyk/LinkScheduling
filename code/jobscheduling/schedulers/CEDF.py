@@ -1,7 +1,9 @@
 import networkx as nx
+from copy import copy
 from queue import PriorityQueue
-from jobscheduling.schedulers.scheduler import Scheduler
-from jobscheduling.task import PeriodicResourceTask, generate_non_periodic_task_set
+from jobscheduling.schedulers.avl_tree import AVLTree
+from jobscheduling.schedulers.scheduler import Scheduler, get_lcm_for
+from jobscheduling.task import PeriodicResourceTask, generate_non_periodic_task_set, ResourceTask
 
 
 class CEDFScheduler:
@@ -88,6 +90,112 @@ class CEDFScheduler:
 
     def preprocess_taskset(self, taskset):
         return taskset
+
+
+class UniResourceCEDFScheduler:
+    def preprocess_taskset(self, taskset):
+        return taskset
+
+    def create_new_task_instance(self, periodic_task, instance):
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p * instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
+        dag_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
+                                    d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
+        return dag_instance
+
+    def initialize_taskset(self, tasks):
+        initial_tasks = []
+        for task in tasks:
+            task_instance = self.create_new_task_instance(task, 0)
+            initial_tasks.append(task_instance)
+
+        return initial_tasks
+
+    def schedule_tasks(self, taskset, topology):
+        ready_queue = PriorityQueue()
+        critical_queue = AVLTree()
+        index_structure = dict()
+        schedule = []
+
+        # First sort the taskset by activation time
+        original_taskset = taskset
+        hyperperiod = get_lcm_for([t.p for t in original_taskset])
+        taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
+        taskset = self.initialize_taskset(taskset)
+
+        taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+        for task in taskset:
+            s_min = task.a
+            s_max = task.d - task.c
+            original_taskname, instance = task.name.split('|')
+            key = (s_max, original_taskname)
+            index_structure[original_taskname] = [s_min, s_max, task, (s_max, original_taskname)]
+            critical_queue.insert(key=key, data=index_structure[original_taskname])
+
+        # Let time evolve and simulate scheduling, start at first task
+        curr_time = taskset[0].a
+        while taskset or not critical_queue.is_empty():
+            while taskset and taskset[0].a <= curr_time:
+                task = taskset.pop(0)
+                ready_queue.put((task.d, task))
+
+            if not ready_queue.empty():
+                _, task_i = ready_queue.get()
+                original_taskname, instance = task_i.name.split('|')
+                si_min, si_max, _, ck_i = index_structure[original_taskname]
+                sj_min, sj_max, task_j, ck_j = critical_queue.minimum().data
+
+                if si_min + task_i.c > sj_max and task_i != task_j and sj_min <= sj_max:
+                    if si_min + task_i.c > si_max:
+                        # Remove task_i from critical queue
+                        critical_queue.delete(key=ck_i)
+
+                        # Reinsert
+                        ck_i = ((si_min + task_i.c), original_taskname)
+                        index_structure[original_taskname] = [si_min, si_max, task_i, ck_i]
+                        critical_queue.insert(key=ck_i, data=index_structure[original_taskname], note=si_max)
+
+                    index_structure[original_taskname][0] = sj_min + task_j.c
+                    task_i.a = sj_min + task_j.c
+                    taskset.append(task_i)
+                    taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+
+                else:
+                    # Remove next_task from critical queue
+                    critical_queue.delete(ck_i)
+                    schedule.append((curr_time, curr_time + task_i.c, task_i))
+                    instance = int(instance)
+                    if instance < instance_count[original_taskname]:
+                        periodic_task = taskset_lookup[original_taskname]
+                        task_instance = self.create_new_task_instance(periodic_task, instance + 1)
+                        taskset = list(sorted(taskset + [task_instance], key=lambda task: (task.a, task.d)))
+                        s_min = task_instance.a
+                        s_max = task_instance.d - task_instance.c
+                        key = (s_max, original_taskname)
+                        index_structure[original_taskname] = [s_min, s_max, task_instance, key]
+                        critical_queue.insert(key=key, data=index_structure[original_taskname])
+
+                    curr_time += task_i.c
+
+            elif taskset and ready_queue.empty():
+                repeat = 0
+                taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+                curr_time = taskset[0].a
+
+        # Check validity
+        valid = True
+        for start, end, task in schedule:
+            if task.d < end:
+                # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
+                valid = False
+
+        return [(original_taskset, schedule, valid)]
+
+    def check_feasibility(self, taskset):
+        pass
 
 
 class PeriodicCEDFScheduler(CEDFScheduler):
