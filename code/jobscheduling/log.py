@@ -2,7 +2,6 @@ import logging
 
 LOG_LEVEL = logging.INFO
 FORMAT = '%(levelname)s - %(name)s - %(message)s'
-FILENAME = "log"
 logging.basicConfig(format=FORMAT)
 
 
@@ -19,6 +18,7 @@ class LSLogger:
         self.logger.warning(message)
 
     def info(self, message):
+        print(message)
         self.logger.info(message)
 
     def debug(self, message):

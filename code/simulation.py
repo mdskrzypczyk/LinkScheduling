@@ -7,12 +7,13 @@ from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
+from jobscheduling.schedulers.scheduler import get_lcm_for
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
-from jobscheduling.schedulers.PBEDF import PreemptionBudgetScheduler
+from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler
 from jobscheduling.schedulers.BlockPBEDF import MultipleResourceBlockPreemptionBudgetScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
@@ -151,15 +152,16 @@ def gen_topologies(n, num_comm_q=1, num_storage_q=1):
 
 def get_schedulers():
     schedulers = [
-        # UniResourceBlockNPEDFScheduler,
-        # UniResourceCEDFScheduler,
-        # UniResourceBlockNPRMScheduler,
-        MultipleResourceBlockCEDFScheduler,
-        MultipleResourceBlockNPEDFScheduler,
+        UniResourcePreemptionBudgetScheduler,
+        UniResourceBlockNPEDFScheduler,
+        UniResourceBlockNPRMScheduler,
+        UniResourceCEDFScheduler,
+        # MultipleResourceBlockCEDFScheduler,
+        # MultipleResourceBlockNPEDFScheduler,
         # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
-        MultipleResourceBlockPreemptionBudgetScheduler
+        # MultipleResourceBlockPreemptionBudgetScheduler
     ]
     return schedulers
 
@@ -225,9 +227,9 @@ def main():
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
     network_topologies = gen_topologies(num_network_nodes)
+    slot_size = 0.05
 
     network_schedulers = get_schedulers()
-    schedule_validator = PreemptionBudgetScheduler()
     results = {}
     for topology in network_topologies:
         network_tasksets = []
@@ -236,7 +238,7 @@ def main():
             logger.info("Generating taskset {}".format(i))
 
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 100)
+            demands = get_network_demands(topology, 200)
 
             logger.info("Demands: {}".format(demands))
 
@@ -250,7 +252,6 @@ def main():
                     continue
 
                 logger.debug("Converting protocol for request {} to task".format(demand))
-                slot_size = 0.05
                 task = convert_protocol_to_task(demand, protocol, slot_size)
 
                 logger.debug("Scheduling task for request {}".format(demand))
@@ -290,7 +291,7 @@ def main():
 
             # Run scheduler on all task sets
             for i in range(num_tasksets):
-                taskset = network_tasksets[i]
+                taskset = sorted(network_tasksets[i], key=lambda task: -task.p)
                 running_taskset = []
                 last_succ_schedule = None
                 start = time.time()
@@ -306,7 +307,8 @@ def main():
                             for sub_taskset, sub_schedule, valid in schedule:
                                 logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(
                                     len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
-
+                        else:
+                            print("Could not add task")
 
                     else:
                         logger.info("Failed to create a schedule for taskset")
@@ -319,6 +321,20 @@ def main():
                 scheduler_results = len(running_taskset)
                 results[results_key] = scheduler_results
                 logger.info("{} scheduled {} tasks".format(results_key, scheduler_results))
+                logger.info("Taskset statistics:")
+                logger.info("Rates: ")
+                rate_dict = defaultdict(int)
+                num_pairs = 0
+
+                for task in running_taskset:
+                    rate_dict[1/task.p] += 1
+
+                hyperperiod = get_lcm_for([t.p for t in running_taskset])
+                for rate in sorted(rate_dict.keys()):
+                    num_pairs += rate_dict[rate] * hyperperiod * rate
+                    logger.info("{}: {}".format(rate, rate_dict[rate]))
+                throughput = sum([num_pairs / (slot_size * max([slot_info[1] for slot_info in sub_schedule])) for _, sub_schedule, _ in last_succ_schedule])
+                logger.info("Network Throughput: {} ebit/s".format(throughput))
                 for sub_taskset, sub_schedule, _ in last_succ_schedule:
                     schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 

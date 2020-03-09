@@ -3,7 +3,7 @@ from collections import defaultdict
 from math import ceil
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
-from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicResourceDAGTask
+from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask
 from jobscheduling.visualize import draw_DAG
 from intervaltree import Interval, IntervalTree
 
@@ -80,8 +80,8 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
                 last_action, _ = stack.pop()
 
     source, dest, fidelity, rate = request
-    main_dag_task = PeriodicResourceDAGTask(name="S={}, D={}, F={}, R={}".format(source, dest, fidelity, rate), tasks=tasks,
-                                            p=ceil(1 / rate / slot_size))
+    main_dag_task = PeriodicBudgetResourceDAGTask(name="S={}, D={}, F={}, R={}".format(source, dest, fidelity, rate), tasks=tasks,
+                                                  p=ceil(1 / rate / slot_size), k=6)
     return main_dag_task
 
 

@@ -4,37 +4,70 @@ from copy import copy
 from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
-from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
+from jobscheduling.schedulers.scheduler import Scheduler, verify_budget_schedule
 from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, find_dag_task_preemption_points, BudgetTask, BudgetResourceTask, PeriodicBudgetResourceDAGTask
 
 
 logger = LSLogger()
 
 
-class PreemptionBudgetSchedulerNew(Scheduler):
+class UniResourcePreemptionBudgetScheduler(Scheduler):
     def preprocess_taskset(self, taskset):
         return taskset
 
-    def schedule_tasks(self, taskset):
+    def create_new_task_instance(self, periodic_task, instance):
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p * instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
+        dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
+                                          d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources,
+                                          k=dag_copy.k)
+        if dag_instance.d is None:
+            import pdb
+            pdb.set_trace()
+        return dag_instance
+
+    def initialize_taskset(self, tasks):
+        initial_tasks = []
+        for task in tasks:
+            task_instance = self.create_new_task_instance(task, 0)
+            initial_tasks.append(task_instance)
+
+        return initial_tasks
+
+    def schedule_tasks(self, taskset, topology):
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
-        taskset_copy = [BudgetTask(name=task.name, a=task.a, c=task.c, d=task.d, k=task.k) for task in taskset]
         self.ready_queue = PriorityQueue()
         self.active_queue = []
         self.curr_task = None
         self.schedule = []
 
         # First sort the taskset by activation time
-        self.taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+        hyperperiod = get_lcm_for([t.p for t in original_taskset])
+        self.taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        self.instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
+        self.taskset = self.initialize_taskset(taskset)
+
+        self.taskset = list(sorted(self.taskset, key=lambda task: (task.a, task.d)))
 
         # Let time evolve and simulate scheduling, start at first task
-        self.curr_time = taskset[0].a
-        while self.taskset or not self.ready_queue.empty():
+        self.curr_time = self.taskset[0].a
+        while self.taskset or not self.ready_queue.empty() or self.active_queue:
             # Get all released tasks into the ready queue
             self.populate_ready_queue()
 
+            print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
+            print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
+            print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
+
             # Only need to worry about the active tasks (if any)
             if self.ready_queue.empty() or self.active_queue and self.active_queue[0][0].k <= 0:
+                if self.active_queue and self.active_queue[0][0].k < 0:
+                    import pdb
+                    pdb.set_trace()
+
                 # If there is a current task resume it
                 if self.curr_task:
                     preempt = self.active_queue and self.active_queue[0][0].k <= 0 and self.curr_task.k > 0
@@ -110,11 +143,14 @@ class PreemptionBudgetSchedulerNew(Scheduler):
                         preempt = False
 
                     # If conditions satisfied preempt the task and run
+                    # TODO: Force preemption after max_t
                     if preempt:
-                        next_ready_task.k = min(next_ready_task.k, next_ready_task.d - next_ready_task.c - cumulative_comp_time[earliest_idx] - self.curr_time)
+                        # next_ready_task.k = min(next_ready_task.k, next_ready_task.d - next_ready_task.c - cumulative_comp_time[earliest_idx] - self.curr_time)
                         if self.curr_task:
                             self.preempt_curr_task()
                         self.schedule_until_next_event(next_ready_task, max_t)
+                        if self.curr_task:
+                            self.preempt_curr_task()
 
                     # Otherwise run the current task or consume the active queue
                     else:
@@ -136,15 +172,17 @@ class PreemptionBudgetSchedulerNew(Scheduler):
                             self.curr_time = self.taskset[0].a
 
                 else:
-                    next_ready_task.k = min(next_ready_task.k,
-                                            next_ready_task.d - next_ready_task.c - self.curr_time)
+                    # next_ready_task.k = min(next_ready_task.k, next_ready_task.d - next_ready_task.c - self.curr_time)
                     if self.curr_task:
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
         self.merge_adjacent_entries()
-
-        valid = self.check_feasible(self.schedule, taskset_copy)
+        for _, _, t in self.schedule:
+            original_taskname, _ = t.name.split('|')
+            t.c = self.taskset_lookup[original_taskname].c
+            t.k = self.taskset_lookup[original_taskname].k
+        valid = verify_budget_schedule(original_taskset, self.schedule)
         taskset = original_taskset
         return [(taskset, self.schedule, valid)]
 
@@ -213,7 +251,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
             task.k -= time
 
     def add_to_schedule(self, task, duration):
-        super(PreemptionBudgetSchedulerNew, self).add_to_schedule(task, duration)
+        super(UniResourcePreemptionBudgetScheduler, self).add_to_schedule(task, duration)
         self.update_active_queue(duration)
 
     def schedule_until_next_event(self, task, ttne=None):
@@ -224,7 +262,7 @@ class PreemptionBudgetSchedulerNew(Scheduler):
         ttnr = 1 if not self.ready_queue.empty() else float('inf')
 
         # Time To Empty Budget in active queue
-        ttb = min(1, self.active_queue[0][0].k) if self.active_queue and task.k > 0 else float('inf')
+        ttb = self.active_queue[0][0].k if self.active_queue and task.k > 0 else float('inf')
 
         # Time to task completion
         ttc = task.c
@@ -235,16 +273,22 @@ class PreemptionBudgetSchedulerNew(Scheduler):
         # Schedule this task to run until the next scheduling decision
         proc_time = min(ttr, ttnr, ttb, ttc, ttp)
         if ttne is not None:
-            proc_time = min(proc_time, ttne)
+            proc_time = ttne
 
+        print("Scheduling {} for {}".format(task.name, proc_time))
         self.add_to_schedule(task, proc_time)
-
         # If the amount of time the task is run does not allow it to complete, it will be the current task at the time
         # of the next scheduling decision
         if proc_time < task.c:
             task.c -= proc_time
             self.curr_task = task
         else:
+            original_taskname, instance = task.name.split('|')
+            instance = int(instance)
+            if instance < self.instance_count[original_taskname]:
+                periodic_task = self.taskset_lookup[original_taskname]
+                task_instance = self.create_new_task_instance(periodic_task, instance + 1)
+                self.taskset = list(sorted(self.taskset + [task_instance], key=lambda task: (task.a, task.d)))
             self.curr_task = None
 
 
@@ -298,10 +342,6 @@ class MultiResourceBlockPreemptionBudgetScheduler(Scheduler):
             start_time = self.get_start_time(next_task, global_resource_occupations, node_resources,
                                              max([next_task.a, earliest, last_start]))
             if start_time + next_task.c > next_task.d:
-                from jobscheduling.visualize import schedule_and_resource_timelines
-                from jobscheduling.protocols import print_resource_schedules
-                import pdb
-                pdb.set_trace()
                 return None, False
 
             # Introduce a new instance into the taskset if necessary

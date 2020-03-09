@@ -591,4 +591,4 @@ class PeriodicBudgetResourceDAGTask(PeriodicResourceDAGTask):
                 parent_task.add_child(task)
                 task.add_parent(parent_task)
 
-        return PeriodicBudgetResourceDAGTask(name=self.name, tasks=list(tasks.values()), p=self.p, k=self.k)
+        return PeriodicBudgetResourceDAGTask(name=self.name, tasks=list(tasks.values()), p=int(self.p), k=int(self.k))

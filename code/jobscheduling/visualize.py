@@ -92,7 +92,7 @@ def resource_timeline(taskset, schedule):
     ax.set_yticklabels([r for r in resources])
     plt.show()
 
-def schedule_and_resource_timelines(taskset, schedule, plot_title=None):
+def schedule_and_resource_timelines(taskset, schedule, plot_title=None, plot_sep=True, save_plot=False):
     task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
 
@@ -121,14 +121,14 @@ def schedule_and_resource_timelines(taskset, schedule, plot_title=None):
     verts = []
     colors = []
     for d in schedule:
-        task_start, _, t = d
+        task_start, task_end, t = d
         name = get_original_taskname(t)
         resource_intervals = t.get_resource_intervals()
         for r, itree in resource_intervals.items():
             itree.merge_overlaps(strict=False)
             for interval in itree:
                 s = interval.begin + task_start - t.a
-                e = interval.end + task_start - t.a
+                e = min(task_end, interval.end + task_start - t.a)
                 v = [
                     (s, resource_cats[r] - .4),
                     (s, resource_cats[r] + .4),
@@ -141,19 +141,50 @@ def schedule_and_resource_timelines(taskset, schedule, plot_title=None):
 
     resource_bars = PolyCollection(verts, facecolors=colors)
 
-    fig, axs = plt.subplots(2)
-    axs[0].add_collection(task_bars)
-    axs[0].autoscale()
+    if plot_sep:
+        fig, ax = plt.subplots()
+        ax.add_collection(task_bars)
+        ax.autoscale()
 
-    axs[0].set_yticks(list(range(1, len(taskset) + 1)))
-    axs[0].set_yticklabels([t.name for t in taskset])
+        ax.set_yticks(list(range(1, len(taskset) + 1)))
+        ax.set_yticklabels([t.name for t in taskset])
+        if plot_title:
+            plt.title(plot_title)
+        if save_plot and plot_title:
+            plt.savefig(fname="{}_tasks.png".format(plot_title))
+        else:
+            plt.show()
 
-    axs[1].add_collection(resource_bars)
-    axs[1].autoscale()
+        fig, ax = plt.subplots()
+        ax.add_collection(resource_bars)
+        ax.autoscale()
 
-    axs[1].set_yticks(list(range(1, len(resources) + 1)))
-    axs[1].set_yticklabels([r for r in resources])
+        ax.set_yticks(list(range(1, len(resources) + 1)))
+        ax.set_yticklabels([r for r in resources])
+        if plot_title:
+            plt.title(plot_title)
+        if save_plot and plot_title:
+            plt.savefig(fname="{}_resources.png".format(plot_title))
+        else:
+            plt.show()
 
-    if plot_title:
-        plt.title(plot_title)
-    plt.show()
+    else:
+        fig, axs = plt.subplots(2)
+        axs[0].add_collection(task_bars)
+        axs[0].autoscale()
+
+        axs[0].set_yticks(list(range(1, len(taskset) + 1)))
+        axs[0].set_yticklabels([t.name for t in taskset])
+
+        axs[1].add_collection(resource_bars)
+        axs[1].autoscale()
+
+        axs[1].set_yticks(list(range(1, len(resources) + 1)))
+        axs[1].set_yticklabels([r for r in resources])
+
+        if plot_title:
+            plt.title(plot_title)
+        if save_plot and plot_title:
+            plt.savefig(fname="{}.png".format(plot_title))
+        else:
+            plt.show()

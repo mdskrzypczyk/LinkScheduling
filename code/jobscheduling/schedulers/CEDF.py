@@ -167,6 +167,7 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
         schedule = []
         earliest = 0
+        repeat = 0
         while taskset:
             task_i = taskset.pop(0)
             original_taskname, instance = task_i.name.split('|')
@@ -177,27 +178,32 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             if start_time + task_i.c > task_i.d:
                 return None, False
 
-            # TODO: What task should be selected?
             j_starts = []
-            for resource in task_i.resources:
+            for resource in taskset_lookup[original_taskname].resources:
                 sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
                 j_start = self.get_start_time(task_i, global_resource_occupations, node_resources, max([sj_min, earliest, last_start]))
-                if j_start + task_j.c > task_j.d:
-                    return None, False
+                index_structure[ck_j][0] = j_start
+                sj_min = j_start
+                # if j_start + task_j.c > task_j.d:
+                #     return None, False
 
                 j_starts.append((j_start, sj_min, sj_max, task_j, ck_j))
 
             j_start, sj_min, sj_max, task_j, ck_j = sorted(j_starts)[0]
 
-            if start_time + task_i.c > sj_max and task_i != task_j and j_start <= sj_max:
+            if start_time + task_i.c > sj_max and task_i != task_j and j_start <= sj_max and start_time <= sj_min:
+                repeat += 1
+                if repeat > 100:
+                    import pdb
+                    pdb.set_trace()
                 if si_min + task_i.c > si_max:
-                    ck_i = ((si_min + task_i.c), original_taskname)
-                    index_structure[original_taskname] = [si_min, si_max, task_i, ck_i]
-
                     for resource in taskset_lookup[original_taskname].resources:
                         # Remove task_i from critical queue
                         critical_queue[resource].delete(key=ck_i)
 
+                    ck_i = ((si_min + task_i.c), original_taskname)
+                    index_structure[original_taskname] = [si_min, si_max, task_i, ck_i]
+                    for resource in taskset_lookup[original_taskname].resources:
                         # Reinsert
                         critical_queue[resource].insert(key=ck_i, data=index_structure[original_taskname], note=si_max)
 
@@ -208,12 +214,12 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
                 taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
 
             else:
+                repeat = 0
                 # Remove next_task from critical queue
                 for resource in task_i.resources:
                     critical_queue[resource].delete(ck_i)
 
                 # Add the schedule information to the overall schedule
-                print("Computed start time {}".format(start_time))
                 schedule.append((start_time, start_time + task_i.c, task_i))
 
                 # Introduce a new instance into the taskset if necessary
