@@ -58,9 +58,9 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
             # Get all released tasks into the ready queue
             self.populate_ready_queue()
 
-            print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
-            print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
-            print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
+            # print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
+            # print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
+            # print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
 
             # Only need to worry about the active tasks (if any)
             if self.ready_queue.empty() or self.active_queue and self.active_queue[0][0].k <= 0:
@@ -148,9 +148,10 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
                         # next_ready_task.k = min(next_ready_task.k, next_ready_task.d - next_ready_task.c - cumulative_comp_time[earliest_idx] - self.curr_time)
                         if self.curr_task:
                             self.preempt_curr_task()
-                        self.schedule_until_next_event(next_ready_task, max_t)
+                        self.schedule_until_next_event(next_ready_task, min_t)
                         if self.curr_task:
                             self.preempt_curr_task()
+                            self.curr_task = None
 
                     # Otherwise run the current task or consume the active queue
                     else:
@@ -275,7 +276,7 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
         if ttne is not None:
             proc_time = ttne
 
-        print("Scheduling {} for {}".format(task.name, proc_time))
+        # print("Scheduling {} for {}".format(task.name, proc_time))
         self.add_to_schedule(task, proc_time)
         # If the amount of time the task is run does not allow it to complete, it will be the current task at the time
         # of the next scheduling decision
@@ -377,7 +378,7 @@ class MultiResourceBlockPreemptionBudgetScheduler(Scheduler):
                     global_resource_occupations[resource].merge_overlaps(strict=False)
 
         # Check validity
-        valid = verify_schedule(original_taskset, schedule)
+        valid = verify_budget_schedule(original_taskset, schedule)
 
         taskset = original_taskset
         return schedule, valid
