@@ -71,7 +71,7 @@ def verify_budget_schedule(original_taskset, schedule):
     task_ends = {}
     task_exec_times = defaultdict(int)
 
-    # Iterate over thes chedule
+    # Iterate over the schedule
     for start, end, t in schedule:
         if not task_starts.get(t.name):
             task_starts[t.name] = start
@@ -98,7 +98,61 @@ def verify_budget_schedule(original_taskset, schedule):
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(i.begin + offset, end, t) for i in itree])
+            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            for interval in offset_itree:
+                if global_resource_intervals[resource].overlap(interval.begin, interval.end):
+                    import pdb
+                    pdb.set_trace()
+                    return False
+                global_resource_intervals[resource].add(interval)
+
+    # Check that the start and end periods align with the tasks runtime
+    if task_exec_times != {}:
+        import pdb
+        pdb.set_trace()
+        return False
+
+    return True
+
+
+def verify_segmented_budget_schedule(original_taskset, schedule):
+    # Construct the occupation intervals of all the resources
+    global_resource_intervals = defaultdict(IntervalTree)
+    taskset_lookup = dict([(t.name, t) for t in original_taskset])
+    task_starts = {}
+    task_ends = {}
+    task_exec_times = defaultdict(int)
+
+    # Iterate over the schedule
+    for start, end, t in schedule:
+        original_taskname, instance, segment = t.name.split('|')
+        instance_name = "|".join([original_taskname, instance])
+
+        if not task_starts.get(instance_name):
+            task_starts[instance_name] = start
+        task_ends[instance_name] = end
+
+        task_exec_times[instance_name] += end - start
+        if task_exec_times[instance_name] > taskset_lookup[original_taskname].c:
+            import pdb
+            pdb.set_trace()
+
+        elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
+            task_exec_times.pop(instance_name)
+            if task_ends[instance_name] - task_starts[instance_name] > taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
+                logger.warning("Task {} does not adhere to budget constraints".format(instance_name))
+                return False
+
+        # Check that the task's execution period adhere's to it's release and deadline times
+        if start < t.a or end > t.d:
+            logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(instance_name, start, end, t.a, t.d))
+            return False
+
+        # Add the occupation period of this task to all resources
+        task_resource_intervals = t.get_resource_intervals()
+        offset = start - t.a
+        for resource, itree in task_resource_intervals.items():
+            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb

@@ -8,13 +8,14 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.schedulers.scheduler import get_lcm_for
-from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
-from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
+from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
+    UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler,\
+    MultipleResourceBlockPreemptionBudgetScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
-from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler
-from jobscheduling.schedulers.BlockPBEDF import MultipleResourceBlockPreemptionBudgetScheduler
+from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
+from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
 
@@ -152,16 +153,18 @@ def gen_topologies(n, num_comm_q=1, num_storage_q=1):
 
 def get_schedulers():
     schedulers = [
-        UniResourcePreemptionBudgetScheduler,
-        UniResourceBlockNPEDFScheduler,
-        UniResourceBlockNPRMScheduler,
-        UniResourceCEDFScheduler,
+        # UniResourcePreemptionBudgetScheduler,
+        # UniResourceFixedPointPreemptionBudgetScheduler,
+        # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
+        # UniResourceBlockNPEDFScheduler,
+        # UniResourceBlockNPRMScheduler,
+        # UniResourceCEDFScheduler,
         # MultipleResourceBlockCEDFScheduler,
-        # MultipleResourceBlockNPEDFScheduler,
+        MultipleResourceBlockNPEDFScheduler,
         # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
-        # MultipleResourceBlockPreemptionBudgetScheduler
+        MultipleResourceBlockPreemptionBudgetScheduler
     ]
     return schedulers
 

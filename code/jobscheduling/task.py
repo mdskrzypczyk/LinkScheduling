@@ -86,17 +86,33 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
         global_itree |= resource_intervals[resource]
 
     global_itree.merge_overlaps()
-    preemption_points = list(sorted([interval.end for interval in global_itree if interval.end < budget_dag_task.a + budget_dag_task.c]))
+    preemption_points = list(sorted([(interval.begin, interval.end) for interval in global_itree if interval.end <= budget_dag_task.a + budget_dag_task.c]))
     points_to_locked_resources = defaultdict(list)
-    for point in preemption_points:
-        for resource, itree in resource_intervals.items():
-            intervals = sorted(itree[0:point])
-            if intervals:
-                last_task = intervals[-1].data
-                if last_task.locked_resources and resource in last_task.locked_resources:
-                    points_to_locked_resources[point].append(resource)
+    points_to_needed_resources = defaultdict(list)
 
-    preemption_points = list(points_to_locked_resources.items())
+    points_to_subtasks = defaultdict(set)
+    for point_start, point_end in preemption_points:
+        for resource, itree in resource_intervals.items():
+            locking_intervals = sorted(itree[0:point_end])
+            if locking_intervals and point_start < budget_dag_task.a + budget_dag_task.c:
+                last_task = locking_intervals[-1].data
+                if last_task.locked_resources and resource in last_task.locked_resources:
+                    points_to_locked_resources[(point_start, point_end)].append(resource)
+            active_intervals = sorted(itree[point_start:point_end])
+            if active_intervals:
+                points_to_needed_resources[(point_start, point_end)].append(resource)
+                for interval in active_intervals:
+                    points_to_subtasks[(point_start, point_end)] |= {interval.data}
+
+    preemption_points = [(point, points_to_locked_resources[point], points_to_needed_resources[point], points_to_subtasks[point]) for point in points_to_locked_resources.keys()]
+    all_pp_subtasks = list()
+    for taskset in points_to_subtasks.values():
+        all_pp_subtasks += list(filter(lambda task: type(task) != ResourceTask, taskset))
+
+    if len(all_pp_subtasks) != len(budget_dag_task.subtasks) or any([t not in all_pp_subtasks for t in budget_dag_task.subtasks]):
+        print("Incorrect subtask set")
+        import pdb
+        pdb.set_trace()
     return preemption_points
 
 
@@ -115,12 +131,14 @@ class Task:
 
 
 class BudgetTask(Task):
-    def __init__(self, name, c, a=0, d=None, k=0):
+    def __init__(self, name, c, a=0, d=None, k=0, preemption_points=None):
         super(BudgetTask, self).__init__(name=name, c=c, a=a, d=d)
         self.k = k
+        self.preemption_points = preemption_points
 
     def __copy__(self):
-        return BudgetTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k)
+        return BudgetTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k,
+                          preemption_points=self.preemption_points)
 
 
 class ResourceTask(Task):
@@ -161,13 +179,15 @@ class ResourceTask(Task):
 
 
 class BudgetResourceTask(ResourceTask):
-    def __init__(self, name, c, a=0, d=None, k=0, resources=None, locked_resources=None):
+    def __init__(self, name, c, a=0, d=None, k=0, preemption_points=None, resources=None, locked_resources=None):
         super(BudgetResourceTask, self).__init__(name=name, c=c, a=a, d=d, resources=resources,
                                                  locked_resources=locked_resources)
         self.k = k
+        self.preemption_points = preemption_points
 
     def __copy__(self):
-        return BudgetResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k, resources=self.resources,
+        return BudgetResourceTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k,
+                                  preemption_points=self.preemption_points, resources=self.resources,
                                   locked_resources=self.locked_resources)
 
 
@@ -181,12 +201,13 @@ class PeriodicTask(Task):
 
 
 class PeriodicBudgetTask(BudgetTask):
-    def __init__(self, name, c, a=0, p=None, k=0):
-        super(PeriodicBudgetTask, self).__init__(name=name, a=a, c=c, k=k)
+    def __init__(self, name, c, a=0, p=None, k=0, preemption_points=None):
+        super(PeriodicBudgetTask, self).__init__(name=name, a=a, c=c, k=k, preemption_points=preemption_points)
         self.p = p
 
     def __copy__(self):
-        return PeriodicBudgetTask(name=self.name, c=self.c, a=self.a, p=self.p, k=self.k)
+        return PeriodicBudgetTask(name=self.name, c=self.c, a=self.a, p=self.p, k=self.k,
+                                  preemption_points=self.preemption_points)
 
 
 class PeriodicResourceTask(ResourceTask):
@@ -201,13 +222,15 @@ class PeriodicResourceTask(ResourceTask):
 
 
 class PeriodicBudgetResourceTask(PeriodicResourceTask):
-    def __init__(self, name, c, p=None, k=0, resources=None, locked_resources=None):
+    def __init__(self, name, c, p=None, k=0, preemption_points=None, resources=None, locked_resources=None):
         super(PeriodicBudgetResourceTask, self).__init__(name=name, c=c, p=p, resources=resources,
                                                          locked_resources=locked_resources)
         self.k = k
+        self.preemption_points = preemption_points
 
     def __copy__(self):
-        return PeriodicBudgetResourceTask(name=self.name, c=self.c, p=self.p, k=self.k, resources=self.resources,
+        return PeriodicBudgetResourceTask(name=self.name, c=self.c, p=self.p, k=self.k,
+                                          preemption_points=self.preemption_points, resources=self.resources,
                                           locked_resources=self.locked_resources)
 
 
