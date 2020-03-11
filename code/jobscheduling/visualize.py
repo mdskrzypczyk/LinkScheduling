@@ -95,6 +95,7 @@ def resource_timeline(taskset, schedule):
 def schedule_and_resource_timelines(taskset, schedule, plot_title=None, plot_sep=True, save_plot=False):
     task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
+    task_lookup = dict([(task.name, task) for task in taskset])
 
     verts = []
     colors = []

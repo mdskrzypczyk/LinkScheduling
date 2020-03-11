@@ -12,7 +12,7 @@ from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, 
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
     UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler,\
-    MultipleResourceBlockPreemptionBudgetScheduler
+    MultipleResourceBlockPreemptionBudgetScheduler, MultipleResourceSegmentBlockPreemptionBudgetScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
@@ -34,7 +34,7 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=1, num_storage_q=1):
+def gen_topologies(n, num_comm_q=2, num_storage_q=2):
     d_to_cap = load_link_data()
     link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
     # Line
@@ -164,7 +164,8 @@ def get_schedulers():
         # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
-        MultipleResourceBlockPreemptionBudgetScheduler
+        MultipleResourceBlockPreemptionBudgetScheduler,
+        MultipleResourceSegmentBlockPreemptionBudgetScheduler
     ]
     return schedulers
 
@@ -225,7 +226,7 @@ def verify_schedule(tasks, schedule):
     return True
 
 def main():
-    num_network_nodes = 8
+    num_network_nodes = 10
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
@@ -286,15 +287,12 @@ def main():
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
-        # Use all schedulers
-        for scheduler_class in network_schedulers:
-            scheduler = scheduler_class()
-            results_key = type(scheduler).__name__
-            scheduler_results = []
-
-            # Run scheduler on all task sets
-            for i in range(num_tasksets):
-                taskset = sorted(network_tasksets[i], key=lambda task: -task.p)
+        # Run scheduler on all task sets
+        for i in range(num_tasksets):
+            # Use all schedulers
+            for scheduler_class in network_schedulers:
+                scheduler = scheduler_class()
+                results_key = type(scheduler).__name__
                 running_taskset = []
                 last_succ_schedule = None
                 start = time.time()
@@ -310,6 +308,7 @@ def main():
                             for sub_taskset, sub_schedule, valid in schedule:
                                 logger.debug("Created schedule for sub_taskset size {}, valid={}, length={}".format(
                                     len(sub_taskset), valid, max([slot_info[1] for slot_info in sub_schedule])))
+
                         else:
                             print("Could not add task")
 
@@ -324,25 +323,25 @@ def main():
                 scheduler_results = len(running_taskset)
                 results[results_key] = scheduler_results
                 logger.info("{} scheduled {} tasks".format(results_key, scheduler_results))
-                logger.info("Taskset statistics:")
+                logger.info("Taskset {} statistics:".format(i))
                 logger.info("Rates: ")
                 rate_dict = defaultdict(int)
+                total_rate_dict = defaultdict(int)
                 num_pairs = 0
 
-                for task in running_taskset:
-                    rate_dict[1/task.p] += 1
+                for task in taskset:
+                    total_rate_dict[1/task.p] += 1
+                    if task in running_taskset:
+                        rate_dict[1/task.p] += 1
 
                 hyperperiod = get_lcm_for([t.p for t in running_taskset])
-                for rate in sorted(rate_dict.keys()):
+                for rate in sorted(total_rate_dict.keys()):
                     num_pairs += rate_dict[rate] * hyperperiod * rate
-                    logger.info("{}: {}".format(rate, rate_dict[rate]))
+                    logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
                 throughput = sum([num_pairs / (slot_size * max([slot_info[1] for slot_info in sub_schedule])) for _, sub_schedule, _ in last_succ_schedule])
                 logger.info("Network Throughput: {} ebit/s".format(throughput))
-                for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                    schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
-
-                import pdb
-                pdb.set_trace()
+                # for sub_taskset, sub_schedule, _ in last_succ_schedule:
+                #     schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 
         import pdb
         pdb.set_trace()

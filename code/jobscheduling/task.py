@@ -144,7 +144,11 @@ class BudgetTask(Task):
 class ResourceTask(Task):
     def __init__(self, name, c, a=0, d=None, resources=None, locked_resources=None):
         super(ResourceTask, self).__init__(name=name, c=c, a=a, d=d)
+        if resources is None:
+            resources = []
         self.resources = resources
+        if locked_resources is None:
+            locked_resources = []
         self.locked_resources = locked_resources
 
     def __copy__(self):

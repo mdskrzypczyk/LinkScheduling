@@ -81,7 +81,7 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
 
     source, dest, fidelity, rate = request
     main_dag_task = PeriodicBudgetResourceDAGTask(name="S={}, D={}, F={}, R={}".format(source, dest, fidelity, rate), tasks=tasks,
-                                                  p=ceil(1 / rate / slot_size), k=6)
+                                                  p=ceil(1 / rate / slot_size), k=0)
     return main_dag_task
 
 
