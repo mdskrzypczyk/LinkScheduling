@@ -94,7 +94,7 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
     for point_start, point_end in preemption_points:
         for resource, itree in resource_intervals.items():
             locking_intervals = sorted(itree[0:point_end])
-            if locking_intervals and point_start < budget_dag_task.a + budget_dag_task.c:
+            if locking_intervals and point_end < budget_dag_task.a + budget_dag_task.c:
                 last_task = locking_intervals[-1].data
                 if last_task.locked_resources and resource in last_task.locked_resources:
                     points_to_locked_resources[(point_start, point_end)].append(resource)
@@ -104,7 +104,7 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
                 for interval in active_intervals:
                     points_to_subtasks[(point_start, point_end)] |= {interval.data}
 
-    preemption_points = [(point, points_to_locked_resources[point], points_to_needed_resources[point], points_to_subtasks[point]) for point in points_to_locked_resources.keys()]
+    preemption_points = [(point, points_to_locked_resources[point], points_to_needed_resources[point], points_to_subtasks[point]) for point in preemption_points]
     all_pp_subtasks = list()
     for taskset in points_to_subtasks.values():
         all_pp_subtasks += list(filter(lambda task: type(task) != ResourceTask, taskset))

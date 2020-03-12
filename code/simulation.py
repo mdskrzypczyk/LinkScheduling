@@ -11,8 +11,9 @@ from jobscheduling.schedulers.scheduler import get_lcm_for
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
-    UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler,\
-    MultipleResourceBlockPreemptionBudgetScheduler, MultipleResourceSegmentBlockPreemptionBudgetScheduler
+    UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler
+from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,\
+    MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler, MultipleResourceConsiderateBlockPreemptionBudgetScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
@@ -164,8 +165,10 @@ def get_schedulers():
         # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
-        MultipleResourceBlockPreemptionBudgetScheduler,
-        MultipleResourceSegmentBlockPreemptionBudgetScheduler
+        # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler
+        MultipleResourceConsiderateBlockPreemptionBudgetScheduler
+
     ]
     return schedulers
 
@@ -242,7 +245,7 @@ def main():
             logger.info("Generating taskset {}".format(i))
 
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 200)
+            demands = get_network_demands(topology, 100)
 
             logger.info("Demands: {}".format(demands))
 
@@ -340,8 +343,8 @@ def main():
                     logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
                 throughput = sum([num_pairs / (slot_size * max([slot_info[1] for slot_info in sub_schedule])) for _, sub_schedule, _ in last_succ_schedule])
                 logger.info("Network Throughput: {} ebit/s".format(throughput))
-                # for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                #     schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
+                for sub_taskset, sub_schedule, _ in last_succ_schedule:
+                    schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 
         import pdb
         pdb.set_trace()

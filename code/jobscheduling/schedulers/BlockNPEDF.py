@@ -120,7 +120,7 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
 
         # First sort the taskset by activation time
         logger.debug("Sorting tasks by earliest deadlines")
-        taskset = list(sorted(taskset, key=lambda task: task.d))
+        taskset = list(sorted(taskset, key=lambda task: (task.d, task.a, task.name)))
 
         schedule = []
         earliest = 0
@@ -130,6 +130,7 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
             last_start = last_task_start[original_taskname]
 
             start_time = self.get_start_time(next_task, global_resource_occupations, node_resources, max([next_task.a, earliest, last_start]))
+
             if start_time + next_task.c > next_task.d:
                 return None, False
 
@@ -140,7 +141,7 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
             if instance < instance_count[original_taskname]:
                 periodic_task = taskset_lookup[original_taskname]
                 task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.d))
+                taskset = list(sorted(taskset + [task_instance], key=lambda task: (task.d, task.a, task.name)))
 
             # Add schedule information to resource schedules
             resource_intervals = defaultdict(list)
@@ -197,17 +198,17 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
 
     def map_task_resources(self, task, resource_occupations, node_resources, offset):
         resource_relations = {}
-        for resource in task.resources:
+        for resource in list(sorted(set(task.resources))):
             resource_node, resource_id = resource.split('-')
             resource_type = resource_id[0]
             resource_string = self.get_resource_string(resource)
             if not resource_relations.get(resource_string):
-                resource_relations[resource_string] = list(node_resources[resource_node][
-                                                               'comm_qs' if resource_type == "C" else "storage_qs"])
+                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
+                                                                      'comm_qs' if resource_type == "C" else "storage_qs"]))
 
         virtual_to_map = {}
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
+        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: (ri[1].begin(), ri[0])))
         for resource, itree in resource_intervals:
             offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
             available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
@@ -221,7 +222,7 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
 
     def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
         resource_string = self.get_resource_string(resource)
-        possible_resources = resource_relations[resource_string]
+        possible_resources = sorted(resource_relations[resource_string])
         available_resources = []
         for pr in possible_resources:
             dist = 0
