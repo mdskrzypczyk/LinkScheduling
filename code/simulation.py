@@ -13,7 +13,8 @@ from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, Mu
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
     UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler
 from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,\
-    MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler, MultipleResourceConsiderateBlockPreemptionBudgetScheduler
+    MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler, MultipleResourceConsiderateBlockPreemptionBudgetScheduler,\
+    MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
@@ -160,15 +161,15 @@ def get_schedulers():
         # UniResourceBlockNPEDFScheduler,
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
-        # MultipleResourceBlockCEDFScheduler,
+        MultipleResourceBlockCEDFScheduler,
         MultipleResourceBlockNPEDFScheduler,
-        # MultipleResourceBlockNPRMScheduler,
+        MultipleResourceBlockNPRMScheduler,
+        # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
-        # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
-        # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler
-        MultipleResourceConsiderateBlockPreemptionBudgetScheduler
-
     ]
     return schedulers
 
@@ -229,12 +230,13 @@ def verify_schedule(tasks, schedule):
     return True
 
 def main():
-    num_network_nodes = 10
+    num_network_nodes = 4
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
     network_topologies = gen_topologies(num_network_nodes)
     slot_size = 0.05
+    demand_size = 100
 
     network_schedulers = get_schedulers()
     results = {}
@@ -245,7 +247,7 @@ def main():
             logger.info("Generating taskset {}".format(i))
 
             # Generate task sets according to some utilization characteristics and preemption budget allowances
-            demands = get_network_demands(topology, 100)
+            demands = get_network_demands(topology, demand_size)
 
             logger.info("Demands: {}".format(demands))
 
@@ -292,6 +294,7 @@ def main():
 
         # Run scheduler on all task sets
         for i in range(num_tasksets):
+            taskset = network_tasksets[i]
             # Use all schedulers
             for scheduler_class in network_schedulers:
                 scheduler = scheduler_class()

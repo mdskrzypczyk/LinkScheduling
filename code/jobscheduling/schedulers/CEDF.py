@@ -22,7 +22,7 @@ class UniResourceCEDFScheduler:
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
         dag_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
-                                    d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
+                                    d=dag_copy.a + dag_copy.p * (instance + 1), resources=list(dag_copy.resources))
         return dag_instance
 
     def initialize_taskset(self, tasks):
@@ -154,8 +154,8 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
         logger.debug("Sorting tasks by earliest deadlines")
 
         critical_queue = defaultdict(AVLTree)
-        index_structure = defaultdict(dict)
-        taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+        index_structure = defaultdict(list)
+        taskset = list(sorted(taskset, key=lambda task: (task.d, task.a, task.name)))
         for task in taskset:
             s_min = task.a
             s_max = task.d - task.c
@@ -167,7 +167,6 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
         schedule = []
         earliest = 0
-        repeat = 0
         while taskset:
             task_i = taskset.pop(0)
             original_taskname, instance = task_i.name.split('|')
@@ -175,27 +174,21 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             last_start = last_task_start[original_taskname]
 
             start_time = self.get_start_time(task_i, global_resource_occupations, node_resources, max([si_min, earliest, last_start]))
-            if start_time + task_i.c > task_i.d:
-                return None, False
 
-            j_starts = []
+            j_starts = [(float('inf'), float('inf'), float('inf'), task_i, ck_i)]
             for resource in taskset_lookup[original_taskname].resources:
                 sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
-                j_start = self.get_start_time(task_i, global_resource_occupations, node_resources, max([sj_min, earliest, last_start]))
-                index_structure[ck_j][0] = j_start
-                sj_min = j_start
-                # if j_start + task_j.c > task_j.d:
-                #     return None, False
 
-                j_starts.append((j_start, sj_min, sj_max, task_j, ck_j))
+                if task_j != task_i:
+                    j_start = self.get_start_time(task_j, global_resource_occupations, node_resources, max([sj_min, last_start]))
+                    taskname_j, instance = task_j.name.split('|')
+                    index_structure[taskname_j][0] = j_start
+                    sj_min = j_start
+                    j_starts.append((j_start, sj_min, sj_max, task_j, ck_j))
 
             j_start, sj_min, sj_max, task_j, ck_j = sorted(j_starts)[0]
 
-            if start_time + task_i.c > sj_max and task_i != task_j and j_start <= sj_max and start_time <= sj_min:
-                repeat += 1
-                if repeat > 100:
-                    import pdb
-                    pdb.set_trace()
+            if start_time + task_i.c > sj_max and task_i != task_j and j_start <= sj_max:
                 if si_min + task_i.c > si_max:
                     for resource in taskset_lookup[original_taskname].resources:
                         # Remove task_i from critical queue
@@ -214,9 +207,11 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
                 taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
 
             else:
-                repeat = 0
+                if start_time + task_i.c > task_i.d:
+                    return None, False
+
                 # Remove next_task from critical queue
-                for resource in task_i.resources:
+                for resource in taskset_lookup[original_taskname].resources:
                     critical_queue[resource].delete(ck_i)
 
                 # Add the schedule information to the overall schedule
@@ -229,7 +224,7 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
                 if instance < instance_count[original_taskname]:
                     periodic_task = taskset_lookup[original_taskname]
                     task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                    taskset = list(sorted(taskset + [task_instance], key=lambda task: (task.a, task.d)))
+                    taskset = list(sorted(taskset + [task_instance], key=lambda task: (task.d, task.a, task.name)))
                     s_min = task_instance.a
                     s_max = task_instance.d - task_instance.c
                     key = (s_max, original_taskname)
@@ -248,10 +243,12 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
                 # Update windowed resource schedules
                 if taskset:
-                    min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
-                    earliest = min_chop
+                    min_chop = max(min(list(last_task_start.values())), min(list([sj_min for sj_min, _, _, _ in index_structure.values()])))
                     for resource in task_i.resources:
                         resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
+                        if global_resource_occupations[resource] & resource_interval_tree:
+                            import pdb
+                            pdb.set_trace()
                         global_resource_occupations[resource] |= resource_interval_tree
                         global_resource_occupations[resource].chop(0, min_chop)
                         global_resource_occupations[resource].merge_overlaps(strict=False)
@@ -274,7 +271,6 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             offset = start - task.a
             resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
             task.resources = list(set(resource_relations.values()))
-
             distance_to_free = 0
             sched_interval = Interval(start, start + task.c)
             for resource in task.resources:
@@ -289,17 +285,17 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
     def map_task_resources(self, task, resource_occupations, node_resources, offset):
         resource_relations = {}
-        for resource in task.resources:
+        for resource in list(sorted(set(task.resources))):
             resource_node, resource_id = resource.split('-')
             resource_type = resource_id[0]
             resource_string = self.get_resource_string(resource)
             if not resource_relations.get(resource_string):
-                resource_relations[resource_string] = list(node_resources[resource_node][
-                                                               'comm_qs' if resource_type == "C" else "storage_qs"])
+                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
+                                                               'comm_qs' if resource_type == "C" else "storage_qs"]))
 
         virtual_to_map = {}
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
+        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: (ri[1].begin(), ri[0])))
         for resource, itree in resource_intervals:
             offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
             available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
@@ -313,7 +309,7 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
     def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
         resource_string = self.get_resource_string(resource)
-        possible_resources = resource_relations[resource_string]
+        possible_resources = sorted(resource_relations[resource_string])
         available_resources = []
         for pr in possible_resources:
             dist = 0

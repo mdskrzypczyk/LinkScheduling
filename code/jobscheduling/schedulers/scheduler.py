@@ -57,6 +57,8 @@ def verify_schedule(original_taskset, schedule):
             offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
+                    import pdb
+                    pdb.set_trace()
                     return False
                 global_resource_intervals[resource].add(interval)
 

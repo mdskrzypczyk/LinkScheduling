@@ -113,6 +113,7 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
         print("Incorrect subtask set")
         import pdb
         pdb.set_trace()
+
     return preemption_points
 
 
@@ -433,8 +434,8 @@ class ResourceDAGTask(ResourceTask):
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2 - s1)]
 
             last_slot, last_task = full_resource_schedules[resource][-1]
-            completion_time = self.c
-            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
+            completion_time = self.c + self.a
+            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 0:
                 occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1,
                                         resources=[resource], locked_resources=[resource])
                 additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
@@ -540,8 +541,8 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2-s1)]
 
             last_slot, last_task = full_resource_schedules[resource][-1]
-            completion_time = self.c
-            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 1:
+            completion_time = self.c + self.a
+            if last_task.locked_resources and resource in last_task.locked_resources and completion_time - last_slot > 0:
                 occ_task = ResourceTask(name="Occupation", c=completion_time - last_slot, a=last_slot + 1, resources=[resource], locked_resources=[resource])
                 additional_slots += [(last_slot + i, occ_task) for i in range(1, completion_time - last_slot)]
 

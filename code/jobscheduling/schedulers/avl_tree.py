@@ -131,6 +131,8 @@ class AVLTree:
                     replacement = self.logical_successor(self.node)
                     if replacement != None:  # sanity check
                         self.node.key = replacement.key
+                        self.node.data = replacement.data
+                        self.node.note = replacement.note
 
                         # replaced. Now delete the key from right child
                         self.node.right.delete(replacement.key)
@@ -191,7 +193,7 @@ class AVLTree:
         for i in l:
             inlist.append(i)
 
-        inlist.append(self.node.key)
+        inlist.append((self.node.key, self.node.data))
 
         l = self.node.right.inorder_traverse()
         for i in l:

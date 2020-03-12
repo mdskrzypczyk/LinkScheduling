@@ -18,10 +18,11 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
         release_offset = dag_copy.a + dag_copy.p * instance
+        dag_copy.a = release_offset
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
         dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources,
+                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
                                           k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
 
         return dag_instance
@@ -175,7 +176,7 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
-        self.merge_adjacent_entries()
+        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -302,12 +303,12 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
         release_offset = dag_copy.a + dag_copy.p * instance
+        dag_copy.a = release_offset
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
         dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources,
+                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
                                           k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
-
         return dag_instance
 
     def initialize_taskset(self, tasks):
@@ -340,9 +341,9 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
             # Get all released tasks into the ready queue
             self.populate_ready_queue()
 
-            print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
-            print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
-            print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
+            # print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
+            # print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
+            # print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
 
             # Only need to worry about the active tasks (if any)
             if self.ready_queue.empty() or self.active_queue and self.active_queue[0][0].k <= 0:
@@ -427,7 +428,7 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
 
                     original_name_next_ready = next_ready_task.name.split('|')[0]
                     completed_comp_time = self.taskset_lookup[original_name_next_ready].c - next_ready_task.c
-                    comp_times = [preemption_point[0] - completed_comp_time for preemption_point in next_ready_task.preemption_points]
+                    comp_times = [pp[0][0] - completed_comp_time - next_ready_task.a for pp in next_ready_task.preemption_points]
                     comp_times = sorted(filter(lambda time: min_t <= time <= max_t, comp_times))
 
                     if not comp_times:
@@ -468,7 +469,7 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
-        self.merge_adjacent_entries()
+        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -566,7 +567,7 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
         # Time to next preemption_point
         original_name_next_ready = task.name.split('|')[0]
         completed_comp_time = self.taskset_lookup[original_name_next_ready].c - task.c
-        comp_times = [preemption_point[0] - completed_comp_time for preemption_point in
+        comp_times = [pp[0][0] - completed_comp_time - task.a for pp in
                       task.preemption_points]
 
         comp_times = sorted(filter(lambda time: time > 0, comp_times))
@@ -609,10 +610,11 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
         release_offset = dag_copy.a + dag_copy.p * instance
+        dag_copy.a = release_offset
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
         dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources,
+                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
                                           k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
 
         return dag_instance
@@ -734,7 +736,7 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
 
                     original_name_next_ready = next_ready_task.name.split('|')[0]
                     completed_comp_time = self.taskset_lookup[original_name_next_ready].c - next_ready_task.c
-                    comp_times = [preemption_point[0] - completed_comp_time for preemption_point in next_ready_task.preemption_points]
+                    comp_times = [pp[0][0] - completed_comp_time - next_ready_task.a for pp in next_ready_task.preemption_points]
                     comp_times = sorted(filter(lambda time: min_t <= time <= max_t, comp_times))
 
                     if not comp_times:
@@ -747,19 +749,19 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
                         for active_task in active_tasks:
                             original_name_active_task = active_task.name.split('|')[0]
                             completed_comp_time = self.taskset_lookup[original_name_active_task].c - active_task.c
-                            current_preemption_point = list(filter(lambda pp: pp[0] == completed_comp_time, active_task.preemption_points))[0]
+                            current_preemption_point = list(filter(lambda pp: pp[0][0] - active_task.a == completed_comp_time, active_task.preemption_points))[0]
                             all_locked_resources += current_preemption_point[1]
-                            required_resume_resources += [r for pp in active_task.preemption_points for r in pp[2] if pp[0] >= completed_comp_time]
+                            required_resume_resources += [r for pp in active_task.preemption_points for r in pp[2] if pp[0][0] - active_task.a >= completed_comp_time]
 
                         # Check if next_ready_task has the resources it needs and leaves resources unlocked for resuming tasks
-                        next_ready_task_pp = list(filter(lambda pp: pp[0] == comp_times[0], next_ready_task.preemption_points))[0]
+                        next_ready_task_pp = list(filter(lambda pp: pp[0][0] - next_ready_task.a == comp_times[0], next_ready_task.preemption_points))[0]
                         next_ready_locked_resources = next_ready_task_pp[1]
                         next_ready_required_resources = next_ready_task_pp[2]
 
-                        print("Currently locked resources: {}".format(set(all_locked_resources)))
-                        print("Required resume resources: {}".format(set(required_resume_resources)))
-                        print("Ready task required resources: {}".format(set(next_ready_required_resources)))
-                        print("Ready task locked resources upon preemption: {}".format(set(next_ready_locked_resources)))
+                        # print("Currently locked resources: {}".format(set(all_locked_resources)))
+                        # print("Required resume resources: {}".format(set(required_resume_resources)))
+                        # print("Ready task required resources: {}".format(set(next_ready_required_resources)))
+                        # print("Ready task locked resources upon preemption: {}".format(set(next_ready_locked_resources)))
 
                         if set(next_ready_required_resources) & set(all_locked_resources) or set(next_ready_locked_resources) & set(required_resume_resources):
                             preempt = False
@@ -799,7 +801,7 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
-        self.merge_adjacent_entries()
+        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -897,7 +899,7 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         # Time to next preemption_point
         original_name_next_ready = task.name.split('|')[0]
         completed_comp_time = self.taskset_lookup[original_name_next_ready].c - task.c
-        comp_times = [preemption_point[0] - completed_comp_time for preemption_point in
+        comp_times = [pp[0][0] - completed_comp_time - task.a for pp in
                       task.preemption_points]
 
         comp_times = sorted(filter(lambda time: time > 0, comp_times))
@@ -916,7 +918,7 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         if ttne is not None:
             proc_time = ttne
 
-        print("Scheduling {} for {}".format(task.name, proc_time))
+        # print("Scheduling {} for {}".format(task.name, proc_time))
         self.add_to_schedule(task, proc_time)
         # If the amount of time the task is run does not allow it to complete, it will be the current task at the time
         # of the next scheduling decision
