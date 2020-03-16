@@ -17,6 +17,25 @@ def get_lcm_for(values):
     return reduce(lambda x, y: lcm(x, y), values)
 
 
+def gcd_rationals(x, y):
+    a = x
+    b = 1
+    while int(a) != b*x:
+        a *= 10
+        b *= 10
+
+    c = y
+    d = 1
+    while int(c) != d * y:
+        c *= 10
+        d *= 10
+
+    return gcd(int(a*d), int(c*b)) / (b * d)
+
+def get_gcd_for(values):
+    return reduce(lambda x, y: gcd_rationals(x, y), values)
+
+
 def to_ranges(iterable):
     iterable = sorted(set(iterable))
     for key, group in itertools.groupby(enumerate(iterable),
@@ -165,9 +184,10 @@ class ResourceTask(Task):
 
     def get_resource_intervals(self):
         resource_intervals = defaultdict(IntervalTree)
-        interval = Interval(self.a, self.a+self.c)
-        for resource in self.resources:
-            resource_intervals[resource].add(interval)
+        if self.c > 0:
+            interval = Interval(self.a, self.a+self.c)
+            for resource in self.resources:
+                resource_intervals[resource].add(interval)
         return resource_intervals
 
     def remap_resources(self, resource_relations):

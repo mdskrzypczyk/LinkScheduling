@@ -586,7 +586,6 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
         if ttne is not None:
             proc_time = ttne
 
-        print("Scheduling {} for {}".format(task.name, proc_time))
         self.add_to_schedule(task, proc_time)
         # If the amount of time the task is run does not allow it to complete, it will be the current task at the time
         # of the next scheduling decision
@@ -648,10 +647,6 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         while self.taskset or not self.ready_queue.empty() or self.active_queue:
             # Get all released tasks into the ready queue
             self.populate_ready_queue()
-
-            print("Current ready queue: {}".format([(t[1].name, t[1].c, t[1].k) for t in self.ready_queue.queue]))
-            print("Current active queue: {}".format([(t[0].name, t[0].c, t[0].k) for t in self.active_queue]))
-            print("Current active task: {}".format((self.curr_task.name if self.curr_task else None, self.curr_task.c if self.curr_task else None, self.curr_task.k if self.curr_task else None)))
 
             # Only need to worry about the active tasks (if any)
             if self.ready_queue.empty() or self.active_queue and self.active_queue[0][0].k <= 0:
@@ -918,7 +913,6 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         if ttne is not None:
             proc_time = ttne
 
-        # print("Scheduling {} for {}".format(task.name, proc_time))
         self.add_to_schedule(task, proc_time)
         # If the amount of time the task is run does not allow it to complete, it will be the current task at the time
         # of the next scheduling decision

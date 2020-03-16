@@ -163,9 +163,15 @@ def schedule_dag_asap(dagtask, topology):
 def get_possible_resources_for_task(task, node_comm_resources, all_node_resources):
     if task.name[0] == "L":
         possible_task_resources = [node_comm_resources[n] for n in task.resources]
+        if len(possible_task_resources) not in [2, 3, 4]:
+            import pdb
+            pdb.set_trace()
 
     else:
         possible_task_resources = get_resources_from_parents(task, all_node_resources)
+        if task.name[0] == "D" and len(possible_task_resources) != 4 or task.name[0] == "S" and len(possible_task_resources) != 2:
+            import pdb
+            pdb.set_trace()
 
     return possible_task_resources
 
@@ -294,7 +300,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     for r in list(set(earliest_resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
-    task.a = slots[0][0]
+    task.a = earliest_possible_start
     task.resources = list(sorted(set(earliest_resources)))
     if task.name[0] == "L" and earliest_mapping == {}:
         task.locked_resources = list(task.resources)
@@ -335,7 +341,7 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
                 if rs:
                     last_slot, last_task = rs[-1]
                     if task_locks_resource(last_task, [lr]):
-                        continue
+                        return float('inf'), {}
                 for sr in storage_resources[lr]:
                     rs = resource_schedules[sr]
                     if rs:
@@ -514,9 +520,9 @@ def schedule_task_alap(task, resource_schedules):
     for r in list(set(task.resources)):
         resource_schedules[r] = list(sorted(resource_schedules[r] + slots))
 
-    if slots[0][0] != task.a:
-        logger.debug("Moved task {} from t={} to t={}".format(task.name, task.a, slots[0][0]))
-    task.a = slots[0][0]
+    if latest != task.a:
+        logger.debug("Moved task {} from t={} to t={}".format(task.name, task.a, latest))
+    task.a = latest
     logger.debug("Scheduled {} with resources {} at t={}".format(task.name, task.resources, task.a))
 
 
@@ -559,9 +565,10 @@ def shift_distillations_and_swaps(dagtask):
 
             earliest_start = max([parent_task_end] + resource_availabilities)
             task.a = earliest_start
-            interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
-            for resource in task.resources:
-                resource_schedules[resource].add(interval)
+            if task.c > 0:
+                interval = Interval(begin=task.a, end=task.a + ceil(task.c), data=task)
+                for resource in task.resources:
+                    resource_schedules[resource].add(interval)
 
     resource_schedules_new = {}
     for resource in resource_schedules.keys():
@@ -589,24 +596,32 @@ def verify_dag(dagtask, node_resources=None):
                 valid = False
 
         if subtask.name[0] == "L" and (len(set(subtask.locked_resources)) != 2 or len(set(subtask.resources)) not in [2, 3, 4]):
+            logger.error("Link generation subtask has incorrect set of resources")
             valid = False
 
         if subtask.name[0] == "S" and len(set(subtask.resources)) != 2:
+            logger.error("Swapping subtask has incorrect set of resources")
+            import pdb
+            pdb.set_trace()
             valid = False
 
         if subtask.name[0] == "D" and (len(set(subtask.resources)) != 4 or len(set(subtask.locked_resources)) != 2):
+            logger.error("Distillation subtask has incorrect set of resources")
+            import pdb
+            pdb.set_trace()
             valid = False
 
-        subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
-        for resource in subtask.resources:
-            if node_resources and (resource not in node_resources):
-                continue
+        if subtask.c > 0:
+            subtask_interval = Interval(subtask.a, subtask.a + subtask.c, subtask)
+            for resource in subtask.resources:
+                if node_resources and (resource not in node_resources):
+                    continue
 
-            if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
-                overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
-                print("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
-                valid = False
-            resource_intervals[resource].add(subtask_interval)
+                if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
+                    overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
+                    logger.error("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
+                    valid = False
+                resource_intervals[resource].add(subtask_interval)
 
     for resource in resource_intervals.keys():
         sorted_intervals = sorted(resource_intervals[resource])
@@ -614,9 +629,11 @@ def verify_dag(dagtask, node_resources=None):
             t1 = iv1.data
             t2 = iv2.data
             if t1.name[0] == "L" and t2.name == "L":
+                logger.error("Consecutive link generation subtasks on common resource")
                 valid = False
 
             elif t1.name[0] == "D" and t2.name == "L" and any([r in t1.locked_resources for r in t2.locked_resources]):
+                logger.error("Distillation followed by link generation on same resource")
                 valid = False
 
     return valid

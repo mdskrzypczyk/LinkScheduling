@@ -7,7 +7,8 @@ from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
-from jobscheduling.schedulers.scheduler import get_lcm_for
+from jobscheduling.task import get_lcm_for, get_gcd_for
+from jobscheduling.schedulers.ClockDriven import UniResourceFlowScheduler
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
@@ -18,6 +19,7 @@ from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceInconsider
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
+from jobscheduling.schedulers.ILP import MultipleResourceILPBlockNPEDFScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines
 from math import ceil
 
@@ -155,20 +157,22 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
 
 def get_schedulers():
     schedulers = [
+        # UniResourceFlowScheduler,
         # UniResourcePreemptionBudgetScheduler,
         # UniResourceFixedPointPreemptionBudgetScheduler,
         # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
-        # UniResourceBlockNPEDFScheduler,
+        UniResourceBlockNPEDFScheduler,
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
-        MultipleResourceBlockCEDFScheduler,
+        # MultipleResourceILPBlockNPEDFScheduler
+        # MultipleResourceBlockCEDFScheduler,
         MultipleResourceBlockNPEDFScheduler,
-        MultipleResourceBlockNPRMScheduler,
+        # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler
-        # MultipleResourceNonBlockNPEDFScheduler,
+        MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
     ]
     return schedulers
@@ -196,7 +200,7 @@ def get_protocol(network_topology, demand):
         return protocol
 
     logger.debug("Trying to find protocol without rate constraint")
-    protocol = create_protocol(path, nodeG, f, 0)
+    protocol = create_protocol(path, nodeG, f, 1e-10)
     if protocol:
         logger.warning("Found protocol without rate constraint")
         return protocol
@@ -228,6 +232,88 @@ def verify_schedule(tasks, schedule):
                 global_resource_intervals[resource].add(interval)
 
     return True
+
+
+def slot_size_selection():
+    num_network_nodes = 3
+    network_topologies = gen_topologies(num_network_nodes, num_comm_q=4, num_storage_q=4)
+    topology = network_topologies[0]
+    protocols = []
+    demands = [('0', str(i), f, 0.0001) for f in [0.5 + 0.05*j for j in range(10)] for i in range(num_network_nodes) ]
+    for demand in demands:
+        s, d, _, _ = demand
+        protocol = get_protocol(topology, demand)
+        if protocol:
+            print("Found protocol between {} and {} with fidelity {} and rate {}".format(s, d, protocol.F, protocol.R))
+            protocols.append((demand, protocol))
+
+    action_durations = []
+    for _, protocol in protocols:
+        q = []
+        q.append(protocol)
+        while q:
+            action = q.pop(0)
+            if action.duration:
+                action_durations.append(round(action.duration, 4))
+            if hasattr(action, "protocols"):
+                q += action.protocols
+
+    action_durations = list(set(action_durations))
+    slot_sizes = sorted(list(set([0.0005*i for i in range(1, 200)])))
+    latency_data = {}
+    slot_count_data = {}
+    for demand, protocol in protocols:
+        pdata_lat = []
+        pdata_slt = []
+        print("Processing demand {}".format(demand))
+        for slot_size in slot_sizes:
+            print("Processing slot size {}".format(slot_size))
+            task = convert_protocol_to_task(demand, protocol, slot_size)
+            task, dec, corr = schedule_dag_for_resources(task, topology)
+            asap_d, alap_d, shift_d = dec
+            if not corr:
+                import pdb
+                pdb.set_trace()
+            elif asap_d < shift_d or alap_d < shift_d:
+                import pdb
+                pdb.set_trace()
+            num_slots = (task.sinks[0].a + task.sinks[0].c)
+            task_latency = num_slots * slot_size
+            pdata_lat.append((slot_size, task_latency))
+            pdata_slt.append((slot_size, num_slots))
+        latency_data[demand] = pdata_lat
+        slot_count_data[demand] = pdata_slt
+
+    for demand, pdata in latency_data.items():
+        spdata = sorted(pdata)
+        xdata = [d[0] for d in spdata]
+        ydata = [d[1] for d in spdata]
+        plt.plot(xdata, ydata, label=str(demand))
+
+    # plt.legend()
+    plt.autoscale()
+    plt.xlabel("Slot Size (s)")
+    plt.ylabel("Latency (s)")
+    plt.title("Protocol Latency vs. Slot Size")
+    plt.show()
+
+    import pdb
+    pdb.set_trace()
+
+    for demand, pdata in slot_count_data.items():
+        pdata = list(sorted(filter(lambda d: d[0] <= 0.01, pdata)))
+        spdata = sorted(pdata)
+        xdata = [d[0] for d in spdata]
+        ydata = [d[1] for d in spdata]
+        plt.plot(xdata, ydata, label=str(demand))
+
+    # plt.legend()
+    plt.autoscale()
+    plt.xlabel("Slot Size (s)")
+    plt.ylabel("Latency (# slots)")
+    plt.title("Protocol Latency vs. Slot Size")
+    plt.show()
+
 
 def main():
     num_network_nodes = 4
@@ -292,6 +378,7 @@ def main():
             logger.info("Created taskset {}".format([t.name for t in taskset]))
             network_tasksets.append(taskset)
 
+
         # Run scheduler on all task sets
         for i in range(num_tasksets):
             taskset = network_tasksets[i]
@@ -346,8 +433,8 @@ def main():
                     logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
                 throughput = sum([num_pairs / (slot_size * max([slot_info[1] for slot_info in sub_schedule])) for _, sub_schedule, _ in last_succ_schedule])
                 logger.info("Network Throughput: {} ebit/s".format(throughput))
-                for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                    schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
+                # for sub_taskset, sub_schedule, _ in last_succ_schedule:
+                    # schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 
         import pdb
         pdb.set_trace()
@@ -370,4 +457,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    slot_size_selection()

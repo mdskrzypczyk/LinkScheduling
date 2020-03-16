@@ -119,19 +119,22 @@ def esss(path, pathResources, G, Fmin, Rmin):
         # Start by dividing the path in two
         lower = 1
         upper = len(path) - 1
-        protocol = None
-        rate = 0
-        fidelity = 0
+        protocols = []
         while lower < upper:
             numL = (upper + lower + 1) // 2
             numR = len(path) + 1 - numL
 
-            logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL]))
-            possible_protocol, Rl, Rr = find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR)
+            logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL-1]))
+            possible_protocol, Rl, Rr = find_split_path_protocol(path, dict(pathResources), G, Fmin, Rmin, numL, numR)
+
+
+            if possible_protocol and possible_protocol.F >= Fmin and possible_protocol.R >= Rmin:
+                protocols.append(possible_protocol)
 
             if Rl == Rr:
                 logger.debug("Rates on left and right paths balanced")
-                return possible_protocol
+                break
+
             elif Rl < Rr:
                 logger.debug("Rate on left path lower, extending right path")
                 upper -= 1
@@ -139,25 +142,21 @@ def esss(path, pathResources, G, Fmin, Rmin):
                 logger.debug("Rate on right path lower, extending left path")
                 lower += 1
 
-            if possible_protocol and possible_protocol.F >= Fmin and possible_protocol.R >= Rmin:
-                if possible_protocol.R >= rate and possible_protocol.F >= fidelity:
-                    protocol = possible_protocol
-                    rate = protocol.R
-                    fidelity = protocol.F
-
+        protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
+        if protocol is None:
+            logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(path, Fmin, Rmin))
         return protocol
 
 
 def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
     protocols = []
 
-    resourceCopy = dict(pathResources)
+    resourceCopy = dict([(k, dict(v)) for k, v in pathResources.items()])
 
     # If we are swapping the middle node needs to use one resource to hold an end of the first link
     resourceCopy[path[numL - 1]]['total'] -= 1
 
     # Assume we allocate half the comm resources of pivot node to either link
-    # resourceCopy[path[numL - 1]]['comm'] = max(resourceCopy[path[numL - 1]]['comm'] // 2, 1)
     num = 0
     while True:
         # Compute minimum fidelity in order for num distillations to achieve Fmin
@@ -173,7 +172,7 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
         else:
             Rlink = Rmin
 
-        pathResourcesCopy = dict(resourceCopy)
+        pathResourcesCopy = dict([(k, dict(v)) for k, v in resourceCopy.items()])
 
         # If we are distilling then the end nodes need to hold one link between protocol steps
         if num > 0:
@@ -201,23 +200,18 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
             logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
                                                                                       protocolR.F, protocolR.R))
             protocols.append((protocol, protocolL.R, protocolR.R))
-            num += 1
-
-        else:
-            Rl = 0 if not protocolL else protocolL.R
-            Rr = 0 if not protocolR else protocolR.R
-            protocols.append((Protocol(F=0, R=0, nodes=None), Rl, Rr))
-            break
+        num += 1
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
-        protocol, Rl, Rr = sorted(protocols, key=lambda p: p[0].R)[-1]
+        protocol, Rl, Rr = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-1]
         logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
                                                                                              num + 1))
 
         return protocol, Rl, Rr
 
     else:
+        logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(path, Fmin, Rmin))
         return None, 0, 0
 
 
@@ -232,10 +226,13 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
         return None
 
     # Check if any single link generation protocols exist
+    protocols = []
     for F, R in link_properties:
         if R >= Rmin and F >= Fmin:
-            logger.debug("Link capable of generating without distillation using F={},R={}".format(F, R))
-            return LinkProtocol(F=F, R=R, nodes=nodes)
+            protocols.append(LinkProtocol(F=F, R=R, nodes=nodes))
+
+    if protocols:
+        return list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1]
 
     # logger.debug("Link not capable of generating without distillation")
     if any([v < 2 for v in [nodeResources[n]['total'] for n in nodes]]):
@@ -243,9 +240,7 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
         return None
 
     # Search for the link gen protocol with highest rate that satisfies fidelity
-    bestR = Rmin
-    bestProtocol = None
-
+    protocols = []
     # Can only generate as fast as the most constrained node
     minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
     for F, R in link_properties:
@@ -264,12 +259,11 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
                 currF = distill_links(currF, F)
                 currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol], nodes=nodes)
 
-            if (currProtocol.F > Fmin and currProtocol.R >= bestR) or (currProtocol.F >= Fmin and currProtocol.R > bestR):
+            if currProtocol.F > Fmin and currProtocol.R >= Rmin:
                 logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
-                bestR = currProtocol.R
-                bestProtocol = currProtocol
+                protocols.append(currProtocol)
 
-    if bestProtocol is None:
-        logger.debug("Failed to find distillation protocol")
-
-    return bestProtocol
+    protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
+    if protocol is None:
+        logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+    return protocol

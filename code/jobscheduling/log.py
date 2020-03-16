@@ -3,7 +3,7 @@ import logging
 LOG_LEVEL = logging.INFO
 FORMAT = '%(levelname)s - %(name)s - %(message)s'
 FILENAME = "log"
-logging.basicConfig(filename=FILENAME, format=FORMAT)
+logging.basicConfig(format=FORMAT)
 
 
 class LSLogger:
