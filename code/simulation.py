@@ -15,7 +15,8 @@ from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetSched
     UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler
 from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,\
     MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler, MultipleResourceConsiderateBlockPreemptionBudgetScheduler,\
-    MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler
+    MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler, MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,\
+    MultipleResourceConsiderateSegmentPreemptionBudgetScheduler
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
@@ -38,9 +39,10 @@ def get_dimensions(n):
     return divisors[hIndex], divisors[wIndex]
 
 
-def gen_topologies(n, num_comm_q=2, num_storage_q=2):
+def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
     d_to_cap = load_link_data()
     link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
+    link_capability = d_to_cap[str(link_distance)]
     # Line
     lineGcq = nx.Graph()
     lineG = nx.Graph()
@@ -61,12 +63,9 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2):
                 for k in range(num_comm_q):
                     lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
 
-            link_distance, link_capability = random.choice(link_capabilities)
             lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
     # Ring
-    link_distance = 5
-    link_capability = d_to_cap[str(link_distance)]
     ringGcq = nx.Graph()
     ringG = nx.Graph()
     for i in range(n):
@@ -161,18 +160,20 @@ def get_schedulers():
         # UniResourcePreemptionBudgetScheduler,
         # UniResourceFixedPointPreemptionBudgetScheduler,
         # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
-        UniResourceBlockNPEDFScheduler,
+        # UniResourceBlockNPEDFScheduler,
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
         # MultipleResourceILPBlockNPEDFScheduler
         # MultipleResourceBlockCEDFScheduler,
-        MultipleResourceBlockNPEDFScheduler,
+        # MultipleResourceBlockNPEDFScheduler,
         # MultipleResourceBlockNPRMScheduler,
-        # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
-        # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler
-        MultipleResourceNonBlockNPEDFScheduler,
+        MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
+        MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
+        MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
+        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+        # MultipleResourceNonBlockNPEDFScheduler
         # MultipleResourceNonBlockNPRMScheduler,
     ]
     return schedulers
@@ -182,7 +183,8 @@ def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
     for num_demands in range(num):
-        src, dst = random.sample(nodeG.nodes, 2)
+        # src, dst = random.sample(nodeG.nodes, 2)
+        src, dst = ('0', '3')
         fidelity = round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
         rate = 10 / (2**random.choice([i for i in range(5, 9)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
@@ -198,6 +200,9 @@ def get_protocol(network_topology, demand):
     if protocol:
         logger.debug("Found protocol that satisfies demands")
         return protocol
+
+    else:
+        return None
 
     logger.debug("Trying to find protocol without rate constraint")
     protocol = create_protocol(path, nodeG, f, 1e-10)
@@ -235,84 +240,87 @@ def verify_schedule(tasks, schedule):
 
 
 def slot_size_selection():
-    num_network_nodes = 3
-    network_topologies = gen_topologies(num_network_nodes, num_comm_q=4, num_storage_q=4)
-    topology = network_topologies[0]
-    protocols = []
-    demands = [('0', str(i), f, 0.0001) for f in [0.5 + 0.05*j for j in range(10)] for i in range(num_network_nodes) ]
-    for demand in demands:
-        s, d, _, _ = demand
-        protocol = get_protocol(topology, demand)
-        if protocol:
-            print("Found protocol between {} and {} with fidelity {} and rate {}".format(s, d, protocol.F, protocol.R))
-            protocols.append((demand, protocol))
+    num_network_nodes = 4
+    link_distances = list(range(5, 55, 5))
+    for i in range(1, num_network_nodes):
+        for l in link_distances:
+            network_topologies = gen_topologies(num_network_nodes, num_comm_q=4, num_storage_q=4, link_distance=l)
+            topology = network_topologies[0]
+            protocols = []
+            demands = [('0', str(i), f, 0.0001) for f in [0.5 + 0.05*j for j in range(10)]]
+            for demand in demands:
+                s, d, _, _ = demand
+                protocol = get_protocol(topology, demand)
+                if protocol:
+                    print("Found protocol between {} and {} with fidelity {} and rate {}".format(s, d, protocol.F, protocol.R))
+                    protocols.append((demand, protocol))
 
-    action_durations = []
-    for _, protocol in protocols:
-        q = []
-        q.append(protocol)
-        while q:
-            action = q.pop(0)
-            if action.duration:
-                action_durations.append(round(action.duration, 4))
-            if hasattr(action, "protocols"):
-                q += action.protocols
+            action_durations = []
+            for _, protocol in protocols:
+                q = []
+                q.append(protocol)
+                while q:
+                    action = q.pop(0)
+                    if action.duration:
+                        action_durations.append(round(action.duration, 4))
+                    if hasattr(action, "protocols"):
+                        q += action.protocols
 
-    action_durations = list(set(action_durations))
-    slot_sizes = sorted(list(set([0.0005*i for i in range(1, 200)])))
-    latency_data = {}
-    slot_count_data = {}
-    for demand, protocol in protocols:
-        pdata_lat = []
-        pdata_slt = []
-        print("Processing demand {}".format(demand))
-        for slot_size in slot_sizes:
-            print("Processing slot size {}".format(slot_size))
-            task = convert_protocol_to_task(demand, protocol, slot_size)
-            task, dec, corr = schedule_dag_for_resources(task, topology)
-            asap_d, alap_d, shift_d = dec
-            if not corr:
-                import pdb
-                pdb.set_trace()
-            elif asap_d < shift_d or alap_d < shift_d:
-                import pdb
-                pdb.set_trace()
-            num_slots = (task.sinks[0].a + task.sinks[0].c)
-            task_latency = num_slots * slot_size
-            pdata_lat.append((slot_size, task_latency))
-            pdata_slt.append((slot_size, num_slots))
-        latency_data[demand] = pdata_lat
-        slot_count_data[demand] = pdata_slt
+            action_durations = list(set(action_durations))
+            slot_sizes = sorted(list(set([0.004*i for i in range(1, 25)])))
+            latency_data = {}
+            slot_count_data = {}
+            for demand, protocol in protocols:
+                pdata_lat = []
+                pdata_slt = []
+                print("Processing demand {}".format(demand))
+                for slot_size in slot_sizes:
+                    print("Processing slot size {}".format(slot_size))
+                    task = convert_protocol_to_task(demand, protocol, slot_size)
+                    task, dec, corr = schedule_dag_for_resources(task, topology)
+                    asap_d, alap_d, shift_d = dec
+                    if not corr:
+                        import pdb
+                        pdb.set_trace()
+                    elif asap_d < shift_d or alap_d < shift_d:
+                        import pdb
+                        pdb.set_trace()
+                    num_slots = (task.sinks[0].a + task.sinks[0].c)
+                    task_latency = num_slots * slot_size
+                    pdata_lat.append((slot_size, task_latency))
+                    pdata_slt.append((slot_size, num_slots))
+                latency_data[demand] = pdata_lat
+                slot_count_data[demand] = pdata_slt
 
-    for demand, pdata in latency_data.items():
-        spdata = sorted(pdata)
-        xdata = [d[0] for d in spdata]
-        ydata = [d[1] for d in spdata]
-        plt.plot(xdata, ydata, label=str(demand))
+            for demand, pdata in latency_data.items():
+                spdata = sorted(pdata)
+                xdata = [d[0] for d in spdata]
+                ydata = [d[1] for d in spdata]
+                plt.plot(xdata, ydata, label=str(demand))
 
-    # plt.legend()
-    plt.autoscale()
-    plt.xlabel("Slot Size (s)")
-    plt.ylabel("Latency (s)")
-    plt.title("Protocol Latency vs. Slot Size")
-    plt.show()
+            plt.legend()
+            plt.autoscale()
+            plt.xlabel("Slot Size (s)")
+            plt.ylabel("Latency (s)")
+            plt.title("Protocol Latency vs. Slot Size")
+            plt.show()
 
-    import pdb
-    pdb.set_trace()
+            import pdb
+            pdb.set_trace()
 
-    for demand, pdata in slot_count_data.items():
-        pdata = list(sorted(filter(lambda d: d[0] <= 0.01, pdata)))
-        spdata = sorted(pdata)
-        xdata = [d[0] for d in spdata]
-        ydata = [d[1] for d in spdata]
-        plt.plot(xdata, ydata, label=str(demand))
+            for demand, pdata in slot_count_data.items():
+                pdata = list(sorted(filter(lambda d: d[0] <= 0.01, pdata)))
+                spdata = sorted(pdata)
+                xdata = [d[0] for d in spdata]
+                ydata = [d[1] for d in spdata]
+                plt.plot(xdata, ydata, label=str(demand))
 
-    # plt.legend()
-    plt.autoscale()
-    plt.xlabel("Slot Size (s)")
-    plt.ylabel("Latency (# slots)")
-    plt.title("Protocol Latency vs. Slot Size")
-    plt.show()
+            plt.legend()
+            plt.autoscale()
+            plt.xlabel("Slot Size (s)")
+            plt.ylabel("Latency (# slots)")
+            plt.title("Protocol Latency vs. Slot Size")
+            plt.show()
 
 
 def main():
@@ -320,9 +328,9 @@ def main():
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]
-    network_topologies = gen_topologies(num_network_nodes)
+    network_topologies = gen_topologies(num_network_nodes, num_comm_q=4, num_storage_q=4)
     slot_size = 0.05
-    demand_size = 100
+    demand_size = 20
 
     network_schedulers = get_schedulers()
     results = {}
@@ -433,8 +441,8 @@ def main():
                     logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
                 throughput = sum([num_pairs / (slot_size * max([slot_info[1] for slot_info in sub_schedule])) for _, sub_schedule, _ in last_succ_schedule])
                 logger.info("Network Throughput: {} ebit/s".format(throughput))
-                # for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                    # schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
+                for sub_taskset, sub_schedule, _ in last_succ_schedule:
+                    schedule_and_resource_timelines(sub_taskset, sub_schedule, plot_title=results_key)
 
         import pdb
         pdb.set_trace()
@@ -457,4 +465,4 @@ def main():
 
 
 if __name__ == "__main__":
-    slot_size_selection()
+    main()

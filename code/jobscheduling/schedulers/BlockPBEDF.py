@@ -5,6 +5,7 @@ from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_budget_schedule, verify_segmented_budget_schedule
+from jobscheduling.schedulers.SearchBlockPBEDF import MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler
 from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, find_dag_task_preemption_points, BudgetTask, BudgetResourceTask, BudgetResourceDAGTask, PeriodicBudgetResourceDAGTask, ResourceTask
 
 

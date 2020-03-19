@@ -100,7 +100,7 @@ def verify_budget_schedule(original_taskset, schedule):
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            offset_itree = IntervalTree([Interval(start, end + offset, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb
@@ -154,7 +154,7 @@ def verify_segmented_budget_schedule(original_taskset, schedule):
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb

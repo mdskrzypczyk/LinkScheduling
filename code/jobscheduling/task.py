@@ -121,7 +121,8 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
             if active_intervals:
                 points_to_needed_resources[(point_start, point_end)].append(resource)
                 for interval in active_intervals:
-                    points_to_subtasks[(point_start, point_end)] |= {interval.data}
+                    if type(interval.data) != ResourceTask:
+                        points_to_subtasks[(point_start, point_end)] |= {interval.data}
 
     preemption_points = [(point, points_to_locked_resources[point], points_to_needed_resources[point], points_to_subtasks[point]) for point in preemption_points]
     all_pp_subtasks = list()
@@ -310,7 +311,7 @@ class DAGBudgetResourceSubTask(DAGResourceSubTask):
 
 
 def get_dag_exec_time(dag):
-    return max([sink.a + sink.c for sink in dag.sinks]) - min([source.a for source in dag.sources])
+    return max([subtask.a + subtask.c for subtask in dag.subtasks]) - min([source.a for source in dag.sources])
 
 
 class DAGTask(Task):
@@ -395,9 +396,9 @@ class ResourceDAGTask(ResourceTask):
         self.tasks = {}
         self.subtasks = tasks
         for task in tasks:
-            if not task.parents:
+            if not task.parents or all([p not in tasks for p in task.parents]):
                 self.sources.append(task)
-            if not task.children:
+            if not task.children or all([c not in tasks for c in task.children]):
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
