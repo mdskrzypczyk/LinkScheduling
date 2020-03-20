@@ -75,19 +75,21 @@ def verify_budget_schedule(original_taskset, schedule):
 
     # Iterate over the schedule
     for start, end, t in schedule:
-        if not task_starts.get(t.name):
-            task_starts[t.name] = start
-        task_ends[t.name] = end
+        original_taskname, instance = t.name.split('|')[0:2]
+        instance_name = "|".join([original_taskname, instance])
 
-        original_taskname, instance = t.name.split('|')
-        task_exec_times[t.name] += end - start
-        if task_exec_times[t.name] > taskset_lookup[original_taskname].c:
+        if not task_starts.get(instance_name):
+            task_starts[instance_name] = start
+        task_ends[instance_name] = end
+
+        task_exec_times[instance_name] += end - start
+        if task_exec_times[instance_name] > taskset_lookup[original_taskname].c:
             import pdb
             pdb.set_trace()
 
-        elif task_exec_times[t.name] == taskset_lookup[original_taskname].c:
-            task_exec_times.pop(t.name)
-            if task_ends[t.name] - task_starts[t.name] > taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
+        elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
+            task_exec_times.pop(instance_name)
+            if task_ends[instance_name] - task_starts[instance_name] > taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
                 logger.warning("Task {} does not adhere to budget constraints".format(t.name))
                 return False
 
@@ -100,7 +102,7 @@ def verify_budget_schedule(original_taskset, schedule):
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(start, end + offset, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb

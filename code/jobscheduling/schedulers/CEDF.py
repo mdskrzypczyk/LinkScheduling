@@ -67,6 +67,8 @@ class UniResourceCEDFScheduler:
                 original_taskname, instance = task_i.name.split('|')
                 si_min, si_max, _, ck_i = index_structure[original_taskname]
                 sj_min, sj_max, task_j, ck_j = critical_queue.minimum().data
+                original_taskname_j = task_j.name.split('|')[0]
+                index_structure[original_taskname_j][0] = curr_time
 
                 if si_min + task_i.c > sj_max and task_i != task_j and sj_min <= sj_max:
                     if si_min + task_i.c > si_max:

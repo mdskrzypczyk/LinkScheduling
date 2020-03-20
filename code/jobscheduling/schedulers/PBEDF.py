@@ -200,5 +200,8 @@ class PreemptionBudgetScheduler(Scheduler):
         if proc_time < task.c:
             task.c -= proc_time
             self.curr_task = task
+        elif proc_time > task.c:
+            import pdb
+            pdb.set_trace()
         else:
             self.curr_task = None

@@ -3,10 +3,10 @@ from collections import defaultdict
 from math import ceil
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
-from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask
+from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask, get_dag_exec_time
 from jobscheduling.visualize import draw_DAG
 from intervaltree import Interval, IntervalTree
-
+from random import randint
 
 logger = LSLogger()
 
@@ -80,7 +80,8 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
                 last_action, _ = stack.pop()
 
     source, dest, fidelity, rate = request
-    main_dag_task = PeriodicBudgetResourceDAGTask(name="S={}, D={}, F={}, R={}".format(source, dest, fidelity, rate), tasks=tasks,
+    task_id = randint(0, 100)
+    main_dag_task = PeriodicBudgetResourceDAGTask(name="S={}, D={}, F={}, R={}, ID={}".format(source, dest, fidelity, rate, task_id), tasks=tasks,
                                                   p=ceil(1 / rate / slot_size), k=100)
     return main_dag_task
 
@@ -103,7 +104,7 @@ def schedule_dag_for_resources(dagtask, topology):
 
     decoherences = (asap_decoherence, alap_decoherence, shift_decoherence)
     correct = (asap_correct and alap_correct and shift_correct)
-    dagtask.c = shift_latency
+    dagtask.c = get_dag_exec_time(dagtask)
     return dagtask, decoherences, correct
 
 
@@ -145,7 +146,7 @@ def schedule_dag_asap(dagtask, topology):
 
     dagtask.resources = list(set([r for subtask in dagtask.subtasks for r in subtask.resources]))
     sink_task = dagtask.sinks[0]
-    asap_latency = sink_task.a + ceil(sink_task.c)
+    asap_latency = get_dag_exec_time(dagtask)
     resource_schedules = defaultdict(list)
     for task in dagtask.subtasks:
         slots = [(task.a + i, task) for i in range(ceil(task.c))]
@@ -501,7 +502,7 @@ def convert_task_to_alap(dagtask):
             resource_schedules[r] = [(s - earliest, t) for s, t in schedule]
 
     sink_task = dagtask.sinks[0]
-    alap_latency = sink_task.a + ceil(sink_task.c)
+    alap_latency = get_dag_exec_time(dagtask)
     alap_decoherence = get_schedule_decoherence(dagtask.get_resource_schedules(), alap_latency)
     alap_correct = verify_dag(dagtask)
     return alap_latency, alap_decoherence, alap_correct
@@ -580,7 +581,7 @@ def shift_distillations_and_swaps(dagtask):
         resource_schedules_new[resource] = list(sorted(resource_schedule))
 
     sink_task = dagtask.sinks[0]
-    shift_latency = sink_task.a + ceil(sink_task.c)
+    shift_latency = get_dag_exec_time(dagtask)
     shift_decoherence = get_schedule_decoherence(dagtask.get_resource_schedules(), shift_latency)
     shift_correct = verify_dag(dagtask)
 
