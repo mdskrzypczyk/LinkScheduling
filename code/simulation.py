@@ -163,16 +163,16 @@ def get_schedulers():
         # UniResourceBlockNPEDFScheduler,
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
-        # MultipleResourceILPBlockNPEDFScheduler
+        # MultipleResourceILPBlockNPEDFScheduler,
         # MultipleResourceBlockCEDFScheduler,
         # MultipleResourceBlockNPEDFScheduler,
         # MultipleResourceBlockNPRMScheduler,
-        MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
-        MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
-        MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+        # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
+        # MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
+        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
         # MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
     ]
@@ -329,7 +329,7 @@ def main():
     utilizations = [0.1*i for i in range(1, 10)]
     network_topologies = gen_topologies(num_network_nodes, num_comm_q=4, num_storage_q=4)
     slot_size = 0.05
-    demand_size = 30
+    demand_size = 10
 
     network_schedulers = get_schedulers()
     results = {}
