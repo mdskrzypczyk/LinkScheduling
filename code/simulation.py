@@ -164,16 +164,16 @@ def get_schedulers():
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
         # MultipleResourceILPBlockNPEDFScheduler,
-        # MultipleResourceBlockCEDFScheduler,
-        # MultipleResourceBlockNPEDFScheduler,
-        # MultipleResourceBlockNPRMScheduler,
+        MultipleResourceBlockCEDFScheduler,
+        MultipleResourceBlockNPEDFScheduler,
+        MultipleResourceBlockNPRMScheduler,
         # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
-        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
-        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
-        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
-        # MultipleResourceNonBlockNPEDFScheduler,
+        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+        MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceNonBlockNPRMScheduler,
     ]
     return schedulers
@@ -323,7 +323,7 @@ def slot_size_selection():
 
 
 def main():
-    num_network_nodes = 4
+    num_network_nodes = 8
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
     utilizations = [0.1*i for i in range(1, 10)]

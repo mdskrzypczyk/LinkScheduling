@@ -42,7 +42,8 @@ class MultiResourceNPEDFScheduler(Scheduler):
 
         # Task lookup when introducing new instance, instance count to track how many instances introduced
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
-        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
+        next_task_release = dict([(t.name, t.a) for t in original_taskset])
+        instance_count = dict([(t.name, 0) for t in original_taskset])
 
         # Initialize the active taskset to one instance of all periodic tasks, track the last time each instance started
         taskset = self.initialize_taskset(taskset)
@@ -55,14 +56,27 @@ class MultiResourceNPEDFScheduler(Scheduler):
         # Sort the initial taskset by deadline
         logger.debug("Sorting tasks by earliest deadlines")
         taskset = list(sorted(taskset, key=lambda task: task.d))
+        ready_queue = PriorityQueue()
 
         # Track the schedule
         schedule = []
 
         # Continue scheduling until no more task instances left
-        while taskset:
-            # Get the next task to schedule and get the start time of the previous instance
-            next_task = taskset.pop(0)
+        while any([release != float('inf') for release in next_task_release.values()]):
+            # Introduce a new task if there are currently none
+            if ready_queue.empty():
+                name, release = sorted(next_task_release.items(), key=lambda ntr: (ntr[1], ntr[0]))[0]
+                periodic_task = taskset_lookup[name]
+                instance = instance_count[name]
+                task_instance = self.create_new_task_instance(periodic_task, instance)
+                if hyperperiod // periodic_task.p == instance_count[name]:
+                    next_task_release[name] = float('inf')
+                else:
+                    instance_count[name] += 1
+                    next_task_release[name] += periodic_task.p
+                ready_queue.put((task_instance.d, task_instance))
+
+            deadline, next_task = ready_queue.get()
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
@@ -75,13 +89,6 @@ class MultiResourceNPEDFScheduler(Scheduler):
                 return None, False
             last_task_start[original_taskname] = start_time
 
-            # Introduce a new instance into the taskset if necessary
-            instance = int(instance)
-            if instance < instance_count[original_taskname]:
-                periodic_task = taskset_lookup[original_taskname]
-                task_instance = self.create_new_task_instance(periodic_task, instance + 1)
-                taskset = list(sorted(taskset + [task_instance], key=lambda task: task.d))
-
             # Construct the intervals that the resources are in use by this task
             resource_interval_trees = {}
             resource_interval_list = [(resource, itree) for resource, itree in next_task.get_resource_intervals().items()]
@@ -89,6 +96,21 @@ class MultiResourceNPEDFScheduler(Scheduler):
             for resource, itree in resource_intervals:
                 offset_itree = IntervalTree([Interval(i.begin + start_time - next_task.a, i.end + start_time - next_task.a) for i in itree])
                 resource_interval_trees[resource] = offset_itree
+
+                # Introduce any new instances that are now available
+                for name, release in next_task_release.items():
+                    for resource, itree in resource_interval_trees.items():
+                        periodic_task = taskset_lookup[name]
+                        if resource in periodic_task.resources and itree.end() >= release:
+                            instance = instance_count[name]
+                            task_instance = self.create_new_task_instance(periodic_task, instance)
+                            if hyperperiod // periodic_task.p == instance_count[name]:
+                                next_task_release[name] = float('inf')
+                            else:
+                                instance_count[name] += 1
+                                next_task_release[name] += periodic_task.p
+                            ready_queue.put((task_instance.d, task_instance))
+                            break
 
             # Add the schedule information to the overall schedule
             schedule.append((start_time, start_time + next_task.c, next_task))
