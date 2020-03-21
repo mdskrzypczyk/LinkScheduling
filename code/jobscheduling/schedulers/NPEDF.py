@@ -97,20 +97,20 @@ class MultiResourceNPEDFScheduler(Scheduler):
                 offset_itree = IntervalTree([Interval(i.begin + start_time - next_task.a, i.end + start_time - next_task.a) for i in itree])
                 resource_interval_trees[resource] = offset_itree
 
-                # Introduce any new instances that are now available
-                for name, release in next_task_release.items():
-                    for resource, itree in resource_interval_trees.items():
-                        periodic_task = taskset_lookup[name]
-                        if resource in periodic_task.resources and itree.end() >= release:
-                            instance = instance_count[name]
-                            task_instance = self.create_new_task_instance(periodic_task, instance)
-                            if hyperperiod // periodic_task.p == instance_count[name]:
-                                next_task_release[name] = float('inf')
-                            else:
-                                instance_count[name] += 1
-                                next_task_release[name] += periodic_task.p
-                            ready_queue.put((task_instance.d, task_instance))
-                            break
+            # Introduce any new instances that are now available
+            for name, release in next_task_release.items():
+                for resource, itree in resource_interval_trees.items():
+                    periodic_task = taskset_lookup[name]
+                    if resource in periodic_task.resources and itree.end() >= release:
+                        instance = instance_count[name]
+                        task_instance = self.create_new_task_instance(periodic_task, instance)
+                        if hyperperiod // periodic_task.p == instance_count[name]:
+                            next_task_release[name] = float('inf')
+                        else:
+                            instance_count[name] += 1
+                            next_task_release[name] += periodic_task.p
+                        ready_queue.put((task_instance.d, task_instance))
+                        break
 
             # Add the schedule information to the overall schedule
             schedule.append((start_time, start_time + next_task.c, next_task))

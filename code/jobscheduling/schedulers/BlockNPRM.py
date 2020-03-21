@@ -106,9 +106,8 @@ class MultiResourceBlockNPRMScheduler(Scheduler):
         logger.debug("Computed hyperperiod {}".format(hyperperiod))
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
         last_task_start = dict([(t.name, 0) for t in original_taskset])
-        instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
-
-        taskset = self.initialize_taskset(taskset)
+        next_task_release = dict([(t.name, t.a) for t in original_taskset])
+        instance_count = dict([(t.name, 0) for t in original_taskset])
 
         resource_schedules = defaultdict(list)
         global_resource_occupations = defaultdict(IntervalTree)
@@ -117,11 +116,26 @@ class MultiResourceBlockNPRMScheduler(Scheduler):
         # First sort the taskset by activation time
         logger.debug("Sorting tasks by earliest deadlines")
         taskset = list(sorted(taskset, key=lambda task: taskset_lookup[task.name.split('|')[0]].p))
+        ready_queue = PriorityQueue()
 
         schedule = []
         earliest = 0
-        while taskset:
-            next_task = taskset.pop(0)
+        # Continue scheduling until no more task instances left
+        while any([release != float('inf') for release in next_task_release.values()]):
+            # Introduce a new task if there are currently none
+            if ready_queue.empty():
+                name, release = sorted(next_task_release.items(), key=lambda ntr: (ntr[1], ntr[0]))[0]
+                periodic_task = taskset_lookup[name]
+                instance = instance_count[name]
+                task_instance = self.create_new_task_instance(periodic_task, instance)
+                if hyperperiod // periodic_task.p == instance_count[name]:
+                    next_task_release[name] = float('inf')
+                else:
+                    instance_count[name] += 1
+                    next_task_release[name] += periodic_task.p
+                ready_queue.put((periodic_task.p, task_instance))
+
+            deadline, next_task = ready_queue.get()
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
@@ -146,6 +160,21 @@ class MultiResourceBlockNPRMScheduler(Scheduler):
             for resource in next_task.resources:
                 resource_intervals[resource].append(interval)
                 resource_schedules[resource].append((task_start, task_end, next_task))
+
+            # Introduce any new instances that are now available
+            for name, release in next_task_release.items():
+                for resource in next_task.resources:
+                    periodic_task = taskset_lookup[name]
+                    if resource in periodic_task.resources and task_end >= release:
+                        instance = instance_count[name]
+                        task_instance = self.create_new_task_instance(periodic_task, instance)
+                        if hyperperiod // periodic_task.p == instance_count[name]:
+                            next_task_release[name] = float('inf')
+                        else:
+                            instance_count[name] += 1
+                            next_task_release[name] += periodic_task.p
+                        ready_queue.put((periodic_task.p, task_instance))
+                        break
 
             # Add the schedule information to the overall schedule
             schedule.append((start_time, start_time + next_task.c, next_task))
