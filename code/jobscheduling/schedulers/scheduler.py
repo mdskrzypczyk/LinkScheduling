@@ -34,7 +34,7 @@ def check_wc_np_feasibility(periodic_taskset):
     return True
 
 
-def verify_schedule(original_taskset, schedule, topology):
+def verify_schedule(original_taskset, schedule, topology, strict=False):
     # Construct the occupation intervals of all the resources
     global_resource_capacities = {}
     node_resources = topology[1].nodes
@@ -47,7 +47,7 @@ def verify_schedule(original_taskset, schedule, topology):
             [Interval(0, float('inf'), (0, len(resources["storage_qs"])))])
 
     # Iterate over thes chedule
-    for start, end, t in schedule:
+    for start, end, t in sorted(schedule):
         # Check that the task's execution period adhere's to it's release and deadline times
         if start < t.a or end > t.d:
             logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
@@ -74,7 +74,8 @@ def verify_schedule(original_taskset, schedule, topology):
                 global_resource_capacities[resource].add(interval)
             global_resource_capacities[resource].split_overlaps(data_reducer=lambda x, y: (x[0] + y[0], max_capacity))
             global_resource_capacities[resource].merge_overlaps(data_reducer=lambda x, y: (x[0], max_capacity),
-                                                          data_compare=lambda x, y: x[0] == y[0])
+                                                                data_compare=lambda x, y: x[0] == y[0])
+            global_resource_capacities[resource].chop(0, start)
 
     return True
 

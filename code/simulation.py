@@ -229,6 +229,7 @@ def get_schedulers():
 def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
+    return [('0', '2', 0.706, 0.078125), ('0', '4', 0.841, 0.01953125), ('0', '4', 0.899, 0.009765625), ('1', '3', 0.657, 0.01953125), ('3', '1', 0.773, 0.009765625), ('4', '2', 0.702, 0.078125), ('0', '3', 0.803, 0.009765625), ('1', '4', 0.653, 0.01953125), ('2', '4', 0.669, 0.078125), ('1', '0', 0.652, 0.009765625)]
     for num_demands in range(num):
         src, dst = random.sample(nodeG.nodes, 2)
         fidelity = round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
@@ -850,8 +851,8 @@ def main():
                         latency = scheduled_task.c * slot_size
                         achieved_rate = 1 / latency
 
-                        new_rate = select_rate(achieved_rate)
                         s, d, f, r = demand
+                        new_rate = r #select_rate(achieved_rate)
                         demand = (s, d, f, new_rate)
                         s, d, f, r = demand
 
@@ -908,7 +909,7 @@ def main():
                                 # Record success
                                 if all([valid for _, _, valid in schedule]):
                                     running_taskset.append(task)
-                                    logger.info("Running taskset length: {}".format(len(running_taskset)))
+                                    logger.info("Running taskset length: {}, {}".format(len(running_taskset), time.time() - start))
                                     last_succ_schedule = schedule
                                     for sub_taskset, sub_schedule, _ in schedule:
                                         logger.debug("Created schedule for {} demands {}, length={}".format(

@@ -3,6 +3,7 @@ from copy import copy
 from collections import defaultdict
 from queue import PriorityQueue
 from intervaltree import Interval, IntervalTree
+from jobscheduling.modintervaltree import ModIntervalTree
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_schedule
 from jobscheduling.task import get_resource_type_intervals, get_lcm_for, generate_non_periodic_task_set, ResourceDAGTask, PeriodicResourceDAGTask, PeriodicBudgetResourceDAGTask
@@ -12,12 +13,13 @@ logger = LSLogger()
 
 
 class MultiResourceNPEDFScheduler(CommonScheduler):
-    def update_resource_occupations(self, resource_occupations, resource_intervals):
+    def update_resource_occupations(self, resource_occupations, resource_intervals, node_resources):
         for resource in resource_intervals.keys():
             resource_interval_tree = resource_intervals[resource]
-            max_capacity = sorted(resource_occupations[resource].all_intervals)[-1].data[1]
+            node, rt = resource
+            max_capacity = len(node_resources[node]["comm_qs" if rt == "C" else "storage_qs"])
             for interval in resource_interval_tree:
-                resource_occupations[resource].add(interval)
+                resource_occupations[resource].add(Interval(interval.begin, interval.end, (interval.data[0], max_capacity)))
             resource_occupations[resource].split_overlaps(data_reducer=lambda x, y: (x[0] + y[0], max_capacity))
             resource_occupations[resource].merge_overlaps(data_reducer=lambda x, y: (x[0], max_capacity),
                                                           data_compare=lambda x, y: x[0] == y[0])
@@ -50,12 +52,8 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         last_task_start = defaultdict(int)
 
         # Track the occupation periods of the resources
-        global_resource_capacities = {}
+        global_resource_capacities = defaultdict(ModIntervalTree)
         node_resources = topology[1].nodes
-        from jobscheduling.modintervaltree import ModIntervalTree
-        for node, resources in node_resources.items():
-            global_resource_capacities["{}C".format(node)] = ModIntervalTree([Interval(0, float('inf'), (0, len(resources["comm_qs"])))])
-            global_resource_capacities["{}S".format(node)] = ModIntervalTree([Interval(0, float('inf'), (0, len(resources["storage_qs"])))])
 
         # Sort the initial taskset by deadline
         logger.debug("Sorting tasks by earliest deadlines")
@@ -65,6 +63,8 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         # Track the schedule
         schedule = []
 
+        import time
+        start = time.time()
         # Continue scheduling until no more task instances left
         while any([release != float('inf') for release in next_task_release.values()]):
             # Introduce a new task if there are currently none
@@ -95,10 +95,11 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
 
             # Update windowed resource schedules
             if taskset:
-                self.update_resource_occupations(global_resource_capacities, resource_interval_trees)
+                self.update_resource_occupations(global_resource_capacities, resource_interval_trees, node_resources)
                 min_chop = min(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
                 self.remove_useless_resource_occupations(global_resource_capacities, resource_interval_trees.keys(), min_chop)
 
+        print("Scheduling took {}".format(time.time() - start))
         # Check validity
         valid = verify_schedule(original_taskset, schedule, topology)
 
@@ -111,7 +112,6 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         while True:
             # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained resource can be scheduled
             scheduleable, step = self.attempt_schedule(task, offset, resource_capacities)
-
             if scheduleable:
                 return offset + task.a
 
@@ -149,7 +149,7 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             return True, 0
 
         else:
-            return False, min(distances_to_free)
+            return False, max(distances_to_free)
 
     def subtask_constrained(self, subtask, resource_occupations, offset):
         # Check if the start time of this resource is affected by the available intervals
