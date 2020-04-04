@@ -278,7 +278,7 @@ def get_protocol_without_rate_constraint(network_topology, demand):
 
 
 def select_rate(achieved_rate):
-    rates = [10 / (2 ** i) for i in range(7, 11)]  # Rate range between 0.2 and 1
+    rates = [1 / (2 ** i) for i in range(5, 9)]  # Rate range between
     rates = list(filter(lambda r: r < achieved_rate, rates))
     return random.choice(rates)
 
@@ -812,7 +812,7 @@ def main():
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes, num_comm_q=1, num_storage_q=3)
     slot_size = 0.05
-    demand_size = 40
+    demand_size = 50
 
     network_schedulers = get_schedulers()
     results = {}
@@ -853,6 +853,7 @@ def main():
                         new_rate = select_rate(achieved_rate)
                         s, d, f, r = demand
                         demand = (s, d, f, new_rate)
+                        s, d, f, r = demand
 
                         asap_dec, alap_dec, shift_dec = decoherence_times
                         logger.info("Results for {}:".format(demand))
@@ -872,6 +873,17 @@ def main():
                             num_succ += 1
                             logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
                             taskset.append(scheduled_task)
+                            from jobscheduling.task import get_resource_type_intervals
+                            intervals = get_resource_type_intervals(task)
+                            for r, itree in intervals.items():
+                                print(r, itree)
+                                def compare(x, y):
+                                    return x[0] == y[0]
+                                itree.merge_overlaps(data_reducer=lambda x, y: (x[0], x[1] | y[1]),
+                                                     data_compare=compare)
+                                print(itree)
+                            import pdb
+                            pdb.set_trace()
 
                     except Exception as err:
                         logger.exception("Error occurred while generating tasks: {}".format(err))
