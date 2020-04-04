@@ -695,7 +695,7 @@ def sample_sim():
                                 # Record success
                                 if all([valid for _, _, valid in schedule]):
                                     running_taskset.append(task)
-                                    logger.info("Running taskset length: {}".format(len(running_taskset)))
+                                    logger.info("Running taskset length: {}, {}".format(len(running_taskset), time.time() - start))
                                     last_succ_schedule = schedule
                                     for sub_taskset, sub_schedule, _ in schedule:
                                         logger.debug("Created schedule for {} demands {}, length={}".format(
