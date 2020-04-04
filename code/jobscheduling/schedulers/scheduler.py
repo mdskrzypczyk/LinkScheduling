@@ -34,9 +34,17 @@ def check_wc_np_feasibility(periodic_taskset):
     return True
 
 
-def verify_schedule(original_taskset, schedule):
+def verify_schedule(original_taskset, schedule, topology):
     # Construct the occupation intervals of all the resources
-    global_resource_intervals = defaultdict(IntervalTree)
+    global_resource_capacities = {}
+    node_resources = topology[1].nodes
+    from jobscheduling.modintervaltree import ModIntervalTree
+    from jobscheduling.task import get_resource_type_intervals
+    for node, resources in node_resources.items():
+        global_resource_capacities["{}C".format(node)] = ModIntervalTree(
+            [Interval(0, float('inf'), (0, len(resources["comm_qs"])))])
+        global_resource_capacities["{}S".format(node)] = ModIntervalTree(
+            [Interval(0, float('inf'), (0, len(resources["storage_qs"])))])
 
     # Iterate over thes chedule
     for start, end, t in schedule:
@@ -51,16 +59,22 @@ def verify_schedule(original_taskset, schedule):
             return False
 
         # Add the occupation period of this task to all resources
-        task_resource_intervals = t.get_resource_intervals()
+        task_resource_intervals = get_resource_type_intervals(t)
         offset = start - t.a
-        for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree])
+        for resource,itree in task_resource_intervals.items():
+            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, i.data) for i in itree])
+            max_capacity = sorted(global_resource_capacities[resource].all_intervals)[-1].data[1]
             for interval in offset_itree:
-                if global_resource_intervals[resource].overlap(interval.begin, interval.end):
-                    import pdb
-                    pdb.set_trace()
-                    return False
-                global_resource_intervals[resource].add(interval)
+                overlapping_intervals = sorted(global_resource_capacities[resource].overlap(interval.begin, interval.end))
+                for overlapping_interval in overlapping_intervals:
+                    if interval.data[0] + overlapping_interval.data[0] > max_capacity:
+                        import pdb
+                        pdb.set_trace()
+                        return False
+                global_resource_capacities[resource].add(interval)
+            global_resource_capacities[resource].split_overlaps(data_reducer=lambda x, y: (x[0] + y[0], max_capacity))
+            global_resource_capacities[resource].merge_overlaps(data_reducer=lambda x, y: (x[0], max_capacity),
+                                                          data_compare=lambda x, y: x[0] == y[0])
 
     return True
 

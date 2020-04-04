@@ -5,7 +5,7 @@ from queue import PriorityQueue
 from intervaltree import Interval, IntervalTree
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, ResourceDAGTask, PeriodicResourceDAGTask, PeriodicBudgetResourceDAGTask
+from jobscheduling.task import get_resource_type_intervals, get_lcm_for, generate_non_periodic_task_set, ResourceDAGTask, PeriodicResourceDAGTask, PeriodicBudgetResourceDAGTask
 
 
 logger = LSLogger()
@@ -15,16 +15,19 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
     def update_resource_occupations(self, resource_occupations, resource_intervals):
         for resource in resource_intervals.keys():
             resource_interval_tree = resource_intervals[resource]
-            resource_occupations[resource] |= resource_interval_tree
-            resource_occupations[resource].merge_overlaps(strict=False)
+            max_capacity = sorted(resource_occupations[resource].all_intervals)[-1].data[1]
+            for interval in resource_interval_tree:
+                resource_occupations[resource].add(interval)
+            resource_occupations[resource].split_overlaps(data_reducer=lambda x, y: (x[0] + y[0], max_capacity))
+            resource_occupations[resource].merge_overlaps(data_reducer=lambda x, y: (x[0], max_capacity),
+                                                          data_compare=lambda x, y: x[0] == y[0])
 
     def extract_resource_intervals(self, next_task, start_time):
         resource_interval_trees = {}
-        resource_interval_list = [(resource, itree) for resource, itree in next_task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
-        for resource, itree in resource_intervals:
+        resource_intervals = get_resource_type_intervals(next_task)
+        for resource, itree in resource_intervals.items():
             offset_itree = IntervalTree(
-                [Interval(i.begin + start_time - next_task.a, i.end + start_time - next_task.a) for i in itree])
+                [Interval(i.begin + start_time - next_task.a, i.end + start_time - next_task.a, i.data) for i in itree])
             resource_interval_trees[resource] = offset_itree
 
         return resource_interval_trees
@@ -47,8 +50,12 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         last_task_start = defaultdict(int)
 
         # Track the occupation periods of the resources
-        global_resource_occupations = defaultdict(IntervalTree)
+        global_resource_capacities = {}
         node_resources = topology[1].nodes
+        from jobscheduling.modintervaltree import ModIntervalTree
+        for node, resources in node_resources.items():
+            global_resource_capacities["{}C".format(node)] = ModIntervalTree([Interval(0, float('inf'), (0, len(resources["comm_qs"])))])
+            global_resource_capacities["{}S".format(node)] = ModIntervalTree([Interval(0, float('inf'), (0, len(resources["storage_qs"])))])
 
         # Sort the initial taskset by deadline
         logger.debug("Sorting tasks by earliest deadlines")
@@ -72,7 +79,7 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             earliest_start = max(next_task.a, last_start)
 
             # Find the start time of this task and track it
-            start_time = self.get_start_time(next_task, global_resource_occupations, node_resources, earliest_start)
+            start_time = self.get_start_time(next_task, global_resource_capacities, node_resources, earliest_start)
             if start_time + next_task.c > next_task.d:
                 return None, False
             last_task_start[original_taskname] = start_time
@@ -88,32 +95,22 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
 
             # Update windowed resource schedules
             if taskset:
-                self.update_resource_occupations(global_resource_occupations, resource_interval_trees)
+                self.update_resource_occupations(global_resource_capacities, resource_interval_trees)
                 min_chop = min(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
-                self.remove_useless_resource_occupations(global_resource_occupations, resource_interval_trees.keys(), min_chop)
+                self.remove_useless_resource_occupations(global_resource_capacities, resource_interval_trees.keys(), min_chop)
 
         # Check validity
-        valid = verify_schedule(original_taskset, schedule)
+        valid = verify_schedule(original_taskset, schedule, topology)
 
         taskset = original_taskset
         return schedule, valid
 
-    def get_start_time(self, task, resource_occupations, node_resources, earliest):
+    def get_start_time(self, task, resource_capacities, node_resources, earliest):
         offset = max(0, earliest - task.a)
-
-        # Find the earliest start
-        resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-        task.resources = list(set(resource_relations.values()))
-        for subtask in task.subtasks:
-            new_resources = []
-            for resource in subtask.resources:
-                new_resources.append(resource_relations[resource])
-            subtask.resources = new_resources
-
-        offset = self.find_earliest_start(task, resource_occupations, earliest)
+        offset = self.find_earliest_start(task, resource_capacities, earliest)
         while True:
             # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained resource can be scheduled
-            scheduleable, step = self.attempt_schedule(task, offset, resource_occupations)
+            scheduleable, step = self.attempt_schedule(task, offset, resource_capacities)
 
             if scheduleable:
                 return offset + task.a
@@ -121,41 +118,32 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             else:
                 # See if we can remove any of the constrained subtasks if we have to move forward by step
                 offset += step
-                resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-                task.resources = list(set(resource_relations.values()))
-                for subtask in task.subtasks:
-                    new_resources = []
-                    for resource in subtask.resources:
-                        new_resources.append(resource_relations[resource])
-                    subtask.resources = new_resources
 
-    def find_earliest_start(self, task, resource_occupations, start):
+    def find_earliest_start(self, task, resource_capacities, start):
         # Iterate over the tasks and check if their interval overlaps with the resources
         distances_to_free = []
 
-        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
+        resource_intervals = get_resource_type_intervals(task)
         offset = start-task.a
-        for resource, itree in resource_intervals:
+        for resource, itree in resource_intervals.items():
             for interval in itree:
-                intervals = sorted(resource_occupations[resource][interval.begin + offset:interval.end + offset])
-                if intervals:
-                    overlapping_interval = intervals[0]
-                    distances_to_free.append(overlapping_interval.end - (interval.begin + offset))
+                intervals = sorted(resource_capacities[resource][interval.begin + offset:interval.end + offset])
+                for overlapping_interval in intervals:
+                    if interval.data[0] + overlapping_interval.data[0] > overlapping_interval.data[1]:
+                        distances_to_free.append(overlapping_interval.end - (interval.begin + offset))
 
         return max([0] + distances_to_free)
 
-    def attempt_schedule(self, task, offset, resource_occupations):
+    def attempt_schedule(self, task, offset, resource_capacities):
         # Iterate over the tasks and check if their interval overlaps with the resources
         distances_to_free = []
-        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
-        for resource, itree in resource_intervals:
+        resource_intervals = get_resource_type_intervals(task)
+        for resource, itree in resource_intervals.items():
             for interval in itree:
-                intervals = sorted(resource_occupations[resource][interval.begin + offset:interval.end + offset])
-                if intervals:
-                    overlapping_interval = intervals[0]
-                    distances_to_free.append(overlapping_interval.end - (interval.begin + offset))
+                intervals = sorted(resource_capacities[resource][interval.begin + offset:interval.end + offset])
+                for overlapping_interval in intervals:
+                    if interval.data[0] + overlapping_interval.data[0] > overlapping_interval.data[1]:
+                        distances_to_free.append(overlapping_interval.end - (interval.begin + offset))
 
         if not distances_to_free:
             return True, 0

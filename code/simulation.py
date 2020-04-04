@@ -211,9 +211,9 @@ def get_schedulers():
         # UniResourceBlockNPRMScheduler,
         # UniResourceCEDFScheduler,
         # MultipleResourceILPBlockNPEDFScheduler,
-        MultipleResourceBlockCEDFScheduler,
-        MultipleResourceBlockNPEDFScheduler,
-        MultipleResourceBlockNPRMScheduler,
+        # MultipleResourceBlockCEDFScheduler,
+        # MultipleResourceBlockNPEDFScheduler,
+        # MultipleResourceBlockNPRMScheduler,
         # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
@@ -221,7 +221,7 @@ def get_schedulers():
         # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
-        MultipleResourceNonBlockNPRMScheduler,
+        # MultipleResourceNonBlockNPRMScheduler,
     ]
     return schedulers
 
@@ -812,7 +812,7 @@ def main():
     budget_allowances = [1*i for i in range(1)]
     network_topologies = gen_topologies(num_network_nodes, num_comm_q=1, num_storage_q=3)
     slot_size = 0.05
-    demand_size = 50
+    demand_size = 5
 
     network_schedulers = get_schedulers()
     results = {}
@@ -873,17 +873,6 @@ def main():
                             num_succ += 1
                             logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
                             taskset.append(scheduled_task)
-                            from jobscheduling.task import get_resource_type_intervals
-                            intervals = get_resource_type_intervals(task)
-                            for r, itree in intervals.items():
-                                print(r, itree)
-                                def compare(x, y):
-                                    return x[0] == y[0]
-                                itree.merge_overlaps(data_reducer=lambda x, y: (x[0], x[1] | y[1]),
-                                                     data_compare=compare)
-                                print(itree)
-                            import pdb
-                            pdb.set_trace()
 
                     except Exception as err:
                         logger.exception("Error occurred while generating tasks: {}".format(err))

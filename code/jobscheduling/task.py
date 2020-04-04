@@ -137,6 +137,30 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
     return preemption_points
 
 
+
+
+def get_resource_string(resource):
+    resource_node, resource_id = resource.split('-')
+    resource_type = resource_id[0]
+    return resource_node + resource_type
+
+from jobscheduling.modintervaltree import ModIntervalTree
+
+def get_resource_type_intervals(dagtask):
+    resource_intervals = dagtask.get_resource_intervals()
+    resource_type_intervals = defaultdict(ModIntervalTree)
+    for resource, itree in resource_intervals.items():
+        resource_type = get_resource_string(resource)
+        for i in itree:
+            resource_type_intervals[resource_type].add(Interval(i.begin, i.end, (1, {i.data})))
+
+    for resource_type, itree in resource_type_intervals.items():
+        itree.split_overlaps(data_reducer=lambda x, y: (x[0] + y[0], x[1] | y[1]))
+        itree.merge_overlaps(data_reducer=lambda x, y: (x[0], x[1]|y[1]), data_compare=lambda x,y: x[0] == y[0])
+
+    return resource_type_intervals
+
+
 class Task:
     def __init__(self, name, c, a=0, d=None, description=None, **kwargs):
         self.name = name
