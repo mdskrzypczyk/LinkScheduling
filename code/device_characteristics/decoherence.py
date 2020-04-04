@@ -174,7 +174,7 @@ class FidelityTrackingProtocol(TimedProtocol):
 
 
 def single_vs_double_device_decoherence_no_noise():
-    config_path = "/Users/mskrzypczyk/Documents/projects/LinkScheduling/code/linkscheduling/config/two_uniform_device.json"
+    config_path = "/home/mds/Documents/projects/LinkScheduling/code/device_characteristics/config/two_uniform_device.json"
     network = setup_physical_network(config_file=config_path)
     node0 = network.get_node_by_id(0)
     device0 = node0.components['alice']

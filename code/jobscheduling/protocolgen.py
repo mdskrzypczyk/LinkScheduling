@@ -2,7 +2,7 @@ import networkx as nx
 from math import ceil
 from copy import copy
 from jobscheduling.log import LSLogger
-from jobscheduling.qmath import swap_links, unswap_links, distill_links, fidelity_for_distillations, distillations_for_fidelity
+from jobscheduling.qmath import swap_links, unswap_links, distill_links, undistill_link_even, fidelity_for_distillations, distillations_for_fidelity
 
 
 logger = LSLogger()
@@ -93,6 +93,7 @@ def create_protocol(path, nodeG, Fmin, Rmin):
         numStorResources = len(nodeG.nodes[node]['storage_qs'])
         pathResources[node] = {
             "comm": numCommResources,
+            "storage": numStorResources,
             "total": numCommResources + numStorResources
         }
 
@@ -126,7 +127,6 @@ def esss(path, pathResources, G, Fmin, Rmin):
 
             logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL-1]))
             possible_protocol, Rl, Rr = find_split_path_protocol(path, dict(pathResources), G, Fmin, Rmin, numL, numR)
-
 
             if possible_protocol and possible_protocol.F >= Fmin and possible_protocol.R >= Rmin:
                 protocols.append(possible_protocol)
@@ -240,6 +240,19 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
         return None
 
     # Search for the link gen protocol with highest rate that satisfies fidelity
+    minResources = min([nodeResources[n]["total"] for n in nodes])
+    pumping_protocol = find_pumping_protocol(nodes, nodeResources, link_properties, Fmin, Rmin)
+    if minResources > 2:
+        binary_protocol = find_binary_protocol(nodes, nodeResources, link_properties, Fmin, Rmin)
+        if binary_protocol:
+            if not pumping_protocol or binary_protocol.R > pumping_protocol.R:
+                return binary_protocol
+
+    return pumping_protocol
+
+
+def find_pumping_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
+    # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
     minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
@@ -257,13 +270,103 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
             linkProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
             for i in range(numGens):
                 currF = distill_links(currF, F)
-                currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol], nodes=nodes)
+                currProtocol = DistillationProtocol(F=currF, R=currR, protocols=[currProtocol, linkProtocol],
+                                                    nodes=nodes)
 
             if currProtocol.F > Fmin and currProtocol.R >= Rmin:
-                logger.debug("Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+                logger.debug(
+                    "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R,
+                                                                                    numGens))
                 protocols.append(currProtocol)
 
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
     if protocol is None:
         logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
     return protocol
+
+
+def find_binary_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
+    # Search for the link gen protocol with highest rate that satisfies fidelity
+    protocols = []
+    # Can only generate as fast as the most constrained node
+    minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
+    minResources = min([nodeResources[n]["total"] for n in nodes])
+    for F, R in link_properties:
+        if R < Rmin:
+            continue
+        numDist = distillations_for_const_fidelity(F, Fmin)
+        numGens = links_for_distillations(numDist)
+
+        # Check that numGens is below the max supported by minResources
+        if numGens > 2**(minResources - 1):
+            continue
+
+        numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
+        binary_rate = R / numRounds
+        if binary_rate < Rmin:
+            continue
+
+        q = [LinkProtocol(F=F, R=R, nodes=nodes) for _ in range(numGens)]
+        currProtocol = None
+        while len(q) > 1:
+            p1 = q.pop(0)
+            p2 = q.pop(0)
+            currF = distill_links(p1.F, p2.F)
+            currProtocol = DistillationProtocol(F=currF, R=min(p1.R, p2.R), protocols=[p1, p2], nodes=nodes)
+            q.append(currProtocol)
+
+        currProtocol = q.pop(0)
+        currProtocol.R = binary_rate
+        if currProtocol.F > Fmin and currProtocol.R >= Rmin:
+            logger.debug(
+                "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+            protocols.append(currProtocol)
+
+    protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
+    if protocol is None:
+        logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+
+    return protocol
+
+
+def const_fidelity_distillation_max(Finitial, num):
+    Fout = Finitial
+    for i in range(num):
+        Fout = distill_links(Fout, Fout)
+
+    return Fout
+
+
+def distillations_for_const_fidelity(Finitial, Ftarget):
+    if Finitial < 0.5:
+        return float('inf')
+    num = 1
+    while Ftarget > Finitial:
+        Ftarget = undistill_link_even(Ftarget)
+        num += 1
+
+    return 2**num - 1
+
+
+def links_for_distillations(num_distillations):
+    return num_distillations + 1
+
+
+def bitcount(n):
+    count = 0
+    while n > 0:
+        count = count + 1
+        n = n & (n-1)
+    return count
+
+
+def num_rounds(num_links, num_comm, num_storage):
+    num_rounds = 0
+    generated = 0
+    while generated < num_links:
+        occupied_resources = bitcount(generated)
+        num_available = min(num_comm, num_comm + num_storage - occupied_resources)
+        num_rounds += 1
+        generated += num_available
+
+    return num_rounds

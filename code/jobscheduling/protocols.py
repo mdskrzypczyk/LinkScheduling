@@ -69,6 +69,10 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
                                              parents=parent_tasks[peek_protocol_action.name], dist=peek_protocol_action.dist,
                                              resources=resources)
 
+                F = round(peek_protocol_action.F, 2)
+                R = round(peek_protocol_action.R, 2)
+                dagtask.description = "F={}, R={}".format(F, R)
+
                 for parent in parent_tasks[peek_protocol_action.name]:
                     parent.add_child(dagtask)
 
@@ -556,7 +560,7 @@ def shift_distillations_and_swaps(dagtask):
     for task in sorted(dagtask.subtasks, key=lambda task: task.a):
         if task.name[0] == "D" or task.name[0] == "S":
             parent_ends = [p.a + ceil(p.c) for p in task.parents if set(p.resources) & set(task.resources)]
-            parent_task_end = max(parent_ends) if parent_ends else task.a
+            parent_task_end = max(parent_ends) if parent_ends else 0
             resource_availabilities = []
             for resource in task.resources:
                 interval_set = resource_schedules[resource].envelop(0, task.a)

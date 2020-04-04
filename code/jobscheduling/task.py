@@ -138,11 +138,12 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
 
 
 class Task:
-    def __init__(self, name, c, a=0, d=None, **kwargs):
+    def __init__(self, name, c, a=0, d=None, description=None, **kwargs):
         self.name = name
         self.a = a
         self.c = c
         self.d = d
+        self.description = description
 
     def __lt__(self, other):
         return self.name < other.name
@@ -311,6 +312,9 @@ class DAGBudgetResourceSubTask(DAGResourceSubTask):
 
 
 def get_dag_exec_time(dag):
+    if not dag.subtasks:
+        import pdb
+        pdb.set_trace()
     return max([subtask.a + subtask.c for subtask in dag.subtasks]) - min([source.a for source in dag.sources])
 
 
@@ -487,6 +491,9 @@ class ResourceDAGTask(ResourceTask):
                 pdb.set_trace()
 
             resource_intervals[resource].add(interval)
+
+        for resource, itree in resource_intervals.items():
+            itree.merge_overlaps(strict=False)
 
         return resource_intervals
 

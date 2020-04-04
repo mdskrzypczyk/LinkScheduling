@@ -1,9 +1,9 @@
-import networkx as nx
 from abc import abstractmethod
 from collections import defaultdict
-from math import floor, ceil
+from copy import copy
+from math import floor
 from queue import PriorityQueue
-from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask, PeriodicResourceDAGTask, ResourceTask, ResourceDAGTask
+from jobscheduling.task import find_dag_task_preemption_points, get_lcm_for, generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask, PeriodicResourceDAGTask, ResourceTask, ResourceDAGTask, BudgetResourceDAGTask
 from jobscheduling.log import LSLogger
 from intervaltree import IntervalTree, Interval
 
@@ -188,233 +188,227 @@ class Scheduler:
         pass
 
 
-class OptimalScheduler(Scheduler):
-    def rschedule(self, taskset):
-        schedule = []
-
-        # First sort the taskset by activation time
-        taskset = list(sorted(taskset, key=lambda task: task.d))
-        schedule, valid = self.schedule_helper(schedule, taskset)
-        return schedule, valid
-
-    def schedule_helper(self, curr_schedule, remaining_tasks):
-        if not remaining_tasks:
-            return curr_schedule, True
-
-        else:
-            next_task = remaining_tasks.pop(0)
-            for s in self.get_available_starts(curr_schedule, next_task):
-                potential_schedule = list(curr_schedule)
-                potential_schedule.append((s, s + next_task.c, next_task))
-                sched, valid = self.schedule_helper(potential_schedule, remaining_tasks)
-                if valid:
-                    return sched, True
-
-        return None, False
-
-    def get_disjoint_tasksets(self, taskset):
-        ordered = list(sorted([(task.a, task.d, task.c, task) for task in taskset]))
-        disjoint_tasksets = []
-        while ordered:
-            next_taskset = []
-            start, end, dur, next_task = ordered.pop(0)
-            next_taskset.append(next_task)
-            while ordered and start <= ordered[0][3].a <= end:
-                _, _, _, next_task = ordered.pop(0)
-                end = max(end, next_task.a)
-                next_taskset.append(next_task)
-            disjoint_tasksets.append(next_taskset)
-        return disjoint_tasksets
-
-
-    def schedule_tasks(self, taskset):
-        schedule = []
-
-        disjoint_tasksets = self.get_disjoint_tasksets(taskset)
-
-        stack = list()
-
-        first_task = taskset[0]
-        stack += [(1, [(s, s + first_task.c)]) for s in self.get_available_starts(schedule, first_task)]
-        while stack:
-            next_task_index, curr_schedule = stack.pop()
-            if next_task_index < len(taskset):
-                next_task = taskset[next_task_index]
-            else:
-                return curr_schedule
-
-            available_starts = self.get_available_starts(curr_schedule, next_task)
-            if not available_starts:
-                continue
-            else:
-                stack += [(next_task_index + 1, curr_schedule + [(s, s + next_task.c, next_task)]) for s in available_starts]
-
-
-    def get_available_starts(self, curr_schedule, next_task):
-        starting_times = []
-
-        if not curr_schedule:
-            return list(range(next_task.a, next_task.d - next_task.c + 1))
-
-        # Check if task can execute before earliest task
-        if next_task.a + next_task.c <= curr_schedule[0][0]:
-            starting_times += [next_task.a + i for i in range(curr_schedule[0][0] - next_task.a - next_task.c)]
-
-        # Check if task can execute between any tasks
-        for td1, td2 in zip(curr_schedule, curr_schedule[1:]):
-            s1, e1, t1 = td1
-            s2, e2, t2 = td2
-
-            # Check if the task execution period does not lie between these tasks
-            if s1 <= next_task.a <= s2:
-                starting_times += [e1 + i for i in range(min(s2, next_task.d) - e1 - next_task.c)]
-            if s1 >= next_task.d:
-                break
-
-        # Check if task can execute after last task
-        if next_task.d - next_task.c >= curr_schedule[-1][1]:
-            starting_times += [max(curr_schedule[-1][1], next_task.a) + i for i in range(next_task.d - max(curr_schedule[-1][1], next_task.a) - next_task.c + 1)]
-
-        starting_times = list(filter(lambda s: next_task.a <= s <= next_task.d - next_task.c, starting_times))
-
-        return starting_times
-
-
-class PeriodicOptimalScheduler(OptimalScheduler):
-    def schedule_tasks(self, taskset):
-        taskset = generate_non_periodic_task_set(taskset)
-        disjoint_tasksets = self.get_disjoint_tasksets(taskset)
-
-        schedule = []
-        num_scheduled = 0
-        for sub_taskset in disjoint_tasksets:
-            stack = list()
-
-            first_task = sub_taskset[0]
-            starts = self.get_available_starts(schedule, first_task)
-            stack += [(1, [(s, s + first_task.c, first_task)]) for s in reversed(starts)]
-
-            curr_schedule = []
-            while stack:
-                next_task_index, curr_schedule = stack.pop()
-                if len(curr_schedule) < len(sub_taskset):
-                    next_task = sub_taskset[next_task_index]
-                    available_starts = self.get_available_starts(list(sorted(schedule + curr_schedule)), next_task)
-
-                    if available_starts:
-                        stack += [(next_task_index + 1, list(sorted(curr_schedule + [(s, s + next_task.c, next_task)])))
-                                  for s in reversed(available_starts)]
-                else:
-                    stack = []
-
-            if len(curr_schedule) != len(sub_taskset):
-                return None, False
-            else:
-                schedule += curr_schedule
-                num_scheduled += len(schedule)
-
-        return schedule, True
-
-
-class EDFScheduler(Scheduler):
+class CommonScheduler:
     def preprocess_taskset(self, taskset):
         return taskset
 
-    def schedule_tasks(self, taskset):
+    def initialize_taskset(self, tasks):
+        initial_tasks = []
+        for task in tasks:
+            task_instance = self.create_new_task_instance(task, 0)
+            initial_tasks.append(task_instance)
+
+        return initial_tasks
+
+    def add_task_to_ready_queue(self):
+        pass
+
+    def check_for_released_tasks(self, ready_queue, resource_intervals, taskset_lookup, instance_count, next_task_release, hyperperiod):
+        for name, release in next_task_release.items():
+            for resource, itree in resource_intervals.items():
+                periodic_task = taskset_lookup[name]
+                if resource in periodic_task.resources and itree.end() >= release:
+                    instance = instance_count[name]
+                    task_instance = self.create_new_task_instance(periodic_task, instance)
+                    if hyperperiod // periodic_task.p == instance_count[name]:
+                        next_task_release[name] = float('inf')
+                    else:
+                        instance_count[name] += 1
+                        next_task_release[name] += periodic_task.p
+                    ready_queue.put((task_instance.d, task_instance))
+                    break
+
+    def populate_ready_queue(self, ready_queue, taskset_lookup, instance_count, next_task_release, hyperperiod):
+        incoming_tasks = list(sorted(next_task_release.items(), key=lambda ntr: (ntr[1], ntr[0])))
+        _, next_release = incoming_tasks[0]
+        for name, release in incoming_tasks:
+            if release != next_release:
+                break
+            periodic_task = taskset_lookup[name]
+            instance = instance_count[name]
+            task_instance = self.create_new_task_instance(periodic_task, instance)
+            if hyperperiod // periodic_task.p == instance_count[name]:
+                next_task_release[name] = float('inf')
+            else:
+                instance_count[name] += 1
+                next_task_release[name] += periodic_task.p
+            ready_queue.put((task_instance.d, task_instance))
+
+    def create_new_task_instance(self, periodic_task, instance):
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p * instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
+
+        dag_instance = BudgetResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset,
+                                             d=dag_copy.a + dag_copy.p * (instance + 1), tasks=dag_copy.subtasks,
+                                             k=periodic_task.k)
+
+        return dag_instance
+
+    def map_task_resources(self, task, resource_occupations, node_resources, offset):
+        resource_relations = {}
+        for resource in list(sorted(set(task.resources))):
+            resource_node, resource_id = resource.split('-')
+            resource_type = resource_id[0]
+            resource_string = self.get_resource_string(resource)
+            if not resource_relations.get(resource_string):
+                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
+                                                               'comm_qs' if resource_type == "C" else "storage_qs"]))
+
+        virtual_to_map = {}
+        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
+        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: (ri[1].begin(), ri[0])))
+        for resource, itree in resource_intervals:
+            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
+            available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
+                                                                offset_itree)
+            dist, mapped = available_resources[0]
+            virtual_to_map[resource] = mapped
+            resource_string = self.get_resource_string(resource)
+            resource_relations[resource_string].remove(mapped)
+
+        return virtual_to_map
+
+    def remap_task_resources(self, task, offset, resource_occupations, node_resources):
+        resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+        task.resources = list(sorted(set(resource_relations.values())))
+        for subtask in task.subtasks:
+            new_resources = []
+            new_locked_resources = []
+            for resource in subtask.resources:
+                new_resources.append(resource_relations[resource])
+            for resource in subtask.locked_resources:
+                new_locked_resources.append(resource_relations[resource])
+            subtask.resources = new_resources
+            subtask.locked_resources = new_locked_resources
+
+        return task
+
+    def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
+        resource_string = self.get_resource_string(resource)
+        possible_resources = sorted(resource_relations[resource_string])
+        available_resources = []
+        for pr in possible_resources:
+            dist = 0
+            for interval in itree:
+                intervals = sorted(resource_occupations[pr][interval.begin:interval.end])
+                if intervals:
+                    overlapping_interval = intervals[0]
+                    dist = max(dist, overlapping_interval.end - interval.begin)
+            available_resources.append((dist, pr))
+
+        return list(sorted(available_resources))
+
+    def get_resource_string(self, resource):
+        resource_node, resource_id = resource.split('-')
+        resource_type = resource_id[0]
+        return resource_node + resource_type
+
+    def remove_useless_resource_occupations(self, resource_occupations, resources, chop):
+        for resource in resources:
+            resource_occupations[resource].chop(0, chop)
+
+    def get_segment_tasks(self, task):
+        segment_tasks = []
+        segment_info = find_dag_task_preemption_points(task)
+        comp_time = 0
+        for i, segment in enumerate(segment_info):
+            segment_task = self.construct_segment_task(task, segment, comp_time, i)
+            segment_tasks.append(segment_task)
+            comp_time += segment_task.c
+
+        return segment_tasks
+
+    def get_start_time(self, task, resource_occupations, node_resources, earliest):
+        segment_earliest = earliest
+        # Find the earliest start
+
+        while True:
+            offset = segment_earliest - task.a
+            task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
+            segment_tasks = self.get_segment_tasks(task)
+
+            segment_intervals = []
+            attempt_earliest = segment_earliest
+            comp_time = 0
+            for segment_task in segment_tasks:
+                # Find the earliest start
+                segment_start = self.find_earliest_start(segment_task, resource_occupations, attempt_earliest)
+                if not segment_intervals and segment_start != segment_earliest:
+                    segment_earliest = segment_start
+                    break
+
+                attempt_earliest = segment_start + segment_task.c
+                comp_time += segment_task.c
+                segment_intervals.append((segment_start, segment_start + segment_task.c))
+                if segment_start + segment_task.c - segment_intervals[0][0] > comp_time + task.k:
+                    segment_earliest = segment_start - comp_time + segment_task.c - task.k
+                    break
+
+                elif len(segment_intervals) == len(segment_tasks):
+                    start_times = list(zip(segment_intervals, [segment_task for segment_task in segment_tasks]))
+                    return start_times
+
+    def schedule_tasks(self, taskset, topology):
         original_taskset = taskset
-        taskset = self.preprocess_taskset(taskset)
-        queue = PriorityQueue()
-        schedule = []
+        hyperperiod = get_lcm_for([t.p for t in original_taskset])
+        logger.debug("Computed hyperperiod {}".format(hyperperiod))
+        taskset_lookup = dict([(t.name, t) for t in original_taskset])
+        last_task_start = dict([(t.name, 0) for t in original_taskset])
+        next_task_release = dict([(t.name, t.a) for t in original_taskset])
+        instance_count = dict([(t.name, 0) for t in original_taskset])
+
+        taskset = self.initialize_taskset(taskset)
+
+        global_resource_occupations = defaultdict(IntervalTree)
+        node_resources = topology[1].nodes
 
         # First sort the taskset by activation time
-        taskset = list(sorted(taskset, key=lambda task: task.a))
+        logger.debug("Sorting tasks by earliest deadlines")
+        taskset = list(sorted(taskset, key=lambda task: (task.d, task.a, task.name)))
+        ready_queue = PriorityQueue()
 
-        # Let time evolve and simulate scheduling, start at first task
-        curr_time = taskset[0].a
-        while taskset or not queue.empty():
-            while taskset and taskset[0].a <= curr_time:
-                task = taskset.pop(0)
-                queue.put((task.d, task))
+        schedule = []
+        earliest = 0
+        while any([release != float('inf') for release in next_task_release.values()]):
+            # Introduce a new task if there are currently none
+            if ready_queue.empty():
+                self.populate_ready_queue(ready_queue, taskset_lookup, instance_count, next_task_release, hyperperiod)
 
-            if not queue.empty():
-                priority, next_task = queue.get()
-                if taskset and curr_time + next_task.c > taskset[0].a:
-                    proc_time = taskset[0].a - curr_time
-                    next_task.c -= proc_time
-                    queue.put((next_task.d, next_task))
+            deadline, next_task = ready_queue.get()
+            original_taskname, instance = next_task.name.split('|')
+            last_start = last_task_start[original_taskname]
 
-                else:
-                    proc_time = next_task.c
+            preemption_point_intervals = self.get_start_time(next_task, global_resource_occupations, node_resources,
+                                                             max([next_task.a, earliest, last_start]))
 
-                schedule.append((curr_time, curr_time + proc_time, next_task))
-                curr_time += proc_time
+            # Check if time violated deadline
+            last_pp_interval, last_pp_tasks = preemption_point_intervals[-1]
+            last_pp_start, last_pp_end = last_pp_interval
+            if last_pp_end > next_task.d:
+                return None, False
 
-            else:
-                curr_time = taskset[0].a
+            # Record start time
+            first_interval, _ = preemption_point_intervals[0]
+            start_time = first_interval[0]
+            last_task_start[original_taskname] = start_time
+
+            # Add schedule information to resource schedules
+            resource_intervals = self.extract_resource_intervals_from_preemption_point_intervals(preemption_point_intervals)
+            self.schedule_preemption_point_intervals(schedule, preemption_point_intervals)
+
+            # Introduce any new instances that are now available
+            self.check_for_released_tasks(ready_queue, resource_intervals, taskset_lookup, instance_count, next_task_release, hyperperiod)
+
+            # Update windowed resource schedules
+            if taskset:
+                self.update_resource_occupations(global_resource_occupations, resource_intervals)
+                min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
+                self.remove_useless_resource_occupations(global_resource_occupations, resource_intervals.keys(), min_chop)
 
         # Check validity
-        valid = True
-        for start, end, task in schedule:
-            if task.d < end:
-                # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
-                valid = False
+        valid = self.verify_schedule(original_taskset, schedule)
 
         taskset = original_taskset
         return schedule, valid
-
-    def merge_adjacent_entries(self):
-        for i in range(len(self.schedule)):
-            if i >= len(self.schedule):
-                return
-            s, e, task = self.schedule[i]
-            c = 1
-            while i+c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
-                e = self.schedule[i+c][1]
-                c += 1
-            for j in range(1, c):
-                self.schedule.pop(i+1)
-            self.schedule[i] = (s, e, task)
-
-
-class PeriodicEDFScheduler(EDFScheduler):
-    def preprocess_taskset(self, taskset):
-        return generate_non_periodic_task_set(taskset)
-
-
-class MultipleResourceOptimalBlockScheduler(Scheduler):
-    def schedule_tasks(self, dagset):
-        # Convert DAGs into tasks
-        tasks = {}
-        resources = set()
-        for dag_task in dagset:
-            block_task = PeriodicResourceTask(name=dag_task.name, c=dag_task.c, p=dag_task.p,
-                                              resources=dag_task.resources)
-            tasks[block_task.name] = block_task
-            resources |= block_task.resources
-
-        # Separate tasks based on resource requirements
-        G = nx.Graph()
-        for r in resources:
-            G.add_node(r)
-        for block_task in tasks.values():
-            G.add_node(block_task.name)
-            for r in block_task.resources:
-                G.add_edge(block_task.name, r)
-
-        sub_graphs = nx.connected_components(G)
-        tasksets = []
-
-        for nodes in sub_graphs:
-            task_names = nodes - resources
-            taskset = [tasks[name] for name in task_names]
-            tasksets.append(taskset)
-
-        # For each set of tasks use NPEDFScheduler
-        scheduler = PeriodicOptimalScheduler()
-        schedules = []
-        for taskset in tasksets:
-            schedule, valid = scheduler.schedule_tasks(taskset)
-            schedules.append(schedule)
-
-        # Set of schedules is the schedule for each group of resources
-        return schedules
