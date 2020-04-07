@@ -141,13 +141,13 @@ class MultiResourceNPRMScheduler(Scheduler):
         offset = max(0, earliest - task.a)
 
         # Find the earliest start
-        resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-        task.resources = list(set(resource_relations.values()))
-        for subtask in task.subtasks:
-            new_resources = []
-            for resource in subtask.resources:
-                new_resources.append(resource_relations[resource])
-            subtask.resources = new_resources
+        # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+        # task.resources = list(set(resource_relations.values()))
+        # for subtask in task.subtasks:
+        #     new_resources = []
+        #     for resource in subtask.resources:
+        #         new_resources.append(resource_relations[resource])
+        #     subtask.resources = new_resources
 
         offset = self.find_earliest_start(task, resource_occupations, earliest)
         while True:
@@ -160,13 +160,13 @@ class MultiResourceNPRMScheduler(Scheduler):
             else:
                 # See if we can remove any of the constrained subtasks if we have to move forward by step
                 offset += step
-                resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-                task.resources = list(set(resource_relations.values()))
-                for subtask in task.subtasks:
-                    new_resources = []
-                    for resource in subtask.resources:
-                        new_resources.append(resource_relations[resource])
-                    subtask.resources = new_resources
+                # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+                # task.resources = list(set(resource_relations.values()))
+                # for subtask in task.subtasks:
+                #     new_resources = []
+                #     for resource in subtask.resources:
+                #         new_resources.append(resource_relations[resource])
+                #     subtask.resources = new_resources
 
     def map_task_resources(self, task, resource_occupations, node_resources, offset):
         resource_relations = {}

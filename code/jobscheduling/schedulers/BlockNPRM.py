@@ -209,8 +209,8 @@ class MultiResourceBlockNPRMScheduler(Scheduler):
         distance_to_free = float('inf')
         while distance_to_free != 0:
             offset = start - task.a
-            resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-            task.resources = list(set(resource_relations.values()))
+            # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+            # task.resources = list(set(resource_relations.values()))
 
             distance_to_free = 0
             sched_interval = Interval(start, start + task.c)

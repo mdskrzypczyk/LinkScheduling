@@ -326,7 +326,7 @@ class CommonScheduler:
 
         while True:
             offset = segment_earliest - task.a
-            task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
+            # task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
             segment_tasks = self.get_segment_tasks(task)
 
             segment_intervals = []

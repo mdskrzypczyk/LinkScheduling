@@ -1,16 +1,15 @@
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 import random
 import time
-from math import sqrt
+from math import ceil
 from collections import defaultdict
-from intervaltree import IntervalTree, Interval
-from device_characteristics.nv_links import load_link_data
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
+from jobscheduling.protocols import schedule_dag_asap, convert_task_to_alap, shift_distillations_and_swaps
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.task import get_lcm_for, get_gcd_for
-from jobscheduling.schedulers.ClockDriven import UniResourceFlowScheduler
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.BlockNPRM import UniResourceBlockNPRMScheduler, MultipleResourceBlockNPRMScheduler
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
@@ -22,204 +21,29 @@ from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceInconsider
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
 from jobscheduling.schedulers.NPRM import MultipleResourceNonBlockNPRMScheduler
-from jobscheduling.schedulers.ILP import MultipleResourceILPBlockNPEDFScheduler
 from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines, protocol_timeline
+from jobscheduling.topology import gen_topologies, gen_plus_topology, gen_grid_topology, gen_surfnet_topology
 
 logger = LSLogger()
 
 
-def get_dimensions(n):
-    divisors = []
-    for currentDiv in range(n):
-        if n % float(currentDiv + 1) == 0:
-            divisors.append(currentDiv+1)
-
-    hIndex = min(range(len(divisors)), key=lambda i: abs(divisors[i]-sqrt(n)))
-    wIndex = hIndex + 1
-
-    return divisors[hIndex], divisors[wIndex]
-
-
-def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
-    d_to_cap = load_link_data()
-    link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
-    link_capability = d_to_cap[str(link_distance)]
-    # Line
-    lineGcq = nx.Graph()
-    lineG = nx.Graph()
-    for i in range(n):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        lineGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        lineG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-        if i > 0:
-            prev_node_id = i - 1
-            for j in range(num_comm_q):
-                for k in range(num_comm_q):
-                    lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-
-            lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
-
-    # Ring
-    ringGcq = nx.Graph()
-    ringG = nx.Graph()
-    for i in range(n):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        ringGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        ringG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-        if i > 0:
-            prev_node_id = i - 1
-            for j in range(num_comm_q):
-                for k in range(num_comm_q):
-                    ringGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-            ringG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
-
-    ringG.add_edge("{}".format(0), "{}".format(n-1), capabilities=link_capability, weight=link_distance)
-
-    # Demo
-    demoGcq = nx.Graph()
-    demoG = nx.Graph()
-    for i in range(4):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        demoGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        demoG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-        if i > 0:
-            prev_node_id = i - 1
-            for j in range(num_comm_q):
-                for k in range(num_comm_q):
-                    demoGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-
-    demoG.add_edge("0", "1", capabilities=d_to_cap["10"], weight=10)
-    demoG.add_edge("1", "2", capabilities=d_to_cap["15"], weight=15)
-    demoG.add_edge("2", "3", capabilities=d_to_cap["35"], weight=35)
-    demoG.add_edge("3", "0", capabilities=d_to_cap["50"], weight=50)
-
-    for j in range(1):
-        for k in range(1):
-            ringGcq.add_edge("{}-{}".format(0, j), "{}-{}".format(n-1, k), capabilities=link_capability, weight=link_distance)
-
-    # Grid
-    w, h = get_dimensions(n)
-    gridGcq = nx.Graph()
-    gridG = nx.Graph()
-    for i in range(w):
-        for j in range(h):
-            comm_qs = []
-            storage_qs = []
-            for c in range(num_comm_q):
-                comm_q_id = "{},{}-C{}".format(i, j, c)
-                comm_qs.append(comm_q_id)
-            for s in range(num_storage_q):
-                storage_q_id = "{},{}-S{}".format(i, j, s)
-                storage_qs.append(storage_q_id)
-            gridGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-            gridG.add_node("{},{}".format(i, j), comm_qs=comm_qs, storage_qs=storage_qs)
-
-            # Connect upward
-            if j > 0:
-                gridG.add_edge("{},{}".format(i, j), "{},{}".format(i, j-1), capabilities=link_capability,
-                               weight=link_distance)
-                for k in range(num_comm_q):
-                    for l in range(num_comm_q):
-                        gridGcq.add_edge("{},{}-C{}".format(i, j-1, k), "{},{}-C{}".format(i, j, l),
-                                         capabilities=link_capability, weight=link_distance)
-            # Connect left
-            if i > 0:
-                gridG.add_edge("{},{}".format(i, j), "{},{}".format(i - 1, j), capabilities=link_capability,
-                               weight=link_distance)
-                for k in range(num_comm_q):
-                    for l in range(num_comm_q):
-                        gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
-                                         capabilities=link_capability, weight=link_distance)
-
-    return [(lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG), (demoGcq, demoG)]
-
-
-def gen_plus_topology(num_nodes=5, end_node_resources=(1, 3), center_resources=(1, 3), link_distance=5):
-    d_to_cap = load_link_data()
-    link_capability = d_to_cap[str(link_distance)]
-    # Line
-    starGcq = nx.Graph()
-    starG = nx.Graph()
-
-    # First make the center
-    num_comm_center, num_storage_center = center_resources
-    comm_qs = []
-    storage_qs = []
-    i = num_nodes - 1
-    for c in range(num_comm_center):
-        comm_q_id = "{}-C{}".format(i, c)
-        comm_qs.append(comm_q_id)
-    for s in range(num_storage_center):
-        storage_q_id = "{}-S{}".format(i, s)
-        storage_qs.append(storage_q_id)
-    starGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-    starG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-
-    # Then make the end nodes
-    num_comm_end_node, num_storage_end_node = end_node_resources
-    for i in range(num_nodes - 1):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_end_node):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_end_node):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        starGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        starG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-
-        center_node_id = num_nodes - 1
-        for j in range(num_comm_center):
-            for k in range(num_comm_end_node):
-                starGcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
-
-        starG.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
-                       weight=link_distance)
-
-    return starGcq, starG
-
-
 def get_schedulers():
     schedulers = [
-        # UniResourceFlowScheduler,
         # UniResourcePreemptionBudgetScheduler,
         # UniResourceFixedPointPreemptionBudgetScheduler,
-        # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
-        # UniResourceBlockNPEDFScheduler,
-        # UniResourceBlockNPRMScheduler,
-        # UniResourceCEDFScheduler,
-        # MultipleResourceILPBlockNPEDFScheduler,
+        UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
+        UniResourceBlockNPEDFScheduler,
+        UniResourceBlockNPRMScheduler,
+        UniResourceCEDFScheduler,
         MultipleResourceBlockCEDFScheduler,
         MultipleResourceBlockNPEDFScheduler,
         MultipleResourceBlockNPRMScheduler,
         # MultipleResourceInconsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
-        # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
         MultipleResourceNonBlockNPRMScheduler,
     ]
@@ -229,40 +53,13 @@ def get_schedulers():
 def get_network_demands(network_topology, num):
     _, nodeG = network_topology
     demands = []
+    end_nodes = [node for node in nodeG.nodes if nodeG.nodes[node]["end_node"] == True]
     for num_demands in range(num):
-        src, dst = random.sample(nodeG.nodes, 2)
+        src, dst = random.sample(end_nodes, 2)
         fidelity = round(0.6 + random.random() * (3 / 10), 3)                    # Fidelity range between F=0.6 and 1
         rate = 10 / (2**random.choice([i for i in range(7, 11)]))       # Rate range between 0.2 and 1
         demands.append((src, dst, fidelity, rate))
     return demands
-
-
-def get_protocol(network_topology, demand):
-    s, d, f, r = demand
-    _, nodeG = network_topology
-    path = nx.shortest_path(G=nodeG, source=s, target=d, weight="weight")
-    protocol = create_protocol(path, nodeG, f, r)
-
-    if protocol:
-        logger.debug("Found protocol that satisfies demands")
-        return protocol
-
-    else:
-        return None
-
-    logger.debug("Trying to find protocol without rate constraint")
-    protocol = create_protocol(path, nodeG, f, 1e-10)
-    if protocol:
-        logger.warning("Found protocol without rate constraint")
-        return protocol
-
-    logger.debug("Trying to find protocol without fidelity/rate constraints")
-    protocol = create_protocol(path, nodeG, 0.5, 0)
-    if protocol:
-        logger.warning("Found protocol without fidelity/rate constraint")
-        return protocol
-
-    return None
 
 
 def get_protocol_without_rate_constraint(network_topology, demand):
@@ -277,10 +74,13 @@ def get_protocol_without_rate_constraint(network_topology, demand):
         return None
 
 
-def select_rate(achieved_rate):
-    rates = [1 / (2 ** i) for i in range(5, 9)]  # Rate range between
-    rates = list(filter(lambda r: r < achieved_rate, rates))
-    return random.choice(rates)
+def select_rate(achieved_rate, slot_size):
+    rates = [32 / (2 ** i) for i in range(10)]  # Rate range between
+    rates = list(filter(lambda r: slot_size < r < achieved_rate, rates))
+    if rates:
+        return random.choice(rates)
+    else:
+        return 0
 
 
 def get_network_resources(topology):
@@ -288,14 +88,70 @@ def get_network_resources(topology):
     network_resources = {}
     network_nodes = nodeG.nodes
     for node in network_nodes:
-        numCommResources = len(nodeG.nodes[node]['comm_qs'])
-        numStorResources = len(nodeG.nodes[node]['storage_qs'])
-        network_resources[node] = {
-            "comm": numCommResources,
-            "storage": numStorResources,
-            "total": numCommResources + numStorResources
-        }
+        try:
+            numCommResources = len(nodeG.nodes[node]['comm_qs'])
+            numStorResources = len(nodeG.nodes[node]['storage_qs'])
+            network_resources[node] = {
+                "comm": numCommResources,
+                "storage": numStorResources,
+                "total": numCommResources + numStorResources
+            }
+        except:
+            import pdb
+            pdb.set_trace()
     return network_resources
+
+
+def balance_taskset_resource_utilization(taskset, node_resources):
+    resource_utilization = {}
+    resource_types = defaultdict(set)
+    for node in node_resources:
+        comm_qs = node_resources[node]["comm_qs"]
+        for c in comm_qs:
+            resource_utilization[c] = 0
+            rt = get_resource_string(c)
+            resource_types[rt] |= {c}
+        storage_qs = node_resources[node]["storage_qs"]
+        for s in storage_qs:
+            resource_utilization[s] = 0
+            rt = get_resource_string(s)
+            resource_types[rt] |= {s}
+
+    for task in taskset:
+        task_period = task.p
+        task_resource_utilization = defaultdict(float)
+        task_resource_types = defaultdict(set)
+        task_resource_intervals = task.get_resource_intervals()
+        for resource, itree in task_resource_intervals.items():
+            total_occupation_time = sum([i.end - i.begin for i in itree])
+            task_resource_utilization[resource] += total_occupation_time / task_period
+            rt = get_resource_string(resource)
+            task_resource_types[rt] |= {resource}
+
+        resource_mapping = {}
+        for rt, resources in task_resource_types.items():
+            tru = list(sorted([(task_resource_utilization[r], r) for r in task_resource_types[rt]]))
+            ru = list(sorted([(-resource_utilization[r], r) for r in resource_types[rt]]))
+            for (vu, vr), (_, pr) in zip(tru, ru):
+                resource_mapping[vr] = pr
+                resource_utilization[pr] += vu
+
+        for subtask in task.subtasks:
+            new_resources = []
+            for vr in subtask.resources:
+                new_resources.append(resource_mapping[vr])
+
+            new_locked_resources = []
+            for vr in subtask.locked_resources:
+                new_locked_resources.append(resource_mapping[vr])
+
+            subtask.resources = new_resources
+            subtask.locked_resources = new_locked_resources
+
+        new_task_resources = []
+        for vr in task.resources:
+            new_task_resources.append(resource_mapping[vr])
+        task.resources = new_task_resources
 
 
 def check_resource_utilization(taskset, network_resources):
@@ -304,14 +160,9 @@ def check_resource_utilization(taskset, network_resources):
         resource_intervals = task.get_resource_intervals()
         for resource, itree in resource_intervals.items():
             utilization = sum([i.end - i.begin for i in itree]) / task.p
-            resource_string = get_resource_string(resource)
-            resource_utilization[resource_string] += utilization
-            node, rtype = resource_string
-            max_utilization = network_resources[node]["comm"] if rtype == "C" else network_resources[node]["storage"]
-            if resource_utilization[resource_string] > max_utilization:
-                logger.warning("Taskset overutilizes resource {}, computed {} where limit is {}".format(resource_string,
-                                                                                                        resource_utilization[resource_string],
-                                                                                                        max_utilization))
+            resource_utilization[resource] += utilization
+            if resource_utilization[resource] > 1:
+                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource, resource_utilization[resource],))
                 return False
 
     for resource in resource_utilization.keys():
@@ -327,22 +178,6 @@ def get_resource_string(resource):
     return resource_node + resource_type
 
 
-def verify_schedule(tasks, schedule):
-    global_resource_intervals = defaultdict(IntervalTree)
-    for start, end, t in schedule:
-        task_resource_intervals = t.get_resource_intervals()
-        for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(i.begin + start, i.end + start) for i in itree])
-            for interval in offset_itree:
-                if global_resource_intervals[resource].overlap(interval.begin, interval.end):
-                    import pdb
-                    pdb.set_trace()
-                    return False
-                global_resource_intervals[resource].add(interval)
-
-    return True
-
-
 def slot_size_selection():
     num_network_nodes = 4
     link_distances = [5] #list(range(5, 55, 5))
@@ -353,8 +188,8 @@ def slot_size_selection():
             protocols = []
             demands = [('0', str(i), f, 0.0001) for f in [0.5 + 0.05*j for j in range(8)]]
             for demand in demands:
-                s, d, _, _ = demand
-                protocol = get_protocol(topology, demand)
+                s, d, f, _ = demand
+                protocol = get_protocol_without_rate_constraint(topology, demand)
                 if protocol:
                     print("Found protocol between {} and {} with fidelity {} and rate {}".format(s, d, protocol.F, protocol.R))
                     protocols.append((demand, protocol))
@@ -429,16 +264,13 @@ def slot_size_selection():
             plt.show()
 
 
-from jobscheduling.protocols import schedule_dag_asap, convert_task_to_alap, shift_distillations_and_swaps
-
-
 def example_schedule():
     network_topologies = gen_topologies(9, num_comm_q=1, num_storage_q=1, link_distance=5)
     grid_topology = network_topologies[2]
     demands = [('0,1', '2,1', 0.8, 1), ('1,0', '1,2', 0.8, 1)]
     taskset = []
     for demand in demands:
-        protocol = get_protocol(grid_topology, demand)
+        protocol = get_protocol_without_rate_constraint(grid_topology, demand)
         task = convert_protocol_to_task(demand, protocol, 0.05)
         scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, grid_topology)
         taskset.append(scheduled_task)
@@ -456,7 +288,7 @@ def visualize_protocol_scheduling():
     line_topology = network_topologies[0]
     # demand = ('0', '2', 0.8, 1)
     demand = ('4', '2', 0.879, 0.01953125)
-    protocol = get_protocol(line_topology, demand)
+    protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.1)
     draw_DAG(task, view=True)
     asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
@@ -490,7 +322,7 @@ def visualize_scheduled_protocols():
                 for Fmin in fidelities:
                     print("Collecting ({}, {}, {}, {})".format(num_nodes, num_resources, length, Fmin))
                     demand = (str(0), str(num_nodes - 1), Fmin, 0.01)
-                    protocol = get_protocol(line_topology, demand)
+                    protocol = get_protocol_without_rate_constraint(line_topology, demand)
                     if protocol is None:
                         data.append((length, num_nodes, num_resources, Fmin, None))
                         logger.warning("Demand {} could not be satisfied!".format(demand))
@@ -531,7 +363,7 @@ def throughput_vs_path_length():
                 for Fmin in fidelities:
                     print("Collecting ({}, {}, {}, {})".format(num_nodes, num_resources, length, Fmin))
                     demand = (str(0), str(num_nodes-1), Fmin, 0.01)
-                    protocol = get_protocol(line_topology, demand)
+                    protocol = get_protocol_without_rate_constraint(line_topology, demand)
                     if protocol is None:
                         data.append((length, num_nodes, num_resources, Fmin, 0))
                         logger.warning("Demand {} could not be satisfied!".format(demand))
@@ -574,7 +406,6 @@ def get_wcrt_in_slots(schedule, slot_size):
 
     return original_task_wcrts
 
-import numpy as np
 
 def get_start_jitter_in_slots(taskset, schedule, slot_size):
     periodic_task_starts = defaultdict(list)
@@ -606,12 +437,12 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
     taskset = []
     num_succ = 0
     while len(taskset) < num_tasks:
-        s, d = random.sample(['0', '1', '2', '3'], 2)
+        s, d = random.sample(['0', '2', '6', '8'], 2)
         rate = 10 / (2**random.choice([i for i in range(3, 7)]))
         demand = (s, d, fidelity, rate)
         try:
             logger.debug("Constructing protocol for request {}".format(demand))
-            protocol = get_protocol(topology, demand)
+            protocol = get_protocol_without_rate_constraint(topology, demand)
             if protocol is None:
                 logger.warning("Demand {} could not be satisfied!".format(demand))
                 continue
@@ -626,7 +457,16 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
             latency = scheduled_task.c * slot_size
             achieved_rate = 1 / latency
 
+            new_rate = select_rate(achieved_rate, slot_size)
+            if new_rate == 0:
+                logger.warning("Could not provide rate for {}".format(demand))
+                continue
+            scheduled_task.p = ceil(1 / new_rate / slot_size)
+
             s, d, f, r = demand
+            demand = (s, d, f, new_rate)
+            s, d, f, r = demand
+
             asap_dec, alap_dec, shift_dec = decoherence_times
             logger.info("Results for {}:".format(demand))
             if not correct:
@@ -645,30 +485,33 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
         except Exception as err:
             logger.exception("Error occurred while generating tasks: {}".format(err))
 
+    balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
     return taskset
 
 
 def sample_sim():
-    center_resource_configs = [(1, 3), (2, 3), (1, 4), (2, 4)]
+    center_resource_configs = [(2, 4)]#, (2, 3), (1, 4), (2, 4)]
     end_node_resources = (1, 3)
-    fidelities = [0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
-    num_tasksets = 5
-    num_tasks = 40
+    fidelities = [0.6, 0.7, 0.8, 0.9] # [0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+    num_tasksets = 1
+    taskset_sizes = [50, 40, 30, 10]
     slot_size = 0.05
     schedulers = get_schedulers()
 
     all_data = {}
     for center_resources in center_resource_configs:
         resource_config_data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        topology = gen_plus_topology(5, end_node_resources=end_node_resources, center_resources=center_resources,
+        # topology = gen_plus_topology(5, end_node_resources=end_node_resources, center_resources=center_resources,
+        #                              link_distance=5)
+        topology = gen_grid_topology(9, end_node_resources=end_node_resources, repeater_resources=center_resources,
                                      link_distance=5)
         network_resources = get_network_resources(topology)
         print("Running center config {}".format(center_resources))
-        for fidelity in fidelities:
+        for fidelity, num_tasks in zip(fidelities, taskset_sizes):
             print("Running fidelity {}".format(fidelity))
             for num_taskset in range(num_tasksets):
-                print("Running taskset {}".format(num_taskset))
                 taskset = get_taskset(num_tasks, fidelity, topology, slot_size)
+                print("Running taskset {}".format(num_taskset))
 
                 total_rate_dict = defaultdict(int)
                 for task in taskset:
@@ -737,10 +580,13 @@ def sample_sim():
                             subtask_jitters = get_start_jitter_in_slots(running_taskset, sub_schedule, slot_size)
                             task_wcrts.update(subtask_wcrts)
                             task_jitters.update(subtask_jitters)
+                            # schedule_and_resource_timelines(sub_taskset, sub_schedule)
 
+                        num_demands = sum(rate_dict.values())
                         resource_config_data[results_key][fidelity]["throughput"].append(network_throughput)
                         resource_config_data[results_key][fidelity]["wcrt"].append(max(task_wcrts.values()))
                         resource_config_data[results_key][fidelity]["jitter"].append(max(task_jitters.values()))
+                        resource_config_data[results_key][fidelity]["num_demands"].append(num_demands)
 
                     except Exception as err:
                         logger.exception("Error occurred while scheduling: {}".format(err))
@@ -773,9 +619,9 @@ def sample_sim():
 def plot_results(data):
     import matplotlib.pyplot as plt
 
-    schedulers = list(data["(1, 3)"].keys())
+    schedulers = list(data["(2, 4)"].keys())
     for res_conf, res_conf_data in data.items():
-        for metric in ["throughput", "wcrt", "jitter"]:
+        for metric in ["throughput", "wcrt", "jitter", "num_demands"]:
             means = defaultdict(list)
             for sched in schedulers:
                 sched_data = res_conf_data[sched]
@@ -793,8 +639,9 @@ def plot_results(data):
                 ax.bar(x - offset + i*width, means[fidelity], width, label="F={}".format(fidelity))
 
             # Add some text for labels, title and custom x-axis tick labels, etc.
-            metric_to_label = {"throughput": "Throughput", "wcrt": "Worst-case Response Time", "jitter": "Jitter"}
-            metric_to_units = {"throughput": "(ebit/s)", "wcrt": "(s)", "jitter": "(s^2)"}
+            metric_to_label = {"throughput": "Throughput", "wcrt": "Worst-case Response Time", "jitter": "Jitter",
+                               "num_demands": "Satisfied Demands"}
+            metric_to_units = {"throughput": "(ebit/s)", "wcrt": "(s)", "jitter": "(s^2)", "num_demands": ""}
             ax.set_ylabel("{} {}".format(metric_to_label[metric], metric_to_units[metric]))
             ax.set_title('{} by scheduler and fidelity {}'.format(metric_to_label[metric], res_conf))
             ax.set_xticks(x)
@@ -807,12 +654,12 @@ def plot_results(data):
 
 
 def main():
-    num_network_nodes = 5
+    num_network_nodes = 7
     num_tasksets = 1
     budget_allowances = [1*i for i in range(1)]
-    network_topologies = gen_topologies(num_network_nodes, num_comm_q=1, num_storage_q=3)
-    slot_size = 0.05
-    demand_size = 50
+    network_topologies = gen_topologies(num_network_nodes, num_comm_q=1, num_storage_q=1)
+    slot_size = 0.1
+    demand_size = 20
 
     network_schedulers = get_schedulers()
     results = {}
@@ -851,6 +698,11 @@ def main():
                         achieved_rate = 1 / latency
 
                         new_rate = select_rate(achieved_rate)
+                        if new_rate == 0:
+                            logger.warning("Could not provide rate for {}".format(demand))
+                            continue
+                        scheduled_task.p = ceil(1 / new_rate / slot_size)
+
                         s, d, f, r = demand
                         demand = (s, d, f, new_rate)
                         s, d, f, r = demand
@@ -873,21 +725,13 @@ def main():
                             num_succ += 1
                             logger.info("Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand, num_succ))
                             taskset.append(scheduled_task)
-                            from jobscheduling.task import get_resource_type_intervals
-                            intervals = get_resource_type_intervals(task)
-                            for r, itree in intervals.items():
-                                print(r, itree)
-                                def compare(x, y):
-                                    return x[0] == y[0]
-                                itree.merge_overlaps(data_reducer=lambda x, y: (x[0], x[1] | y[1]),
-                                                     data_compare=compare)
-                                print(itree)
-                            import pdb
-                            pdb.set_trace()
 
                     except Exception as err:
                         logger.exception("Error occurred while generating tasks: {}".format(err))
+                        import pdb
+                        pdb.set_trace()
 
+                balance_taskset_resource_utilization(taskset, topology[1].nodes)
                 logger.info("Demands: {}".format(demands))
                 total_rate_dict = defaultdict(int)
                 for task in taskset:
@@ -993,14 +837,15 @@ def main():
     plt.show()
 
 
+
 if __name__ == "__main__":
-    main()
+    # main()
     # slot_size_selection()
     # throughput_vs_path_length()
     # visualize_scheduled_protocols()
     # visualize_protocol_scheduling()
     # example_schedule()
-    # sample_sim()
+    sample_sim()
     # import json
     # data = json.load(open("out.json"))
     # plot_results(data)

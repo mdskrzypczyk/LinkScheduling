@@ -590,7 +590,7 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
                       task.preemption_points]
 
         comp_times = sorted(filter(lambda time: time > 0, comp_times))
-        max_proc_time = min(ttb)
+        max_proc_time = ttb
 
         if ttc <= max_proc_time:
             proc_time = ttc

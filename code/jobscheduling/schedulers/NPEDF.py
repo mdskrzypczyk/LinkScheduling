@@ -102,13 +102,13 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         offset = max(0, earliest - task.a)
 
         # Find the earliest start
-        resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-        task.resources = list(set(resource_relations.values()))
-        for subtask in task.subtasks:
-            new_resources = []
-            for resource in subtask.resources:
-                new_resources.append(resource_relations[resource])
-            subtask.resources = new_resources
+        # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+        # task.resources = list(set(resource_relations.values()))
+        # for subtask in task.subtasks:
+        #     new_resources = []
+        #     for resource in subtask.resources:
+        #         new_resources.append(resource_relations[resource])
+        #     subtask.resources = new_resources
 
         offset = self.find_earliest_start(task, resource_occupations, earliest)
         while True:
@@ -121,13 +121,13 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             else:
                 # See if we can remove any of the constrained subtasks if we have to move forward by step
                 offset += step
-                resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-                task.resources = list(set(resource_relations.values()))
-                for subtask in task.subtasks:
-                    new_resources = []
-                    for resource in subtask.resources:
-                        new_resources.append(resource_relations[resource])
-                    subtask.resources = new_resources
+                # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
+                # task.resources = list(set(resource_relations.values()))
+                # for subtask in task.subtasks:
+                #     new_resources = []
+                #     for resource in subtask.resources:
+                #         new_resources.append(resource_relations[resource])
+                #     subtask.resources = new_resources
 
     def find_earliest_start(self, task, resource_occupations, start):
         # Iterate over the tasks and check if their interval overlaps with the resources

@@ -155,6 +155,7 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
     # If we are swapping the middle node needs to use one resource to hold an end of the first link
     resourceCopy[path[numL - 1]]['total'] -= 1
+    resourceCopy[path[numL - 1]]['storage'] -= 1
 
     # Assume we allocate half the comm resources of pivot node to either link
     num = 0
@@ -176,8 +177,13 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
         # If we are distilling then the end nodes need to hold one link between protocol steps
         if num > 0:
+            pathResourcesCopy[path[0]]['storage'] -= 1
+            pathResourcesCopy[path[-1]]['storage'] -= 1
             pathResourcesCopy[path[0]]['total'] -= 1
             pathResourcesCopy[path[-1]]['total'] -= 1
+
+        if pathResourcesCopy[path[0]]['storage'] < 0 or pathResourcesCopy[path[-1]]['storage'] < 0:
+            return None, 0, 0
 
         # Search for protocols on left and right that have above properties
         protocolL = esss(path[:numL], pathResourcesCopy, G, Funswapped, Rlink)

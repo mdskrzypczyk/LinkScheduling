@@ -492,8 +492,8 @@ class ResourceDAGTask(ResourceTask):
 
             resource_intervals[resource].add(interval)
 
-        for resource, itree in resource_intervals.items():
-            itree.merge_overlaps(strict=False)
+        # for resource, itree in resource_intervals.items():
+        #     itree.merge_overlaps(strict=False)
 
         return resource_intervals
 

@@ -216,6 +216,10 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     earliest_resources = None
     earliest_mapping = None
 
+    # if task.name == "L;191;0;3":
+    #     import pdb
+    #     pdb.set_trace()
+
     for resource_set in list(itertools.product(*task_resources)):
         earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(resource_set) & set(p.resources)])
 
@@ -229,6 +233,9 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
             break
 
     if earliest_possible_start == float('inf') and task.name[0] == "L":
+        logger.debug("Failed to schedule {}".format(task.name))
+        import pdb
+        pdb.set_trace()
         return None
 
     # If the earliest_resources are locked by their last tasks, we have already confirmed there are storage resources for them
@@ -298,7 +305,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
                 sr_mapping[lr] = (last_slot, lr)
 
         for t, sr in sr_mapping.values():
-            t = max([s[0] for s in sr_mapping.values()])
+            #t = max([s[0] for s in sr_mapping.values()])
             if sr is not None and t + 1 <= earliest_possible_start:
                 earliest_resources.append(sr)
 
@@ -311,7 +318,7 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
         task.locked_resources = list(task.resources)
         for lr in sr_mapping.keys():
             t = max([s[0] for s in sr_mapping.values()])
-            if sr_mapping[lr][1] != lr and t + 1 <= earliest_possible_start:
+            if sr_mapping[lr][1] != lr and sr_mapping[lr][1] in earliest_resources:#t + 1 <= earliest_possible_start:
                 task.locked_resources.remove(lr)
 
     elif task.name[0] == "D":
