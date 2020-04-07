@@ -1,6 +1,7 @@
 import networkx as nx
 from device_characteristics.nv_links import load_link_data
 from jobscheduling.haversine import distance
+from math import sqrt
 
 SURFNET_GML = "Surfnet.gml"
 
