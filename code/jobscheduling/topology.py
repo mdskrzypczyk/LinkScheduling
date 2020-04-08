@@ -5,6 +5,7 @@ from math import sqrt
 
 SURFNET_GML = "Surfnet.gml"
 
+
 def get_dimensions(n):
     divisors = []
     for currentDiv in range(n):
@@ -19,31 +20,7 @@ def get_dimensions(n):
 
 def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
     d_to_cap = load_link_data()
-    link_capabilities = [(d, d_to_cap[str(d)]) for d in [5]]
     link_capability = d_to_cap[str(link_distance)]
-    # Line
-    lineGcq = nx.Graph()
-    lineG = nx.Graph()
-    for i in range(n):
-        node = "{}".format(i)
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        lineGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        lineG.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
-        lineG.nodes[node]["end_node"] = True
-        if i > 0:
-            prev_node_id = i - 1
-            for j in range(num_comm_q):
-                for k in range(num_comm_q):
-                    lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-
-            lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
 
     # Ring
     ringGcq = nx.Graph()
@@ -132,7 +109,38 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
                         gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
 
-    return [(lineGcq, lineG), (ringGcq, ringG), (gridGcq, gridG), (demoGcq, demoG)]
+    return [(ringGcq, ringG), (gridGcq, gridG), (demoGcq, demoG)]
+
+
+def gen_line_topology(num_nodes=5, num_comm_q=1, num_storage_q=3, link_distance=5):
+    d_to_cap = load_link_data()
+    link_capability = d_to_cap[str(link_distance)]
+    # Line
+    lineGcq = nx.Graph()
+    lineG = nx.Graph()
+    for i in range(num_nodes):
+        node = "{}".format(i)
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        lineGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        lineG.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
+        lineG.nodes[node]["end_node"] = True
+        if i > 0:
+            prev_node_id = i - 1
+            for j in range(num_comm_q):
+                for k in range(num_comm_q):
+                    lineGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
+
+            lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability,
+                           weight=link_distance)
+
+    return (lineGcq, lineG)
 
 
 def gen_plus_topology(num_nodes=5, end_node_resources=(1, 3), center_resources=(1, 3), link_distance=5):

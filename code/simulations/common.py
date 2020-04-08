@@ -2,6 +2,7 @@ import networkx as nx
 import random
 from math import ceil
 from collections import defaultdict
+from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
@@ -12,6 +13,9 @@ from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceConsiderat
 from jobscheduling.schedulers.CEDF import UniResourceCEDFScheduler, MultipleResourceBlockCEDFScheduler
 from jobscheduling.schedulers.BlockNPEDF import UniResourceBlockNPEDFScheduler, MultipleResourceBlockNPEDFScheduler
 from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
+
+
+logger = LSLogger()
 
 
 def get_schedulers():
