@@ -99,6 +99,9 @@ def create_protocol(path, nodeG, Fmin, Rmin):
     try:
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
         if type(protocol) != Protocol and protocol is not None:
+            if type(protocol) == LinkProtocol:
+                rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, nodeG))
+                protocol.R = rate
             return protocol
         else:
             return None
@@ -204,12 +207,16 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
                                                                                                  num))
             logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
                                                                                       protocolR.F, protocolR.R))
+
             protocols.append((protocol, protocolL.R, protocolR.R))
         num += 1
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
         protocol, Rl, Rr = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-1]
+        if len(path) <= 3:
+            rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+            protocol.R = rate
         logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
                                                                                              num + 1))
 

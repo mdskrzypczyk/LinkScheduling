@@ -2,7 +2,7 @@ import itertools
 from collections import defaultdict
 from math import ceil
 from jobscheduling.log import LSLogger
-from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
+#from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask, get_dag_exec_time
 from intervaltree import Interval, IntervalTree
 from random import randint
@@ -37,9 +37,9 @@ def get_protocol_rate(demand, protocol, topology):
 def convert_protocol_to_task(request, protocol, slot_size=0.1):
     tasks = []
     labels = {
-        LinkProtocol.__name__: 0,
-        DistillationProtocol.__name__: 0,
-        SwapProtocol.__name__: 0
+        "L": 0,
+        "D": 0,
+        "S": 0
     }
 
     stack = []
@@ -50,7 +50,7 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
         if protocol_action is not None:
             stack.append((protocol_action, child_action))
 
-            if type(protocol_action) != LinkProtocol:
+            if protocol_action.name[0] != "L":
                 left_protocol_action = protocol_action.protocols[0]
                 child_action = protocol_action
                 protocol_action = left_protocol_action
@@ -61,7 +61,7 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
 
         else:
             peek_protocol_action, peek_child_action = stack[-1]
-            right_protocol_action = None if type(peek_protocol_action) == LinkProtocol else peek_protocol_action.protocols[1]
+            right_protocol_action = None if peek_protocol_action.name[0] == "L" else peek_protocol_action.protocols[1]
             if right_protocol_action is not None and last_action != right_protocol_action:
                 protocol_action = right_protocol_action
                 child_action = peek_protocol_action
@@ -69,8 +69,8 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
             else:
                 name = peek_protocol_action.name
                 suffix = name.split(';')[1:]
-                name = ';'.join([type(peek_protocol_action).__name__[0]] + [str(labels[type(peek_protocol_action).__name__])] + suffix)
-                labels[type(peek_protocol_action).__name__] += 1
+                name = ';'.join([peek_protocol_action.name[0]] + [str(labels[peek_protocol_action.name[0]])] + suffix)
+                labels[peek_protocol_action.name[0]] += 1
 
                 resources = peek_protocol_action.nodes
 

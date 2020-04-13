@@ -1,6 +1,6 @@
 import logging
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.ERROR
 FORMAT = '%(levelname)s - %(name)s - %(message)s'
 FILENAME = "log"
 logging.basicConfig(format=FORMAT)

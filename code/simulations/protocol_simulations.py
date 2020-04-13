@@ -200,8 +200,8 @@ def throughput_vs_link_length():
 def throughput_vs_resources():
     num_network_nodes = 4
     link_length = 5
-    num_comm_qubits = [1, 2]
-    num_storage_qubits = [2, 4]
+    num_comm_qubits = [1, 2, 4]
+    num_storage_qubits = [2, 4, 8]
     fidelities = [0.5 + 0.05*i for i in range(10)]
     latency_data = {}
     for num_comm, num_storage in list(itertools.product(num_comm_qubits, num_storage_qubits)):
@@ -285,7 +285,7 @@ def visualize_protocol_scheduling():
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
     protocol_timeline(task)
 
-    line_topology = gen_line_topology(5, num_comm_q=10, num_storage_q=4, link_distance=5)
+    line_topology = gen_line_topology(5, num_comm_q=4, num_storage_q=4, link_distance=5)
     import pdb
     pdb.set_trace()
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
@@ -378,5 +378,5 @@ if __name__ == "__main__":
     # slot_size_selection()
     # throughput_vs_chain_length()
     # throughput_vs_link_length()
-    # throughput_vs_resources()
-    visualize_protocol_scheduling()
+    throughput_vs_resources()
+    # visualize_protocol_scheduling()
