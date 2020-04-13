@@ -6,6 +6,7 @@ from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapPr
 from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask, get_dag_exec_time
 from intervaltree import Interval, IntervalTree
 from random import randint
+from jobscheduling.visualize import draw_DAG
 
 logger = LSLogger()
 
@@ -22,6 +23,15 @@ def print_resource_schedules(resource_schedules):
             resource_timeline[s] = t
         schedule_string += ''.join(["|{:>3} ".format("V" if resource_timeline[i] is None else resource_timeline[i].name[0]) for i in range(schedule_length)])
         print(schedule_string)
+
+
+def get_protocol_rate(demand, protocol, topology):
+    slot_size = 0.01
+    task = convert_protocol_to_task(demand, protocol, slot_size)
+    scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+    latency = scheduled_task.c * slot_size
+    achieved_rate = 1 / latency
+    return achieved_rate
 
 
 def convert_protocol_to_task(request, protocol, slot_size=0.1):

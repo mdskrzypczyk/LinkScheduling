@@ -3,10 +3,9 @@ from math import ceil
 from copy import copy
 from jobscheduling.log import LSLogger
 from jobscheduling.qmath import swap_links, unswap_links, distill_links, undistill_link_even, fidelity_for_distillations, distillations_for_fidelity
-
+from jobscheduling.protocols import get_protocol_rate
 
 logger = LSLogger()
-
 
 class Protocol:
     def __init__(self, F, R, nodes):
@@ -295,42 +294,44 @@ def find_binary_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
     # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
-    minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
-    minResources = min([nodeResources[n]["total"] for n in nodes])
-    for F, R in link_properties:
-        if R < Rmin:
-            continue
-        numDist = distillations_for_const_fidelity(F, Fmin)
-        numGens = links_for_distillations(numDist)
+    maxNodeComms = min([nodeResources[n]['comm'] for n in nodes])
+    maxResources = min([nodeResources[n]["total"] for n in nodes])
+    for minNodeComms in range(1, maxNodeComms+1):
+        for minResources in range(minNodeComms, maxResources+1):
+            for F, R in link_properties:
+                if R < Rmin:
+                    continue
+                numDist = distillations_for_const_fidelity(F, Fmin)
+                numGens = links_for_distillations(numDist)
 
-        # Check that numGens is below the max supported by minResources
-        if numGens > 2**(minResources - 1):
-            continue
+                # Check that numGens is below the max supported by minResources
+                if numGens > 2**(minResources - 1):
+                    continue
 
-        numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
-        binary_rate = R / numRounds
-        if binary_rate < Rmin:
-            continue
+                numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
+                binary_rate = R / numRounds
+                if binary_rate < Rmin:
+                    continue
 
-        q = [LinkProtocol(F=F, R=R, nodes=nodes) for _ in range(numGens)]
-        currProtocol = None
-        while len(q) > 1:
-            p1 = q.pop(0)
-            p2 = q.pop(0)
-            currF = distill_links(p1.F, p2.F)
-            currProtocol = DistillationProtocol(F=currF, R=min(p1.R, p2.R), protocols=[p1, p2], nodes=nodes)
-            q.append(currProtocol)
+                q = [LinkProtocol(F=F, R=R, nodes=nodes) for _ in range(numGens)]
+                currProtocol = None
+                while len(q) > 1:
+                    p1 = q.pop(0)
+                    p2 = q.pop(0)
+                    currF = distill_links(p1.F, p2.F)
+                    currProtocol = DistillationProtocol(F=currF, R=min(p1.R, p2.R), protocols=[p1, p2], nodes=nodes)
+                    q.append(currProtocol)
 
-        currProtocol = q.pop(0)
-        currProtocol.R = binary_rate
-        if currProtocol.F > Fmin and currProtocol.R >= Rmin:
-            logger.debug(
-                "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
-            protocols.append(currProtocol)
+                currProtocol = q.pop(0)
+                currProtocol.R = binary_rate
+                if currProtocol.F > Fmin and currProtocol.R >= Rmin:
+                    logger.debug(
+                        "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+                    protocols.append(currProtocol)
 
-    protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
-    if protocol is None:
-        logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+            protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
+            if protocol is None:
+                logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
 
     return protocol
 
@@ -346,10 +347,10 @@ def const_fidelity_distillation_max(Finitial, num):
 def distillations_for_const_fidelity(Finitial, Ftarget):
     if Finitial < 0.5:
         return float('inf')
-    num = 1
+    num = 0
     while Ftarget > Finitial:
-        Ftarget = undistill_link_even(Ftarget)
         num += 1
+        Ftarget = undistill_link_even(Ftarget)
 
     return 2**num - 1
 
