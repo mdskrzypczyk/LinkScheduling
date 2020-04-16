@@ -122,5 +122,3 @@ def correct_data(run_data):
             old_throughput = run_data[entry_key][fidelity][sched]["throughput"]
             print(satisfied_demands)
             print("Scheduler {}: Old throughput: {}, new throughput: {}".format(sched, old_throughput, network_throughput))
-        import pdb
-        pdb.set_trace()
