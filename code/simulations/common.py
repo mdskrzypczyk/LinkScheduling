@@ -257,6 +257,7 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         all_node_resources += node_resources
 
     resource_utilization = dict([(r, 0) for r in all_node_resources])
+    not_allowed = []
     while any([("C" in resource and utilization < 1.5) for resource, utilization in resource_utilization.items()]):
         possible_nodes = []
         for resource, utilization in resource_utilization.items():
@@ -269,12 +270,16 @@ def get_balanced_taskset(topology, fidelity, slot_size):
             break
 
         source, destination = random.sample(possible_nodes, 2)
+        while (source, destination) in not_allowed:
+            destination = random.sample(end_nodes)
+
         demand = (source, destination, fidelity, 1)
         try:
             logger.debug("Constructing protocol for request {}".format(demand))
             protocol = get_protocol_without_rate_constraint(topology, demand)
             if protocol is None:
                 logger.warning("Demand {} could not be satisfied!".format(demand))
+                not_allowed.append((source, destination))
                 continue
 
             logger.debug("Converting protocol for request {} to task".format(demand))
