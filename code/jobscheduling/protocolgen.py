@@ -76,6 +76,9 @@ class SwapProtocol(Protocol):
         return SwapProtocol(F=self.F, R=self.R, nodes=self.nodes, protocols=[copy(p) for p in self.protocols])
 
 
+cache = {}
+
+
 def create_protocol(path, nodeG, Fmin, Rmin):
     def filter_node(node):
         return node in path
@@ -87,6 +90,7 @@ def create_protocol(path, nodeG, Fmin, Rmin):
     subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
 
     pathResources = {}
+    cache_key = [node for node in path]
     for node in path:
         numCommResources = len(nodeG.nodes[node]['comm_qs'])
         numStorResources = len(nodeG.nodes[node]['storage_qs'])
@@ -95,6 +99,11 @@ def create_protocol(path, nodeG, Fmin, Rmin):
             "storage": numStorResources,
             "total": numCommResources + numStorResources
         }
+        cache_key.append(numCommResources, numStorResources)
+
+    cache_key = tuple(cache_key)
+    if cache_key in cache.keys():
+        return cache[cache_key]
 
     try:
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
@@ -102,8 +111,10 @@ def create_protocol(path, nodeG, Fmin, Rmin):
             if type(protocol) == LinkProtocol:
                 rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, nodeG))
                 protocol.R = rate
+            cache[cache_key] = protocol
             return protocol
         else:
+            cache[cache_key] = None
             return None
     except:
         logger.exception("Failed to create protocol for path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
