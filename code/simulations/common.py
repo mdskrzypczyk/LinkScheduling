@@ -272,15 +272,13 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         elif len(possible_nodes) == 1:
             source = possible_nodes[0]
             destination = random.sample(end_nodes, 1)[0]
-            while destination == source:
+            while destination == source or (source, destination in not_allowed):
                 destination = random.sample(end_nodes, 1)[0]
 
         else:
             source, destination = random.sample(possible_nodes, 2)
-            while (source, destination) in not_allowed:
+            while destination == source or (source, destination in not_allowed):
                 destination = random.sample(end_nodes, 1)[0]
-                while destination == source:
-                    destination = random.sample(end_nodes, 1)[0]
 
         demand = (source, destination, fidelity, 1)
         try:
