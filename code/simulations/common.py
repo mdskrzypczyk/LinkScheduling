@@ -63,7 +63,6 @@ def get_protocol_without_rate_constraint(network_topology, demand):
 
 
 def select_rate(achieved_rate, slot_size):
-    rates = [1 / (slot_size * (2 ** i)) for i in range(14)]  # Rate range between
     rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
     rates = list(filter(lambda r: r < achieved_rate, rates))
     if rates:

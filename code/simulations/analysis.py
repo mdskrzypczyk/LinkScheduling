@@ -2,6 +2,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
+from jobscheduling.task import get_lcm_for
 
 
 def get_wcrt_in_slots(schedule, slot_size):
@@ -99,3 +100,27 @@ def plot_results(data):
         fig.tight_layout()
 
         plt.show()
+
+
+def correct_data(run_data):
+    entry_key = list(run_data.keys())[0]
+    fidelities = list(run_data[entry_key].keys())
+    schedulers = list(sorted(run_data[entry_key][fidelities[0]]))
+    for fidelity in fidelities:
+        for sched in schedulers:
+            satisfied_demands = run_data[entry_key][fidelity][sched]["satisfied_demands"]
+            rates = []
+            for demand in satisfied_demands:
+                rate = float(demand.split(' ')[3].split('=')[1][:-1])
+                rates.append(rate)
+            slot_size = 0.01
+            periods = [int(1/(rate*slot_size)) for rate in rates]
+            print(periods)
+            hyperperiod = get_lcm_for(periods)
+            num_pairs = sum([hyperperiod*slot_size*rate for rate in rates])
+            network_throughput = num_pairs / (hyperperiod * slot_size)
+            old_throughput = run_data[entry_key][fidelity][sched]["throughput"]
+            print(satisfied_demands)
+            print("Scheduler {}: Old throughput: {}, new throughput: {}".format(sched, old_throughput, network_throughput))
+        import pdb
+        pdb.set_trace()

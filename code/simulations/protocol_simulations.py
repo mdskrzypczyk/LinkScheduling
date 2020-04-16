@@ -276,16 +276,16 @@ def example_schedule():
 
 
 def visualize_protocol_scheduling():
-    # line_topology = gen_line_topology(3, num_comm_q=1, num_storage_q=1, link_distance=5)
-    demand = ('0', '2', 0.8, 0.01)
-    # protocol = get_protocol_without_rate_constraint(line_topology, demand)
-    # task = convert_protocol_to_task(demand, protocol, 0.01)
-    # asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
-    # alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
-    # shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
-    # protocol_timeline(task)
-
-    line_topology = gen_line_topology(5, num_comm_q=1, num_storage_q=3, link_distance=5)
+    line_topology = gen_line_topology(3, num_comm_q=2, num_storage_q=3, link_distance=5)
+    demand = ('0', '2', 0.55, 0.01)
+    protocol = get_protocol_without_rate_constraint(line_topology, demand)
+    task = convert_protocol_to_task(demand, protocol, 0.01)
+    asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
+    alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
+    shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
+    protocol_timeline(task)
+    demand = ('0', '2', 0.6, 0.01)
+    line_topology = gen_line_topology(5, num_comm_q=2, num_storage_q=3, link_distance=5)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.01)
     asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
@@ -344,8 +344,8 @@ def visualize_scheduled_protocols():
 
 
 if __name__ == "__main__":
-    slot_size_selection()
-    throughput_vs_chain_length()
-    throughput_vs_link_length()
-    throughput_vs_resources()
+    # slot_size_selection()
+    # throughput_vs_chain_length()
+    # throughput_vs_link_length()
+    # throughput_vs_resources()
     visualize_protocol_scheduling()
