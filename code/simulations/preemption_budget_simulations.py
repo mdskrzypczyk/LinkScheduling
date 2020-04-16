@@ -62,7 +62,7 @@ def main():
     slot_size = 0.01
     preemption_budgets = [0.01, 0.1, 1]
     schedulers = get_schedulers()
-    results_file = "line_results/pb_results_{}.json"
+    results_file = "pb_results/pb_results_{}.json"
     num_results = 0
     while num_results < 100:
         print("Starting new run {}".format(num_results))

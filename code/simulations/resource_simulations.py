@@ -152,7 +152,7 @@ def main():
                                        num_rep_storage_q=3)
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "plus_results/plus_rep_2c3s_results_{}.json"
+    results_file = "resource_results/resource_results_{}.json"
     num_results = 0
     while num_results < 100:
         print("Starting new run {}".format(num_results))
