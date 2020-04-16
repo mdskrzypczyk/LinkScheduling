@@ -64,7 +64,11 @@ def plot_results(data):
         for sched in schedulers:
             for run_key, run_data in data.items():
                 for fidelity in fidelities:
-                    means[fidelity][sched].append(run_data[fidelity][sched][metric])
+                    try:
+                        means[fidelity][sched].append(run_data[fidelity][sched][metric])
+                    except:
+                        import pdb
+                        pdb.set_trace()
 
         for sched in schedulers:
             for fidelity in fidelities:

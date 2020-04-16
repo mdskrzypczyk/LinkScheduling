@@ -52,10 +52,10 @@ def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
-    topology = gen_plus_topology()
+    topology = gen_plus_topology(num_rep_comm_q=2)
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "plus_results/plus_results_{}.json"
+    results_file = "plus_results/plus_rep_2c3s_results_{}.json"
     num_results = 0
     while num_results < 100:
         print("Starting new run {}".format(num_results))
@@ -87,3 +87,7 @@ def main():
             pdb.set_trace()
         print("Completed run {}".format(num_results))
         num_results += 1
+
+
+if __name__ == "__main__":
+    main()
