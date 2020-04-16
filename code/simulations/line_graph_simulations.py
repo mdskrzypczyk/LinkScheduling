@@ -6,7 +6,7 @@ from simulations.common import load_results, write_results, get_schedulers, get_
 
 
 def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
-    num_nodes = 6
+    num_nodes = 5
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
     # Line

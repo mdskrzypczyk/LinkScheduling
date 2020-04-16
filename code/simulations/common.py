@@ -271,14 +271,13 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         elif len(possible_nodes) == 1:
             source = possible_nodes[0]
             destination = random.sample(end_nodes, 1)[0]
-            while destination == source or (source, destination in not_allowed):
+            while destination == source or ((source, destination) in not_allowed):
                 destination = random.sample(end_nodes, 1)[0]
 
         else:
             source, destination = random.sample(possible_nodes, 2)
-            while destination == source or (source, destination in not_allowed):
+            while destination == source or ((source, destination) in not_allowed):
                 destination = random.sample(end_nodes, 1)[0]
-
         demand = (source, destination, fidelity, 1)
         try:
             logger.debug("Constructing protocol for request {}".format(demand))
@@ -301,6 +300,7 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 
             if new_rate == 0:
                 logger.warning("Could not provide rate for {}".format(demand))
+                not_allowed.append((source, destination))
                 continue
 
             demand = (source, destination, fidelity, new_rate)
