@@ -1,130 +1,89 @@
-import json
+import networkx as nx
 import time
-from collections import defaultdict
-from jobscheduling.task import get_lcm_for, get_gcd_for
-from jobscheduling.topology import gen_topologies, gen_plus_topology, gen_grid_topology, gen_surfnet_topology
+from device_characteristics.nv_links import load_link_data
+from jobscheduling.task import get_lcm_for
+from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset
 
-def sample_sim():
-    center_resource_configs = [(1, 1)] #[(2, 4)]#, (2, 3), (1, 4), (2, 4)]
-    end_node_resources = (1, 1) #(1, 3)
-    fidelities = [0.6, 0.7, 0.8, 0.9] # [0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
-    num_tasksets = 1
-    taskset_sizes = [50, 40, 30, 10]
-    slot_size = 0.05
+
+def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+    num_nodes = 4
+    d_to_cap = load_link_data()
+    link_capability = d_to_cap[str(link_length)]
+    # Line
+    Gcq = nx.Graph()
+    G = nx.Graph()
+
+    # First make the center
+    comm_qs = []
+    storage_qs = []
+    i = num_nodes - 1
+    for c in range(num_rep_comm_q):
+        comm_q_id = "{}-C{}".format(i, c)
+        comm_qs.append(comm_q_id)
+    for s in range(num_rep_storage_q):
+        storage_q_id = "{}-S{}".format(i, s)
+        storage_qs.append(storage_q_id)
+    Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+    G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=False)
+
+    # Then make the end nodes
+    for i in range(num_nodes - 1):
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_end_node_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_end_node_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
+
+        center_node_id = num_nodes - 1
+        for j in range(num_rep_comm_q):
+            for k in range(num_end_node_comm_q):
+                Gcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
+
+        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
+                       weight=link_length)
+
+    return Gcq, G
+
+
+def main():
+    fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+    topology = gen_plus_topology()
+    slot_size = 0.01
     schedulers = get_schedulers()
+    results_file = "plus_results/plus_results_{}.json"
+    num_results = 0
+    while num_results < 100:
+        print("Starting new run {}".format(num_results))
 
-    all_data = {}
-    for center_resources in center_resource_configs:
-        resource_config_data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        # topology = gen_plus_topology(5, end_node_resources=end_node_resources, center_resources=center_resources,
-        #                              link_distance=5)
-        topology = gen_grid_topology(9, end_node_resources=end_node_resources, repeater_resources=center_resources,
-                                     link_distance=5)
-        network_resources = get_network_resources(topology)
-        print("Running center config {}".format(center_resources))
-        for fidelity, num_tasks in zip(fidelities, taskset_sizes):
+        run_results = {}
+        for fidelity in fidelities:
+            fidelity_data = {}
             print("Running fidelity {}".format(fidelity))
-            for num_taskset in range(num_tasksets):
-                taskset = get_taskset(num_tasks, fidelity, topology, slot_size)
-                print("Running taskset {}".format(num_taskset))
+            print("Generating taskset")
+            taskset = get_balanced_taskset(topology, fidelity, slot_size)
+            print("Completed generating taskset of size {}".format(len(taskset)))
+            print("Hyperperiod: {}".format(get_lcm_for([task.p for task in taskset])))
+            for scheduler_class in schedulers:
+                scheduler = scheduler_class()
+                scheduler_key = type(scheduler).__name__
+                print("Running scheduler {}".format(scheduler_key))
+                scheduler_results = schedule_taskset(scheduler, taskset, topology, slot_size)
+                fidelity_data[scheduler_key] = scheduler_results
 
-                total_rate_dict = defaultdict(int)
-                for task in taskset:
-                    total_rate_dict[1 / task.p] += 1
+            run_results[fidelity] = fidelity_data
 
-                for scheduler_class in schedulers:
-                    try:
-                        scheduler = scheduler_class()
-                        results_key = type(scheduler).__name__
-                        print("Running scheduler {}".format(results_key))
-                        running_taskset = []
-                        last_succ_schedule = None
-
-                        logger.info("Scheduling tasks with {}".format(results_key))
-                        start = time.time()
-                        for task in taskset:
-                            # First test the taskset if it is even feasible to schedule
-                            test_taskset = running_taskset + [task]
-                            if check_resource_utilization(test_taskset, network_resources) == False:
-                                continue
-
-                            schedule = scheduler.schedule_tasks(running_taskset + [task], topology)
-                            if schedule:
-                                # Record success
-                                if all([valid for _, _, valid in schedule]):
-                                    running_taskset.append(task)
-                                    logger.info("Running taskset length: {}".format(len(running_taskset)))
-                                    last_succ_schedule = schedule
-                                    for sub_taskset, sub_schedule, _ in schedule:
-                                        logger.debug("Created schedule for {} demands {}, length={}".format(
-                                            len(sub_taskset), [t.name for t in sub_taskset],
-                                            max([slot_info[1] for slot_info in sub_schedule])))
-
-                                else:
-                                    logger.warning(
-                                        "Could not add demand {} with latency {}".format(task.name, task.c * slot_size))
-
-                        end = time.time()
-                        logger.info("{} completed scheduling in {}s".format(results_key, end - start))
-                        logger.info("{} scheduled {} tasks".format(results_key, len(running_taskset)))
-
-                        rate_dict = defaultdict(int)
-
-                        for task in running_taskset:
-                            rate_dict[1 / task.p] += 1
-
-                        logger.info("Taskset {} statistics:".format(num_taskset))
-                        logger.info("Rates: ")
-
-                        num_pairs = 0
-                        hyperperiod = get_lcm_for([t.p for t in running_taskset])
-                        for rate in sorted(total_rate_dict.keys()):
-                            num_pairs += rate_dict[rate] * hyperperiod * rate
-                            logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
-
-                        total_latency = hyperperiod * slot_size
-                        logger.info("Schedule generates {} pairs in {}s".format(num_pairs, total_latency))
-
-                        network_throughput = num_pairs / total_latency
-                        logger.info("Network Throughput: {} ebit/s".format(network_throughput))
-
-                        task_wcrts = {}
-                        task_jitters = {}
-                        for sub_taskset, sub_schedule, _ in last_succ_schedule:
-                            subtask_wcrts = get_wcrt_in_slots(sub_schedule, slot_size)
-                            subtask_jitters = get_start_jitter_in_slots(running_taskset, sub_schedule, slot_size)
-                            task_wcrts.update(subtask_wcrts)
-                            task_jitters.update(subtask_jitters)
-                            # schedule_and_resource_timelines(sub_taskset, sub_schedule)
-
-                        num_demands = sum(rate_dict.values())
-                        resource_config_data[results_key][fidelity]["throughput"].append(network_throughput)
-                        resource_config_data[results_key][fidelity]["wcrt"].append(max(task_wcrts.values()))
-                        resource_config_data[results_key][fidelity]["jitter"].append(max(task_jitters.values()))
-                        resource_config_data[results_key][fidelity]["num_demands"].append(num_demands)
-
-                    except Exception as err:
-                        logger.exception("Error occurred while scheduling: {}".format(err))
-
-        all_data[center_resources] = resource_config_data
-
-    final_data = {}
-    for res_conf, res_conf_data in all_data.items():
-        final_res_conf_key = str(res_conf)
-        final_res_conf_data = {}
-        for fidelity, fidelity_data in res_conf_data.items():
-            final_fidelity_data = {}
-            for sched_name, sched_data in fidelity_data.items():
-                final_sched_data = {}
-                for metric_name, metric_data in sched_data.items():
-                    average_metric_data = sum(metric_data) / len(metric_data)
-                    final_sched_data[metric_name] = average_metric_data
-
-                final_fidelity_data[sched_name] = final_sched_data
-
-            final_res_conf_data[fidelity] = final_fidelity_data
-
-        final_data[final_res_conf_key] = final_res_conf_data
-
-    json.dump(final_data, open("out.json", "w"), sort_keys=True, indent=4)
-    plot_results(final_data)
+        run_key = time.strftime("%b %d %Y %H:%M:%S", time.gmtime(time.time()))
+        results = load_results(results_file.format(run_key))
+        results[run_key] = run_results
+        try:
+            write_results(results_file.format(run_key), results)
+        except:
+            import pdb
+            pdb.set_trace()
+        print("Completed run {}".format(num_results))
+        num_results += 1

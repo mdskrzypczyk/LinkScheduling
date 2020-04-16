@@ -115,7 +115,7 @@ def esss(path, pathResources, G, Fmin, Rmin):
     if len(path) == 2:
         logger.debug("Down to elementary link, finding distillation protocol")
         link_properties = G.get_edge_data(*path)['capabilities']
-        protocol = get_protocol_for_link(link_properties, Fmin, Rmin, path, pathResources)
+        protocol = get_protocol_for_link(link_properties, G, Fmin, Rmin, path, pathResources)
         return protocol
 
     else:
@@ -147,6 +147,9 @@ def esss(path, pathResources, G, Fmin, Rmin):
         protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
         if protocol is None:
             logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(path, Fmin, Rmin))
+        # else:
+        #     rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+        #     protocol.R = rate
         return protocol
 
 
@@ -213,10 +216,13 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
+        # if len(path) <= 3:
+        #     protocols = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-5:]
+        #     for protocol, Rl, Rr in protocols:
+        #         if protocol is not None:
+        #             rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+        #             protocol.R = rate
         protocol, Rl, Rr = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-1]
-        if len(path) <= 3:
-            rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
-            protocol.R = rate
         logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
                                                                                              num + 1))
 
@@ -227,7 +233,7 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
         return None, 0, 0
 
 
-def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
+def get_protocol_for_link(link_properties, G, Fmin, Rmin, nodes, nodeResources):
     logger.debug("Getting protocol on link {} with Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
     if all([R < Rmin for _, R in link_properties]):
         logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
@@ -253,9 +259,9 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
 
     # Search for the link gen protocol with highest rate that satisfies fidelity
     minResources = min([nodeResources[n]["total"] for n in nodes])
-    pumping_protocol = find_pumping_protocol(nodes, nodeResources, link_properties, Fmin, Rmin)
+    pumping_protocol = find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin)
     if minResources > 2:
-        binary_protocol = find_binary_protocol(nodes, nodeResources, link_properties, Fmin, Rmin)
+        binary_protocol = find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin)
         if binary_protocol:
             if not pumping_protocol or binary_protocol.R > pumping_protocol.R:
                 return binary_protocol
@@ -263,7 +269,7 @@ def get_protocol_for_link(link_properties, Fmin, Rmin, nodes, nodeResources):
     return pumping_protocol
 
 
-def find_pumping_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
+def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
     # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
@@ -294,51 +300,53 @@ def find_pumping_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
     if protocol is None:
         logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+    # else:
+    #     rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+    #     protocol.R = rate
     return protocol
 
 
-def find_binary_protocol(nodes, nodeResources, link_properties, Fmin, Rmin):
+def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
     # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
-    maxNodeComms = min([nodeResources[n]['comm'] for n in nodes])
-    maxResources = min([nodeResources[n]["total"] for n in nodes])
-    for minNodeComms in range(1, maxNodeComms+1):
-        for minResources in range(minNodeComms, maxResources+1):
-            for F, R in link_properties:
-                if R < Rmin:
-                    continue
-                numDist = distillations_for_const_fidelity(F, Fmin)
-                numGens = links_for_distillations(numDist)
+    minNodeComms = min([nodeResources[n]['comm'] for n in nodes])
+    minResources = min([nodeResources[n]["total"] for n in nodes])
 
-                # Check that numGens is below the max supported by minResources
-                if numGens > 2**(minResources - 1):
-                    continue
+    for F, R in link_properties:
+        if R < Rmin:
+            continue
+        numDist = distillations_for_const_fidelity(F, Fmin)
+        numGens = links_for_distillations(numDist)
 
-                numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
-                binary_rate = R / numRounds
-                if binary_rate < Rmin:
-                    continue
+        # Check that numGens is below the max supported by minResources
+        if numGens > 2**(minResources - 1):
+            continue
 
-                q = [LinkProtocol(F=F, R=R, nodes=nodes) for _ in range(numGens)]
-                currProtocol = None
-                while len(q) > 1:
-                    p1 = q.pop(0)
-                    p2 = q.pop(0)
-                    currF = distill_links(p1.F, p2.F)
-                    currProtocol = DistillationProtocol(F=currF, R=min(p1.R, p2.R), protocols=[p1, p2], nodes=nodes)
-                    q.append(currProtocol)
+        numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
+        binary_rate = R / numRounds
+        if binary_rate < Rmin:
+            continue
 
-                currProtocol = q.pop(0)
-                currProtocol.R = binary_rate
-                if currProtocol.F > Fmin and currProtocol.R >= Rmin:
-                    logger.debug(
-                        "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
-                    protocols.append(currProtocol)
+        q = [LinkProtocol(F=F, R=R, nodes=nodes) for _ in range(numGens)]
+        currProtocol = None
+        while len(q) > 1:
+            p1 = q.pop(0)
+            p2 = q.pop(0)
+            currF = distill_links(p1.F, p2.F)
+            currProtocol = DistillationProtocol(F=currF, R=min(p1.R, p2.R), protocols=[p1, p2], nodes=nodes)
+            q.append(currProtocol)
 
-            protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
-            if protocol is None:
-                logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+        currProtocol = q.pop(0)
+        currProtocol.R = binary_rate
+        if currProtocol.F > Fmin and currProtocol.R >= Rmin:
+            logger.debug(
+                "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+            protocols.append(currProtocol)
+
+    protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
+    if protocol is None:
+        logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
 
     return protocol
 

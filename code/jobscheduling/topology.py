@@ -143,52 +143,6 @@ def gen_line_topology(num_nodes=5, num_comm_q=1, num_storage_q=3, link_distance=
     return (lineGcq, lineG)
 
 
-def gen_plus_topology(num_nodes=5, end_node_resources=(1, 3), center_resources=(1, 3), link_distance=5):
-    d_to_cap = load_link_data()
-    link_capability = d_to_cap[str(link_distance)]
-    # Line
-    starGcq = nx.Graph()
-    starG = nx.Graph()
-
-    # First make the center
-    num_comm_center, num_storage_center = center_resources
-    comm_qs = []
-    storage_qs = []
-    i = num_nodes - 1
-    for c in range(num_comm_center):
-        comm_q_id = "{}-C{}".format(i, c)
-        comm_qs.append(comm_q_id)
-    for s in range(num_storage_center):
-        storage_q_id = "{}-S{}".format(i, s)
-        storage_qs.append(storage_q_id)
-    starGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-    starG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-
-    # Then make the end nodes
-    num_comm_end_node, num_storage_end_node = end_node_resources
-    for i in range(num_nodes - 1):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_comm_end_node):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_storage_end_node):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        starGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        starG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
-
-        center_node_id = num_nodes - 1
-        for j in range(num_comm_center):
-            for k in range(num_comm_end_node):
-                starGcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
-
-        starG.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
-                       weight=link_distance)
-
-    return starGcq, starG
-
-
 def gen_grid_topology(num_nodes=9, end_node_resources=(1, 3), repeater_resources=(1, 3), link_distance=5):
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_distance)]

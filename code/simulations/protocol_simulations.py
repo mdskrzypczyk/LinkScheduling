@@ -134,7 +134,7 @@ def throughput_vs_chain_length():
         xdata = fidelities
         dest_demands = list(sorted(filter(lambda demand: demand[1] == destination, latency_data.keys())))
         ydata = [latency_data[demand] for demand in dest_demands]
-        plt.plot(xdata, ydata, label="{} hops".format(i+1))
+        plt.plot(xdata, ydata, label="{} node chain".format(int(destination) + 1))
 
     plt.title("Repeater Protocol Rate vs. Fidelity")
     plt.xlabel("Fidelity")
@@ -147,7 +147,7 @@ def throughput_vs_chain_length():
 def throughput_vs_link_length():
     num_network_nodes = 3
     link_lengths = [5 + 5*i for i in range(10)]
-    fidelities = [0.5 + 0.05*i for i in range(10)]
+    fidelities = [0.55 + 0.05 * i for i in range(9)]
     protocols = []
     latency_data = {}
     for length in link_lengths:
@@ -198,17 +198,17 @@ def throughput_vs_link_length():
 
 
 def throughput_vs_resources():
-    num_network_nodes = 4
+    num_network_nodes = 3
     link_length = 5
     num_comm_qubits = [1, 2, 4]
-    num_storage_qubits = [2, 4, 8]
-    fidelities = [0.5 + 0.05*i for i in range(10)]
+    num_storage_qubits = [3, 4, 5]
+    fidelities = [0.55 + 0.05 * i for i in range(9)]
     latency_data = {}
     for num_comm, num_storage in list(itertools.product(num_comm_qubits, num_storage_qubits)):
         print("Using {} comm qs and {} storage qs".format(num_comm, num_storage))
         topology = gen_line_topology(num_network_nodes, num_comm_q=num_comm, num_storage_q=num_storage, link_distance=link_length)
         source = '0'
-        destination = '3'
+        destination = '2'
         protocols = []
         for fidelity in fidelities:
             demand = (source, destination, fidelity, 1)
@@ -276,8 +276,16 @@ def example_schedule():
 
 
 def visualize_protocol_scheduling():
-    line_topology = gen_line_topology(3, num_comm_q=2, num_storage_q=4, link_distance=5)
+    # line_topology = gen_line_topology(3, num_comm_q=1, num_storage_q=1, link_distance=5)
     demand = ('0', '2', 0.8, 0.01)
+    # protocol = get_protocol_without_rate_constraint(line_topology, demand)
+    # task = convert_protocol_to_task(demand, protocol, 0.01)
+    # asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
+    # alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
+    # shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
+    # protocol_timeline(task)
+
+    line_topology = gen_line_topology(5, num_comm_q=1, num_storage_q=3, link_distance=5)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.01)
     asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
@@ -285,17 +293,13 @@ def visualize_protocol_scheduling():
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
     protocol_timeline(task)
 
-    line_topology = gen_line_topology(5, num_comm_q=4, num_storage_q=4, link_distance=5)
-    import pdb
-    pdb.set_trace()
-    protocol = get_protocol_without_rate_constraint(line_topology, demand)
-    task = convert_protocol_to_task(demand, protocol, 0.01)
-    asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
-    protocol_timeline(task)
-    alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
-    protocol_timeline(task)
-    shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
-    protocol_timeline(task)
+    # line_topology = gen_line_topology(5, num_comm_q=4, num_storage_q=8, link_distance=5)
+    # protocol = get_protocol_without_rate_constraint(line_topology, demand)
+    # task = convert_protocol_to_task(demand, protocol, 0.01)
+    # asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
+    # alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
+    # shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
+    # protocol_timeline(task)
 
 
 def visualize_scheduled_protocols():
@@ -375,8 +379,8 @@ def plot_results(data):
 
 
 if __name__ == "__main__":
-    # slot_size_selection()
-    # throughput_vs_chain_length()
-    # throughput_vs_link_length()
+    slot_size_selection()
+    throughput_vs_chain_length()
+    throughput_vs_link_length()
     throughput_vs_resources()
-    # visualize_protocol_scheduling()
+    visualize_protocol_scheduling()

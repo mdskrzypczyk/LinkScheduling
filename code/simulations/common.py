@@ -1,7 +1,12 @@
+import json
 import networkx as nx
 import random
 from math import ceil
+from os.path import exists
 from collections import defaultdict
+from analysis import get_wcrt_in_slots, get_start_jitter_in_slots
+from jobscheduling.task import get_lcm_for
+from jobscheduling.visualize import schedule_and_resource_timelines
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
@@ -58,8 +63,9 @@ def get_protocol_without_rate_constraint(network_topology, demand):
 
 
 def select_rate(achieved_rate, slot_size):
-    rates = [32 / (2 ** i) for i in range(10)]  # Rate range between
-    rates = list(filter(lambda r: slot_size < r < achieved_rate, rates))
+    rates = [1 / (slot_size * (2 ** i)) for i in range(14)]  # Rate range between
+    rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
+    rates = list(filter(lambda r: r < achieved_rate, rates))
     if rates:
         return random.choice(rates)
     else:
@@ -145,6 +151,7 @@ def balance_taskset_resource_utilization(taskset, node_resources):
 
 def check_resource_utilization(taskset):
     resource_utilization = defaultdict(float)
+    result = True
     for task in taskset:
         resource_intervals = task.get_resource_intervals()
         for resource, itree in resource_intervals.items():
@@ -152,13 +159,31 @@ def check_resource_utilization(taskset):
             resource_utilization[resource] += utilization
             if resource_utilization[resource] > 1:
                 logger.warning("Taskset overutilizes resource {}, computed {}".format(resource, resource_utilization[resource],))
-                return False
+                result = False
 
     for resource in resource_utilization.keys():
         resource_utilization[resource] = round(resource_utilization[resource], 3)
 
     logger.info("Resource utilization: {}".format(resource_utilization))
-    return True
+    return result
+
+def get_resource_utilization(taskset):
+    resource_utilization = defaultdict(float)
+    result = True
+    for task in taskset:
+        resource_intervals = task.get_resource_intervals()
+        for resource, itree in resource_intervals.items():
+            utilization = sum([i.end - i.begin for i in itree]) / task.p
+            resource_utilization[resource] += utilization
+            if resource_utilization[resource] > 1:
+                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource, resource_utilization[resource],))
+                result = False
+
+    for resource in resource_utilization.keys():
+        resource_utilization[resource] = round(resource_utilization[resource], 3)
+
+    logger.info("Resource utilization: {}".format(resource_utilization))
+    return resource_utilization
 
 
 def get_taskset(num_tasks, fidelity, topology, slot_size):
@@ -189,7 +214,8 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
             if new_rate == 0:
                 logger.warning("Could not provide rate for {}".format(demand))
                 continue
-            scheduled_task.p = ceil(1 / new_rate / slot_size)
+
+            scheduled_task.p = ceil(1 / (new_rate * slot_size))
 
             s, d, f, r = demand
             demand = (s, d, f, new_rate)
@@ -215,3 +241,169 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
 
     balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
     return taskset
+
+
+def get_balanced_taskset(topology, fidelity, slot_size):
+    taskset = []
+    num_succ = 0
+    Gcq, G = topology
+    end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
+    repeater_nodes = [node for node in G.nodes if not G.nodes[node]["end_node"]]
+    all_node_resources = []
+    for node in G.nodes:
+        comm_qs = G.nodes[node]["comm_qs"]
+        storage_qs = G.nodes[node]["storage_qs"]
+        node_resources = comm_qs + storage_qs
+        all_node_resources += node_resources
+
+    resource_utilization = dict([(r, 0) for r in all_node_resources])
+    while any([("C" in resource and utilization < 1.5) for resource, utilization in resource_utilization.items()]):
+        possible_nodes = []
+        for resource, utilization in resource_utilization.items():
+            if "C" in resource and utilization < 1.5:
+                node, resource_id = resource.split('-')
+                if node in end_nodes:
+                    possible_nodes.append(node)
+
+        if len(possible_nodes) < 2:
+            break
+
+        source, destination = random.sample(possible_nodes, 2)
+        demand = (source, destination, fidelity, 1)
+        try:
+            logger.debug("Constructing protocol for request {}".format(demand))
+            protocol = get_protocol_without_rate_constraint(topology, demand)
+            if protocol is None:
+                logger.warning("Demand {} could not be satisfied!".format(demand))
+                continue
+
+            logger.debug("Converting protocol for request {} to task".format(demand))
+            task = convert_protocol_to_task(demand, protocol, slot_size)
+
+            logger.debug("Scheduling task for request {}".format(demand))
+
+            scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+
+            latency = scheduled_task.c * slot_size
+            achieved_rate = 1 / latency
+            new_rate = select_rate(achieved_rate, slot_size)
+
+            if new_rate == 0:
+                logger.warning("Could not provide rate for {}".format(demand))
+                continue
+
+            demand = (source, destination, fidelity, new_rate)
+            scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            scheduled_task.p = ceil(1 / new_rate / slot_size)
+            asap_dec, alap_dec, shift_dec = decoherence_times
+            logger.info("Results for {}:".format(demand))
+            num_succ += 1
+            logger.info(
+                "Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand,
+                                                                                                        num_succ))
+            taskset.append(scheduled_task)
+
+        except Exception as err:
+            logger.exception("Error occurred while generating tasks: {}".format(err))
+
+        check_resource_utilization(taskset)
+        balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
+        resource_utilization.update(get_resource_utilization(taskset))
+
+    return taskset
+
+
+def load_results(filename):
+    if exists(filename):
+        try:
+            return json.load(open(filename))
+        except:
+            return {}
+    else:
+        return {}
+
+
+def write_results(filename, results):
+    json.dump(results, open(filename, 'w'), indent=4, sort_keys=True)
+
+
+import time
+
+def schedule_taskset(scheduler, taskset, topology, slot_size):
+    try:
+        network_resources = get_network_resources(topology)
+        results_key = type(scheduler).__name__
+
+        running_taskset = []
+        last_succ_schedule = None
+
+        total_rate_dict = defaultdict(int)
+        for task in taskset:
+            total_rate_dict[1 / task.p] += 1
+
+        logger.info("Scheduling tasks with {}".format(results_key))
+        start = time.time()
+
+        for task in taskset:
+            # First test the taskset if it is even feasible to schedule
+            test_taskset = running_taskset + [task]
+            if check_resource_utilization(test_taskset) == False:
+                continue
+
+            schedule = scheduler.schedule_tasks(running_taskset + [task], topology)
+            if schedule:
+                # Record success
+                if all([valid for _, _, valid in schedule]):
+                    running_taskset.append(task)
+                    logger.info("Running taskset length: {}".format(len(running_taskset)))
+                    last_succ_schedule = schedule
+                    for sub_taskset, sub_schedule, _ in schedule:
+                        logger.debug("Created schedule for {} demands {}, length={}".format(
+                            len(sub_taskset), [t.name for t in sub_taskset],
+                            max([slot_info[1] for slot_info in sub_schedule])))
+
+                else:
+                    logger.warning(
+                        "Could not add demand {} with latency {}".format(task.name, task.c * slot_size))
+
+        end = time.time()
+        logger.info("{} completed scheduling in {}s".format(results_key, end - start))
+        logger.info("{} scheduled {} tasks".format(results_key, len(running_taskset)))
+        rate_dict = defaultdict(int)
+
+        for task in running_taskset:
+            rate_dict[1 / task.p] += 1
+
+        num_pairs = 0
+        hyperperiod = get_lcm_for([t.p for t in running_taskset])
+        for rate in sorted(total_rate_dict.keys()):
+            num_pairs += rate_dict[rate] * hyperperiod * rate
+            logger.info("{}: {} / {}".format(rate, rate_dict[rate], total_rate_dict[rate]))
+
+        total_latency = hyperperiod * slot_size
+        logger.info("Schedule generates {} pairs in {}s".format(num_pairs, total_latency))
+
+        network_throughput = num_pairs / total_latency
+        logger.info("Network Throughput: {} ebit/s".format(network_throughput))
+
+        task_wcrts = {}
+        task_jitters = {}
+        for sub_taskset, sub_schedule, _ in last_succ_schedule:
+            subtask_wcrts = get_wcrt_in_slots(sub_schedule, slot_size)
+            subtask_jitters = get_start_jitter_in_slots(running_taskset, sub_schedule, slot_size)
+            task_wcrts.update(subtask_wcrts)
+            task_jitters.update(subtask_jitters)
+            # schedule_and_resource_timelines(sub_taskset, sub_schedule)
+
+        results = {
+            "throughput": network_throughput,
+            "wcrt": max(list(task_wcrts.values()) + [0]),
+            "jitter": max(list(task_jitters.values()) + [0]),
+            "satisfied_demands": [task.name for task in running_taskset],
+            "unsatisfied_demands": [task.name for task in taskset if task not in running_taskset],
+        }
+
+        return results
+
+    except Exception as err:
+        logger.exception("Error occurred while scheduling: {}".format(err))

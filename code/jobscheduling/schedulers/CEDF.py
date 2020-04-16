@@ -44,7 +44,7 @@ class UniResourceCEDFScheduler:
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
         taskset_lookup = dict([(t.name, t) for t in original_taskset])
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
-        taskset = self.initialize_taskset(taskset)
+        taskset = self.initialize_taskset(original_taskset)
 
         taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
         for task in taskset:
@@ -57,6 +57,7 @@ class UniResourceCEDFScheduler:
 
         # Let time evolve and simulate scheduling, start at first task
         curr_time = taskset[0].a
+        loop = 0
         while taskset or not critical_queue.is_empty():
             while taskset and taskset[0].a <= curr_time:
                 task = taskset.pop(0)
@@ -71,6 +72,10 @@ class UniResourceCEDFScheduler:
                 index_structure[original_taskname_j][0] = curr_time
 
                 if si_min + task_i.c > sj_max and task_i != task_j and sj_min <= sj_max:
+                    if loop > 1000:
+                        import pdb
+                        pdb.set_trace()
+                    loop += 1
                     if si_min + task_i.c > si_max:
                         # Remove task_i from critical queue
                         critical_queue.delete(key=ck_i)
@@ -88,6 +93,8 @@ class UniResourceCEDFScheduler:
                 else:
                     # Remove next_task from critical queue
                     critical_queue.delete(ck_i)
+                    if curr_time > task_i.d:
+                        return [(None, None, False)]
                     schedule.append((curr_time, curr_time + task_i.c, task_i))
                     instance = int(instance)
                     if instance < instance_count[original_taskname]:
