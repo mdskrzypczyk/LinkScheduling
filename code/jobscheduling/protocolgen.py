@@ -90,7 +90,8 @@ def create_protocol(path, nodeG, Fmin, Rmin):
     subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
 
     pathResources = {}
-    cache_key = [node for node in sorted(path)]
+    cache_key = [Fmin, Rmin]
+    cache_key += [node for node in sorted(path)]
     for node in sorted(path):
         numCommResources = len(nodeG.nodes[node]['comm_qs'])
         numStorResources = len(nodeG.nodes[node]['storage_qs'])
