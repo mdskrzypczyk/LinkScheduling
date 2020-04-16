@@ -343,41 +343,6 @@ def visualize_scheduled_protocols():
             schedule_and_resource_timelines([task], schedule)
 
 
-def plot_results(data):
-    schedulers = list(data["(2, 4)"].keys())
-    for res_conf, res_conf_data in data.items():
-        for metric in ["throughput", "wcrt", "jitter", "num_demands"]:
-            means = defaultdict(list)
-            for sched in schedulers:
-                sched_data = res_conf_data[sched]
-                for fidelity, fidelity_data in sched_data.items():
-                    means[fidelity].append(fidelity_data[metric])
-
-            labels = [''.join([c for c in sched if c.isupper()]) for sched in schedulers]
-            x = np.arange(len(labels))  # the label locations
-            total_width = 0.7       # Width of all bars
-            width = total_width / len(means.keys())   # the width of the bars
-
-            fig, ax = plt.subplots()
-            offset = (len(means.keys()) - 1) * width / 2
-            for i, fidelity in enumerate(means.keys()):
-                ax.bar(x - offset + i*width, means[fidelity], width, label="F={}".format(fidelity))
-
-            # Add some text for labels, title and custom x-axis tick labels, etc.
-            metric_to_label = {"throughput": "Throughput", "wcrt": "Worst-case Response Time", "jitter": "Jitter",
-                               "num_demands": "Satisfied Demands"}
-            metric_to_units = {"throughput": "(ebit/s)", "wcrt": "(s)", "jitter": "(s^2)", "num_demands": ""}
-            ax.set_ylabel("{} {}".format(metric_to_label[metric], metric_to_units[metric]))
-            ax.set_title('{} by scheduler and fidelity {}'.format(metric_to_label[metric], res_conf))
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels)
-            ax.legend()
-
-            fig.tight_layout()
-
-            plt.show()
-
-
 if __name__ == "__main__":
     slot_size_selection()
     throughput_vs_chain_length()
