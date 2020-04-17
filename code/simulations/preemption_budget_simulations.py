@@ -83,7 +83,7 @@ def main():
                         new_k = int(preemption_budget / slot_size)
                         for task in taskset:
                             task.k = new_k
-                        scheduler_key = scheduler_key + "_{}s".format(preemption_budget)
+                        scheduler_key = type(scheduler).__name__ + "_{}s".format(preemption_budget)
                         print("Running scheduler {} with preemption_budget".format(scheduler_key))
                         scheduler_results = schedule_taskset(scheduler, taskset, topology, slot_size)
                         fidelity_data[scheduler_key] = scheduler_results

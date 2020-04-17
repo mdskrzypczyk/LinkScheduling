@@ -104,8 +104,14 @@ def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
 
 def get_full_taskset(taskset1, taskset2, topology, slot_size):
     full_taskset = []
+    proc = []
     for task1, task2 in zip(taskset1, taskset2):
-        items = task1.name.split(" ")
+        proc.append(task1)
+        proc.append(task2)
+
+    proc += taskset1[len(taskset2):] if len(taskset1) > len(taskset2) else taskset2[len(taskset1):]
+    for task in proc:
+        items = task.name.split(" ")
         source = items[0].strip(",").split("=")[-1]
         destination = items[1].strip(",").split("=")[-1]
         fidelity = float(items[2].strip(",").split("=")[-1])
