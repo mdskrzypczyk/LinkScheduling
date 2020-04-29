@@ -9,21 +9,6 @@ from random import randint
 logger = LSLogger()
 
 
-def print_resource_schedules(resource_schedules):
-    schedule_length = max([rs[-1][0] + 1 for rs in resource_schedules.values() if rs])
-    timeline_string = " R" + " " * max([len(r) + 1 for r in resource_schedules.keys()])
-    timeline_string += ''.join(["|{:>3} ".format(i) for i in range(schedule_length)])
-    print(timeline_string)
-    for r in sorted(resource_schedules.keys()):
-        schedule_string = "{:>5}: ".format(r)
-        resource_timeline = defaultdict(lambda: None)
-        for s, t in resource_schedules[r]:
-            resource_timeline[s] = t
-        schedule_string += ''.join(["|{:>3} ".format("V" if resource_timeline[i] is None else
-                                                     resource_timeline[i].name[0]) for i in range(schedule_length)])
-        print(schedule_string)
-
-
 def get_protocol_rate(demand, protocol, topology):
     slot_size = 0.01
     task = convert_protocol_to_task(demand, protocol, slot_size)

@@ -1,53 +1,7 @@
-import networkx as nx
 import time
-from device_characteristics.nv_links import load_link_data
 from jobscheduling.task import get_lcm_for
+from jobscheduling.topology import gen_plus_topology
 from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset
-
-
-def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
-                      link_length=5):
-    num_nodes = 4
-    d_to_cap = load_link_data()
-    link_capability = d_to_cap[str(link_length)]
-    # Line
-    Gcq = nx.Graph()
-    G = nx.Graph()
-
-    # First make the center
-    comm_qs = []
-    storage_qs = []
-    i = num_nodes - 1
-    for c in range(num_rep_comm_q):
-        comm_q_id = "{}-C{}".format(i, c)
-        comm_qs.append(comm_q_id)
-    for s in range(num_rep_storage_q):
-        storage_q_id = "{}-S{}".format(i, s)
-        storage_qs.append(storage_q_id)
-    Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-    G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=False)
-
-    # Then make the end nodes
-    for i in range(num_nodes - 1):
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_end_node_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_end_node_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
-
-        center_node_id = num_nodes - 1
-        for j in range(num_rep_comm_q):
-            for k in range(num_end_node_comm_q):
-                Gcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
-
-        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
-
-    return Gcq, G
 
 
 def main():

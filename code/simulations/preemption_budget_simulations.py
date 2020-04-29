@@ -1,7 +1,6 @@
-import networkx as nx
 import time
-from device_characteristics.nv_links import load_link_data
 from jobscheduling.task import get_lcm_for
+from jobscheduling.topology import gen_line_topology
 from simulations.common import load_results, write_results, get_balanced_taskset, schedule_taskset
 from jobscheduling.schedulers.BlockPBEDF import UniResourceConsiderateFixedPointPreemptionBudgetScheduler
 from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceConsiderateBlockPreemptionBudgetScheduler,\
@@ -22,37 +21,6 @@ def get_schedulers():
         MultipleResourceConsiderateSegmentPreemptionBudgetScheduler
     ]
     return schedulers
-
-
-def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=5):
-    num_nodes = 6
-    d_to_cap = load_link_data()
-    link_capability = d_to_cap[str(link_length)]
-    # Line
-    Gcq = nx.Graph()
-    G = nx.Graph()
-
-    for i in range(num_nodes):
-        node = "{}".format(i)
-        comm_qs = []
-        storage_qs = []
-        for c in range(num_end_node_comm_q):
-            comm_q_id = "{}-C{}".format(i, c)
-            comm_qs.append(comm_q_id)
-        for s in range(num_end_node_storage_q):
-            storage_q_id = "{}-S{}".format(i, s)
-            storage_qs.append(storage_q_id)
-        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
-        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
-        if i > 0:
-            prev_node_id = i - 1
-            for j in range(num_end_node_comm_q):
-                for k in range(num_end_node_storage_q):
-                    Gcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-
-            G.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
-
-    return Gcq, G
 
 
 def main():
