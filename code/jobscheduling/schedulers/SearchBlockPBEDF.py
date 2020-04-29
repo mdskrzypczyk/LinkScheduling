@@ -1,17 +1,17 @@
 import networkx as nx
 from collections import defaultdict
-from copy import copy
 from intervaltree import Interval, IntervalTree
-from queue import PriorityQueue
 from jobscheduling.log import LSLogger
-from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_budget_schedule, verify_segmented_budget_schedule
-from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, find_dag_task_preemption_points, BudgetTask, BudgetResourceTask, BudgetResourceDAGTask, PeriodicBudgetResourceDAGTask, ResourceTask, ResourceDAGTask
+from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_budget_schedule, \
+    verify_segmented_budget_schedule
+from jobscheduling.task import find_dag_task_preemption_points, PeriodicBudgetResourceDAGTask, ResourceTask, \
+    ResourceDAGTask
 
 
 logger = LSLogger()
 
 
-class MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
+class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
     def verify_schedule(self, taskset, schedule):
         return verify_budget_schedule(taskset, schedule)
 
@@ -73,7 +73,7 @@ class MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler(CommonS
         return start
 
 
-class MultiResourceInconsiderateFixedPointSegmentBlockPreemptionBudgetScheduler(MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler):
+class MRIFixedPointSegmentBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBudgetScheduler):
     def verify_schedule(self, taskset, schedule):
         return verify_segmented_budget_schedule(taskset, schedule)
 
@@ -88,7 +88,7 @@ class MultiResourceInconsiderateFixedPointSegmentBlockPreemptionBudgetScheduler(
         return segment_task
 
 
-class MultiResourceInconsiderateFixedPointSegmentPreemptionBudgetScheduler(MultiResourceInconsiderateFixedPointSegmentBlockPreemptionBudgetScheduler):
+class MRIFixedPointSegmentPreemptionBudgetScheduler(MRIFixedPointSegmentBlockPreemptionBudgetScheduler):
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
@@ -114,7 +114,7 @@ class MultiResourceInconsiderateFixedPointSegmentPreemptionBudgetScheduler(Multi
         return segment_task
 
 
-class MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler(MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler):
+class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBudgetScheduler):
     def update_resource_occupations(self, resource_occupations, resource_intervals):
         # Update windowed resource schedules
         for resource in resource_intervals.keys():
@@ -125,7 +125,8 @@ class MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler(MultiReso
                 import pdb
                 pdb.set_trace()
             resource_occupations[resource] |= resource_interval_tree
-            resource_occupations[resource].merge_overlaps(strict=False, data_reducer=lambda curr_task, new_task: new_task)
+            resource_occupations[resource].merge_overlaps(strict=False,
+                                                          data_reducer=lambda curr_task, new_task: new_task)
 
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
         # Add schedule information to resource schedules
@@ -163,7 +164,6 @@ class MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler(MultiReso
         # Find the earliest start
 
         while True:
-            offset = segment_earliest - task.a
             # task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
             segment_tasks = self.get_segment_tasks(task)
 
@@ -229,7 +229,7 @@ class MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler(MultiReso
         return start
 
 
-class MultiResourceConsiderateFixedPointSegmentBlockPreemptionBudgetScheduler(MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler):
+class MRCFixedPointSegmentBlockPreemptionBudgetScheduler(MRCFixedPointBlockPreemptionBudgetScheduler):
     def verify_schedule(self, taskset, schedule):
         return verify_segmented_budget_schedule(taskset, schedule)
 
@@ -256,10 +256,9 @@ class MultiResourceConsiderateFixedPointSegmentBlockPreemptionBudgetScheduler(Mu
             segment_times, segment_locked_resources, segment_resources, segment_subtasks = segment
             segment_start_offset, segment_end_offset = segment_times
             segment_duration = segment_end_offset - segment_start_offset
-            # TODO: Make sure any tasks that produce the final pair of qubits do not lock the resource, in this case
-            # they may not be in the last segment
             if i == len(segment_info) - 1:
                 segment_locked_resources = []
+
             segment_task = ResourceTask(name="{}|{}".format(task.name, i), c=segment_duration,
                                         a=task.a + comp_time, d=task.d - task.c + comp_time + segment_duration,
                                         resources=segment_resources,
@@ -269,7 +268,7 @@ class MultiResourceConsiderateFixedPointSegmentBlockPreemptionBudgetScheduler(Mu
         return segment_tasks
 
 
-class MultiResourceConsiderateFixedPointSegmentPreemptionBudgetScheduler(MultiResourceConsiderateFixedPointSegmentBlockPreemptionBudgetScheduler):
+class MRCFixedPointSegmentPreemptionBudgetScheduler(MRCFixedPointSegmentBlockPreemptionBudgetScheduler):
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
@@ -279,7 +278,8 @@ class MultiResourceConsiderateFixedPointSegmentPreemptionBudgetScheduler(MultiRe
             segment_intervals = list(sorted(segment_interval_list, key=lambda ri: ri[1].begin()))
             for resource, itree in segment_intervals:
                 offset_itree = IntervalTree([Interval(i.begin + segment_start - segment_task.a,
-                                                      i.end + segment_start - segment_task.a, segment_task) for i in itree])
+                                                      i.end + segment_start - segment_task.a, segment_task)
+                                             for i in itree])
                 resource_intervals[resource] |= offset_itree
 
         return resource_intervals
@@ -318,14 +318,15 @@ class MultiResourceConsiderateFixedPointSegmentPreemptionBudgetScheduler(MultiRe
                     if locking_intervals:
                         last_task = locking_intervals[-1].data
                         if resource in last_task.locked_resources:
-                            unlocking_intervals = sorted(resource_occupations[resource][interval.begin + offset:float('inf')])
+                            unlock_start = interval.begin + offset
+                            unlocking_intervals = sorted(resource_occupations[resource][unlock_start:float('inf')])
                             if not unlocking_intervals:
                                 import pdb
                                 pdb.set_trace()
                             unlocking_interval = unlocking_intervals[0]
-                            distance_to_free = max(distance_to_free, unlocking_interval.end - (interval.begin+offset))
+                            distance_to_free = max(distance_to_free, unlocking_interval.end - (interval.begin + offset))
 
-                    intervals = sorted(resource_occupations[resource][interval.begin+offset:interval.end+offset])
+                    intervals = sorted(resource_occupations[resource][interval.begin + offset:interval.end + offset])
                     if intervals:
                         overlapping_interval = intervals[0]
                         distance_to_free = max(distance_to_free, overlapping_interval.end - start)
@@ -336,7 +337,8 @@ class MultiResourceConsiderateFixedPointSegmentPreemptionBudgetScheduler(MultiRe
 
 
 class MultipleResourceInconsiderateBlockPreemptionBudgetScheduler(Scheduler):
-    internal_scheduler_class = MultiResourceInconsiderateFixedPointBlockPreemptionBudgetScheduler
+    internal_scheduler_class = MRIFixedPointBlockPreemptionBudgetScheduler
+
     def schedule_tasks(self, dagset, topology):
         # Convert DAGs into tasks
         tasks = {}
@@ -375,19 +377,20 @@ class MultipleResourceInconsiderateBlockPreemptionBudgetScheduler(Scheduler):
 
 
 class MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateBlockPreemptionBudgetScheduler):
-    internal_scheduler_class = MultiResourceInconsiderateFixedPointSegmentBlockPreemptionBudgetScheduler
+    internal_scheduler_class = MRIFixedPointSegmentBlockPreemptionBudgetScheduler
 
 
 class MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler(MultipleResourceInconsiderateBlockPreemptionBudgetScheduler):
-    internal_scheduler_class = MultiResourceInconsiderateFixedPointSegmentPreemptionBudgetScheduler
+    internal_scheduler_class = MRIFixedPointSegmentPreemptionBudgetScheduler
 
 
 class MultipleResourceConsiderateBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
-    internal_scheduler_class = MultiResourceConsiderateFixedPointBlockPreemptionBudgetScheduler
+    internal_scheduler_class = MRCFixedPointBlockPreemptionBudgetScheduler
 
 
 class MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
-    internal_scheduler_class = MultiResourceConsiderateFixedPointSegmentBlockPreemptionBudgetScheduler
+    internal_scheduler_class = MRCFixedPointSegmentBlockPreemptionBudgetScheduler
+
 
 class MultipleResourceConsiderateSegmentPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
-    internal_scheduler_class = MultiResourceConsiderateFixedPointSegmentPreemptionBudgetScheduler
+    internal_scheduler_class = MRCFixedPointSegmentPreemptionBudgetScheduler

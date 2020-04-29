@@ -1,7 +1,7 @@
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler
-from jobscheduling.task import get_lcm_for, generate_non_periodic_budget_task_set, BudgetTask, BudgetResourceDAGTask
+from jobscheduling.task import BudgetTask
 
 
 logger = LSLogger()
@@ -53,7 +53,10 @@ class PreemptionBudgetScheduler(Scheduler):
             else:
                 p, next_ready_task = self.ready_queue.get()
                 preempt = True
-                active_tasks = [task for task, _ in self.active_queue] if self.curr_task is None else list(sorted([self.curr_task] + [task for task, _ in self.active_queue], key=lambda task: task.k))
+                active_tasks = [task for task, _ in self.active_queue]
+                if self.curr_task is not None:
+                    active_tasks.append(self.curr_task)
+                    active_tasks = list(sorted(active_tasks, key=lambda t: (t[0].k, t[1], t[0].name)))
                 proc_time = next_ready_task.c if not active_tasks else min(active_tasks[0].k, next_ready_task.c)
 
                 # See if the next ready task causes the budget of the active tasks
@@ -61,7 +64,8 @@ class PreemptionBudgetScheduler(Scheduler):
                 for atask in active_tasks:
                     k_temp = atask.k
                     # Compute the amount of higher priority work in the active queue
-                    hpwork = sum([task.c for task, _ in self.active_queue if (task.k <= atask.k and task < atask)]) + proc_time
+                    hpwork = sum([task.c for task, _ in self.active_queue if (task.k <= atask.k and task < atask)])
+                    hpwork += proc_time
                     k_temp -= hpwork
                     if k_temp < 0:
                         preempt = False
@@ -112,42 +116,17 @@ class PreemptionBudgetScheduler(Scheduler):
         taskset = original_taskset
         return self.schedule, valid
 
-    def check_feasible(self, schedule, taskset):
-        # Check validity
-        valid = True
-        task_starts = {}
-        task_ends = {}
-        for s, e, task in schedule:
-            if not task.name in task_starts.keys():
-                task_starts[task.name] = s
-            task_ends[task.name] = e
-
-        for task in taskset:
-            if task.d < task_ends[task.name]:
-                print("Task {} with deadline {} starts at {} and ends at {}".format(task.name, task.d,
-                                                                                    task_starts[task.name],
-                                                                                    task_ends[task.name]))
-                valid = False
-
-            if task_ends[task.name] - task_starts[task.name] > task.c + task.k:
-                print("Task {} with budget {} starts at {} and ends at {}".format(task.name, task.k,
-                                                                                  task_starts[task.name],
-                                                                                  task_ends[task.name]))
-                valid = False
-
-        return valid
-
     def merge_adjacent_entries(self):
         for i in range(len(self.schedule)):
             if i >= len(self.schedule):
                 return
             s, e, task = self.schedule[i]
             c = 1
-            while i+c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
-                e = self.schedule[i+c][1]
+            while i + c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
+                e = self.schedule[i + c][1]
                 c += 1
             for j in range(1, c):
-                self.schedule.pop(i+1)
+                self.schedule.pop(i + 1)
             self.schedule[i] = (s, e, task)
 
     def remove_invalid_entries(self):

@@ -1,12 +1,9 @@
 import itertools
 import matplotlib.pyplot as plt
-import numpy as np
-from collections import defaultdict
 from jobscheduling.log import LSLogger
 from jobscheduling.protocols import schedule_dag_asap, convert_task_to_alap, shift_distillations_and_swaps
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
-from jobscheduling.schedulers.NPEDF import MultipleResourceNonBlockNPEDFScheduler
-from jobscheduling.visualize import draw_DAG, schedule_timeline, resource_timeline, schedule_and_resource_timelines, protocol_timeline
+from jobscheduling.visualize import schedule_and_resource_timelines, protocol_timeline
 from jobscheduling.topology import gen_line_topology
 from simulations.common import get_protocol_without_rate_constraint
 
@@ -22,7 +19,7 @@ def slot_size_selection():
 
     source = '0'
     destinations = ['1', '2']
-    fidelities = [0.6 + 0.1*i for i in range(4)]
+    fidelities = [0.6 + 0.1 * i for i in range(4)]
     for destination in destinations:
         for fidelity in fidelities:
             demand = (source, destination, fidelity, 1)
@@ -33,7 +30,7 @@ def slot_size_selection():
                 protocols.append((demand, protocol))
 
     # Increments of 4ms
-    slot_sizes = sorted(list(set([0.004*i for i in range(1, 50)])))
+    slot_sizes = sorted(list(set([0.004 * i for i in range(1, 50)])))
     latency_data = {}
     slot_count_data = {}
     for demand, protocol in protocols:
@@ -146,7 +143,7 @@ def throughput_vs_chain_length():
 
 def throughput_vs_link_length():
     num_network_nodes = 3
-    link_lengths = [5 + 5*i for i in range(10)]
+    link_lengths = [5 + 5 * i for i in range(10)]
     fidelities = [0.55 + 0.05 * i for i in range(9)]
     protocols = []
     latency_data = {}
@@ -197,6 +194,34 @@ def throughput_vs_link_length():
     plt.show()
 
 
+def find_link_capabilities():
+    num_network_nodes = 6
+    link_lengths = [5 + 5 * i for i in range(10)]
+    fidelities = [0.55 + 0.05 * i for i in range(9)]
+    link_capabilities = []
+
+    for length in link_lengths:
+        print("Processing link length: {}".format(length))
+        topology = gen_line_topology(num_network_nodes, num_comm_q=1, num_storage_q=5, link_distance=length)
+        source = '0'
+        for destination in [str(i) for i in range(1, num_network_nodes)]:
+            print("Processing destination {}".format(destination))
+            for fidelity in fidelities:
+                demand = (source, destination, fidelity, 1)
+                protocol = get_protocol_without_rate_constraint(topology, demand)
+                if protocol:
+                    q = [protocol]
+                    while q:
+                        next = q.pop(0)
+                        if hasattr(next, "protocols"):
+                            q += next.protocols
+                        else:
+                            cap = (length, round(next.F, 3), next.R)
+                            if cap not in link_capabilities:
+                                link_capabilities.append(cap)
+                                print(type(next), cap)
+
+
 def throughput_vs_resources():
     num_network_nodes = 3
     link_length = 5
@@ -206,7 +231,8 @@ def throughput_vs_resources():
     latency_data = {}
     for num_comm, num_storage in list(itertools.product(num_comm_qubits, num_storage_qubits)):
         print("Using {} comm qs and {} storage qs".format(num_comm, num_storage))
-        topology = gen_line_topology(num_network_nodes, num_comm_q=num_comm, num_storage_q=num_storage, link_distance=link_length)
+        topology = gen_line_topology(num_network_nodes, num_comm_q=num_comm, num_storage_q=num_storage,
+                                     link_distance=link_length)
         source = '0'
         destination = '2'
         protocols = []
@@ -244,7 +270,8 @@ def throughput_vs_resources():
 
     for num_comm, num_storage in list(itertools.product(num_comm_qubits, num_storage_qubits)):
         xdata = fidelities
-        length_demands = list(sorted(filter(lambda demand: demand[-2] == num_comm and demand[-1] == num_storage, latency_data.keys())))
+        length_demands = list(sorted(filter(lambda demand: demand[-2] == num_comm and demand[-1] == num_storage,
+                                            latency_data.keys())))
         ydata = [latency_data[demand] for demand in length_demands]
         plt.plot(xdata, ydata, label="{} Comm. {} Stor.".format(num_comm, num_storage))
 
@@ -256,27 +283,8 @@ def throughput_vs_resources():
     plt.show()
 
 
-def example_schedule():
-    network_topologies = gen_topologies(9, num_comm_q=1, num_storage_q=1, link_distance=5)
-    grid_topology = network_topologies[2]
-    demands = [('0,1', '2,1', 0.8, 1), ('1,0', '1,2', 0.8, 1)]
-    taskset = []
-    for demand in demands:
-        protocol = get_protocol_without_rate_constraint(grid_topology, demand)
-        task = convert_protocol_to_task(demand, protocol, 0.05)
-        scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, grid_topology)
-        taskset.append(scheduled_task)
-
-    scheduler = MultipleResourceNonBlockNPEDFScheduler()
-    schedule = scheduler.schedule_tasks(taskset, grid_topology)
-    import pdb
-    pdb.set_trace()
-    sub_taskset, sub_schedule, _ = schedule[0]
-    schedule_and_resource_timelines(sub_taskset, sub_schedule)
-
-
 def visualize_protocol_scheduling():
-    line_topology = gen_line_topology(3, num_comm_q=2, num_storage_q=3, link_distance=5)
+    line_topology = gen_line_topology(3, num_comm_q=1, num_storage_q=3, link_distance=5)
     demand = ('0', '2', 0.55, 0.01)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.01)
@@ -284,7 +292,7 @@ def visualize_protocol_scheduling():
     alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
     protocol_timeline(task)
-    demand = ('0', '2', 0.6, 0.01)
+    demand = ('0', '2', 0.55, 0.01)
     line_topology = gen_line_topology(5, num_comm_q=2, num_storage_q=3, link_distance=5)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.01)
@@ -315,10 +323,8 @@ def visualize_scheduled_protocols():
             # Iterate over the different lengths for links (make line equidistant
             for length in link_lengths:
                 # Construct topology
-                network_topologies = gen_topologies(num_nodes, num_comm_q=num_resources,
-                                                    num_storage_q=num_resources, link_distance=length)
-
-                line_topology = network_topologies[0]
+                line_topology = gen_line_topology(num_end_node_comm=num_resources, num_end_node_storage=num_resources,
+                                                  link_length=length)
                 # Iterate over the different fidelities
                 for Fmin in fidelities:
                     print("Collecting ({}, {}, {}, {})".format(num_nodes, num_resources, length, Fmin))
@@ -330,10 +336,7 @@ def visualize_scheduled_protocols():
                     else:
                         task = convert_protocol_to_task(demand, protocol, slot_size)
                         scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, line_topology)
-                        latency = scheduled_task.c * slot_size
-                        achieved_rate = 1 / latency
                         data.append((length, num_nodes, num_resources, Fmin, scheduled_task))
-
 
     for entry in sorted(data):
         length, num_nodes, num_resources, Fmin, task = entry
@@ -349,3 +352,4 @@ if __name__ == "__main__":
     # throughput_vs_link_length()
     # throughput_vs_resources()
     visualize_protocol_scheduling()
+    # find_link_capabilities()

@@ -1,37 +1,13 @@
 from abc import abstractmethod
 from collections import defaultdict
 from copy import copy
-from math import floor
 from queue import PriorityQueue
-from jobscheduling.task import find_dag_task_preemption_points, get_lcm_for, generate_non_periodic_task_set, generate_non_periodic_budget_task_set, generate_non_periodic_dagtask_set, get_dag_exec_time, PeriodicResourceTask, BudgetTask, PeriodicResourceDAGTask, ResourceTask, ResourceDAGTask, BudgetResourceDAGTask
+from jobscheduling.task import find_dag_task_preemption_points, get_lcm_for, BudgetResourceDAGTask
 from jobscheduling.log import LSLogger
 from intervaltree import IntervalTree, Interval
 
 
 logger = LSLogger()
-
-
-def pretty_print_schedule(schedule):
-    print([(s, e, (t.name, t.a, t.c, t.d)) for s, e, t in schedule])
-
-
-def compute_schedule_lateness(schedule):
-    return sum([max(0, e - t.d) for s, e, t in schedule])
-
-
-# Work-conserving, non-preemptive scheduling
-def check_wc_np_feasibility(periodic_taskset):
-    periodic_taskset = sorted(periodic_taskset, key=lambda task: task.p)
-
-    if not sum([task.c / task.p for task in periodic_taskset]) <= 1:
-        return False
-
-    for i in range(len(periodic_taskset)):
-        for L in range(periodic_taskset[0].p + 1, periodic_taskset[i].p):
-            if L < periodic_taskset[i].c + sum([floor((L-1) / periodic_taskset[j].p) for j in range(i)]):
-                return False
-
-    return True
 
 
 def verify_schedule(original_taskset, schedule):
@@ -42,7 +18,8 @@ def verify_schedule(original_taskset, schedule):
     for start, end, t in schedule:
         # Check that the task's execution period adhere's to it's release and deadline times
         if start < t.a or end > t.d:
-            logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
+            logger.warning("Found task {} ({}, {}) that does not adhere"
+                           "to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
             return False
 
         # Check that the start and end periods align with the tasks runtime
@@ -89,20 +66,23 @@ def verify_budget_schedule(original_taskset, schedule):
 
         elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
             task_exec_times.pop(instance_name)
-            if task_ends[instance_name] - task_starts[instance_name] > taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
+            if task_ends[instance_name] - task_starts[instance_name] > \
+                    taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
                 logger.warning("Task {} does not adhere to budget constraints".format(t.name))
                 return False
 
         # Check that the task's execution period adhere's to it's release and deadline times
         if start < t.a or end > t.d:
-            logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
+            logger.warning("Found task {} ({}, {}) that does not adhere"
+                           "to release/deadline constraints ({}, {})".format(t.name, start, end, t.a, t.d))
             return False
 
         # Add the occupation period of this task to all resources
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(start, end, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            offset_itree = IntervalTree([Interval(start, end, t) for i in itree
+                                         if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb
@@ -143,20 +123,23 @@ def verify_segmented_budget_schedule(original_taskset, schedule):
 
         elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
             task_exec_times.pop(instance_name)
-            if task_ends[instance_name] - task_starts[instance_name] > taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
+            if task_ends[instance_name] - task_starts[instance_name] > \
+                    taskset_lookup[original_taskname].k + taskset_lookup[original_taskname].c:
                 logger.warning("Task {} does not adhere to budget constraints".format(instance_name))
                 return False
 
         # Check that the task's execution period adhere's to it's release and deadline times
         if start < t.a or end > t.d:
-            logger.warning("Found task {} ({}, {}) that does not adhere to release/deadline constraints ({}, {})".format(instance_name, start, end, t.a, t.d))
+            logger.warning("Found task {} ({}, {}) that does not adhere"
+                           "to release/deadline constraints ({}, {})".format(instance_name, start, end, t.a, t.d))
             return False
 
         # Add the occupation period of this task to all resources
         task_resource_intervals = t.get_resource_intervals()
         offset = start - t.a
         for resource, itree in task_resource_intervals.items():
-            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree if start <= i.begin + offset < end and start < i.end + offset <= end])
+            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree
+                                         if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
                     import pdb
@@ -203,7 +186,8 @@ class CommonScheduler:
     def add_task_to_ready_queue(self):
         pass
 
-    def check_for_released_tasks(self, ready_queue, resource_intervals, taskset_lookup, instance_count, next_task_release, hyperperiod):
+    def check_for_released_tasks(self, ready_queue, resource_intervals, taskset_lookup, instance_count,
+                                 next_task_release, hyperperiod):
         for name, release in next_task_release.items():
             for resource, itree in resource_intervals.items():
                 periodic_task = taskset_lookup[name]
@@ -253,8 +237,8 @@ class CommonScheduler:
             resource_type = resource_id[0]
             resource_string = self.get_resource_string(resource)
             if not resource_relations.get(resource_string):
-                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
-                                                               'comm_qs' if resource_type == "C" else "storage_qs"]))
+                related_resources = node_resources[resource_node]['comm_qs' if resource_type == "C" else "storage_qs"]
+                resource_relations[resource_string] = list(sorted(related_resources))
 
         virtual_to_map = {}
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
@@ -325,7 +309,6 @@ class CommonScheduler:
         # Find the earliest start
 
         while True:
-            offset = segment_earliest - task.a
             # task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
             segment_tasks = self.get_segment_tasks(task)
 
@@ -399,13 +382,15 @@ class CommonScheduler:
             self.schedule_preemption_point_intervals(schedule, preemption_point_intervals)
 
             # Introduce any new instances that are now available
-            self.check_for_released_tasks(ready_queue, resource_intervals, taskset_lookup, instance_count, next_task_release, hyperperiod)
+            self.check_for_released_tasks(ready_queue, resource_intervals, taskset_lookup, instance_count,
+                                          next_task_release, hyperperiod)
 
             # Update windowed resource schedules
             if taskset:
                 self.update_resource_occupations(global_resource_occupations, resource_intervals)
                 min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
-                self.remove_useless_resource_occupations(global_resource_occupations, resource_intervals.keys(), min_chop)
+                self.remove_useless_resource_occupations(global_resource_occupations, resource_intervals.keys(),
+                                                         min_chop)
 
         # Check validity
         valid = self.verify_schedule(original_taskset, schedule)

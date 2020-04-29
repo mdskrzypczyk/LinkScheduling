@@ -1,17 +1,16 @@
 import json
 import networkx as nx
 import random
+import time
 from math import ceil
 from os.path import exists
 from collections import defaultdict
 from analysis import get_wcrt_in_slots, get_start_jitter_in_slots
 from jobscheduling.task import get_lcm_for
-from jobscheduling.visualize import schedule_and_resource_timelines
 from jobscheduling.log import LSLogger
-from jobscheduling.protocolgen import create_protocol, LinkProtocol, DistillationProtocol, SwapProtocol
+from jobscheduling.protocolgen import create_protocol
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
-from jobscheduling.schedulers.BlockPBEDF import UniResourcePreemptionBudgetScheduler,\
-    UniResourceFixedPointPreemptionBudgetScheduler, UniResourceConsiderateFixedPointPreemptionBudgetScheduler
+from jobscheduling.schedulers.BlockPBEDF import UniResourceConsiderateFixedPointPreemptionBudgetScheduler
 from jobscheduling.schedulers.SearchBlockPBEDF import MultipleResourceConsiderateBlockPreemptionBudgetScheduler,\
     MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler, \
     MultipleResourceConsiderateSegmentPreemptionBudgetScheduler
@@ -84,7 +83,7 @@ def get_network_resources(topology):
                 "storage": numStorResources,
                 "total": numCommResources + numStorResources
             }
-        except:
+        except Exception:
             import pdb
             pdb.set_trace()
     return network_resources
@@ -157,7 +156,8 @@ def check_resource_utilization(taskset):
             utilization = sum([i.end - i.begin for i in itree]) / task.p
             resource_utilization[resource] += utilization
             if resource_utilization[resource] > 1:
-                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource, resource_utilization[resource],))
+                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource,
+                                                                                      resource_utilization[resource]))
                 result = False
 
     for resource in resource_utilization.keys():
@@ -166,17 +166,17 @@ def check_resource_utilization(taskset):
     logger.info("Resource utilization: {}".format(resource_utilization))
     return result
 
+
 def get_resource_utilization(taskset):
     resource_utilization = defaultdict(float)
-    result = True
     for task in taskset:
         resource_intervals = task.get_resource_intervals()
         for resource, itree in resource_intervals.items():
             utilization = sum([i.end - i.begin for i in itree]) / task.p
             resource_utilization[resource] += utilization
             if resource_utilization[resource] > 1:
-                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource, resource_utilization[resource],))
-                result = False
+                logger.warning("Taskset overutilizes resource {}, computed {}".format(resource,
+                                                                                      resource_utilization[resource]))
 
     for resource in resource_utilization.keys():
         resource_utilization[resource] = round(resource_utilization[resource], 3)
@@ -247,7 +247,6 @@ def get_balanced_taskset(topology, fidelity, slot_size):
     num_succ = 0
     Gcq, G = topology
     end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
-    repeater_nodes = [node for node in G.nodes if not G.nodes[node]["end_node"]]
     all_node_resources = []
     for node in G.nodes:
         comm_qs = G.nodes[node]["comm_qs"]
@@ -257,10 +256,11 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 
     resource_utilization = dict([(r, 0) for r in all_node_resources])
     not_allowed = []
-    while any([("C" in resource and utilization < 1.5) for resource, utilization in resource_utilization.items()]):
+    max_util = 1.2
+    while any([("C" in resource and utilization < max_util) for resource, utilization in resource_utilization.items()]):
         possible_nodes = []
         for resource, utilization in resource_utilization.items():
-            if "C" in resource and utilization < 1.5:
+            if "C" in resource and utilization < max_util:
                 node, resource_id = resource.split('-')
                 if node in end_nodes:
                     possible_nodes.append(node)
@@ -328,7 +328,7 @@ def load_results(filename):
     if exists(filename):
         try:
             return json.load(open(filename))
-        except:
+        except Exception:
             return {}
     else:
         return {}
@@ -338,11 +338,8 @@ def write_results(filename, results):
     json.dump(results, open(filename, 'w'), indent=4, sort_keys=True)
 
 
-import time
-
 def schedule_taskset(scheduler, taskset, topology, slot_size):
     try:
-        network_resources = get_network_resources(topology)
         results_key = type(scheduler).__name__
 
         running_taskset = []
@@ -358,7 +355,7 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
         for task in taskset:
             # First test the taskset if it is even feasible to schedule
             test_taskset = running_taskset + [task]
-            if check_resource_utilization(test_taskset) == False:
+            if check_resource_utilization(test_taskset) is False:
                 continue
 
             schedule = scheduler.schedule_tasks(running_taskset + [task], topology)

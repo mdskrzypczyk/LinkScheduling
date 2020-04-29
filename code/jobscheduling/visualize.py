@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from graphviz import Digraph
 from matplotlib.collections import PolyCollection
 
+
 def draw_DAG(dag, name=None, view=False):
     graph_dir = "graphs/"
     if name is not None:
@@ -12,15 +13,6 @@ def draw_DAG(dag, name=None, view=False):
     for task in dag.subtasks:
         name = "{},A={},C={}".format(task.name, round(task.a, 3), round(task.c, 3))
         action = name[0]
-        # nodes = "("
-        # for resource in task.resources:
-        #     nodeID = {"0": "Alice", "1": "Rep.", "2": "Bob"}[resource]
-        #     nodes += "{}, ".format(nodeID)
-        # nodes = nodes[:-2] + ")"
-        # if action == "L":
-        #     label = "{}\n{}\n({}))".format(action, nodes, task.description)
-        # else:
-        #     label = "{}\n{}".format(action, nodes)
         dot.node(name, action)
 
     for task in dag.subtasks:
@@ -37,8 +29,8 @@ def get_original_taskname(task):
 
 
 def schedule_timeline(taskset, schedule):
-    cats = dict([(task.name, i+1) for i, task in enumerate(taskset)])
-    colormapping = dict([(name, "C{}".format(i-1)) for name, i in cats.items()])
+    cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
+    colormapping = dict([(name, "C{}".format(i - 1)) for name, i in cats.items()])
 
     verts = []
     colors = []
@@ -46,11 +38,11 @@ def schedule_timeline(taskset, schedule):
         s, e, t = d
         name = get_original_taskname(t)
         v = [
-            (s, cats[name]-.4),
-            (s, cats[name]+.4),
-            (e, cats[name]+.4),
-            (e, cats[name]-.4),
-            (s, cats[name]-.4)
+            (s, cats[name] - .4),
+            (s, cats[name] + .4),
+            (e, cats[name] + .4),
+            (e, cats[name] - .4),
+            (s, cats[name] - .4)
         ]
         verts.append(v)
         colors.append(colormapping[name])
@@ -136,8 +128,6 @@ def protocol_timeline(scheduled_protocol_task):
     fig, ax = plt.subplots()
     ax.add_collection(bars)
     ax.autoscale()
-    # name_map = {'1,0': "Alice", '1,1': "Repeater", '1,2': "Bob", "0,1": "Charlie", "2,1": "David"}
-    # yticks = [name_map[r[0]] + r[1:] for r in resources]
     yticks = resources
     ax.set_yticks(list(range(1, len(resources) + 1)))
     ax.set_yticklabels(yticks)
@@ -147,7 +137,6 @@ def protocol_timeline(scheduled_protocol_task):
 def schedule_and_resource_timelines(taskset, schedule, plot_title=None, plot_sep=True, save_plot=False):
     task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
-    task_lookup = dict([(task.name, task) for task in taskset])
 
     verts = []
     colors = []

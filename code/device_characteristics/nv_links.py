@@ -5,6 +5,9 @@ def load_link_data():
     with open("device_characteristics/data.json") as f:
         data = json.load(f)
 
+    with open("device_characteristics/data.json", "w") as f:
+        json.dump(data, f, indent=4, sort_keys=True)
+
     distances = list(data["rates"].keys())
 
     d_to_capability = {}
@@ -16,13 +19,17 @@ def load_link_data():
 
 if __name__ == "__main__":
     dist_to_cap = load_link_data()
-    # for row in zip(*[dist_to_cap[d] for d in sorted(dist_to_cap.keys())]):
-    #     string = ""
-    #     for F, R in row:
-    #         string += " & ({}, {})".format(round(F, 3), round(R, 3))
-    #     print(string)
-    for key, caps in dist_to_cap.items():
-        print(key, max(cap[0] for cap in caps))
-
+    lengths = [5*i for i in range(1,11)]
+    for l in lengths:
+        cap = dist_to_cap[str(l)]
+        string = "${}km$".format(l)
+        for F, R in reversed(sorted(cap)):
+            string += " & {}".format(round(R, 1))
+        print(string)
+    # string = ""
+    # for F,R in dist_to_cap["5"]:
+    #     string += " & {}".format(round(F,2))
+    #
+    # print(string)
     import pdb
     pdb.set_trace()

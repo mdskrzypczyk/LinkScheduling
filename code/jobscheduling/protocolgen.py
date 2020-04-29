@@ -2,10 +2,11 @@ import networkx as nx
 from math import ceil
 from copy import copy
 from jobscheduling.log import LSLogger
-from jobscheduling.qmath import swap_links, unswap_links, distill_links, undistill_link_even, fidelity_for_distillations, distillations_for_fidelity
-from jobscheduling.protocols import get_protocol_rate
+from jobscheduling.qmath import swap_links, unswap_links, distill_links, undistill_link_even, \
+    fidelity_for_distillations, distillations_for_fidelity
 
 logger = LSLogger()
+
 
 class Protocol:
     def __init__(self, F, R, nodes):
@@ -110,15 +111,12 @@ def create_protocol(path, nodeG, Fmin, Rmin):
     try:
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
         if type(protocol) != Protocol and protocol is not None:
-            if type(protocol) == LinkProtocol:
-                rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, nodeG))
-                protocol.R = rate
             cache[cache_key] = protocol
             return protocol
         else:
             cache[cache_key] = None
             return None
-    except:
+    except Exception:
         logger.exception("Failed to create protocol for path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
         raise Exception()
 
@@ -140,7 +138,7 @@ def esss(path, pathResources, G, Fmin, Rmin):
             numL = (upper + lower + 1) // 2
             numR = len(path) + 1 - numL
 
-            logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL-1]))
+            logger.debug("Finding protocol for path {} with pivot {}".format(path, path[numL - 1]))
             possible_protocol, Rl, Rr = find_split_path_protocol(path, dict(pathResources), G, Fmin, Rmin, numL, numR)
 
             if possible_protocol and possible_protocol.F >= Fmin and possible_protocol.R >= Rmin:
@@ -160,9 +158,7 @@ def esss(path, pathResources, G, Fmin, Rmin):
         protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
         if protocol is None:
             logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(path, Fmin, Rmin))
-        # else:
-        #     rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
-        #     protocol.R = rate
+
         return protocol
 
 
@@ -208,7 +204,8 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
         protocolR = esss(path[-numR:], pathResourcesCopy, G, Funswapped, Rlink)
 
         # Add to list of protocols
-        if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and type(protocolR) != Protocol:
+        if protocolL is not None and protocolR is not None and type(protocolL) != Protocol and \
+                type(protocolR) != Protocol:
             Fswap = swap_links(protocolL.F, protocolR.F)
             Rswap = min(protocolL.R, protocolR.R)
             swap_protocol = SwapProtocol(F=Fswap, R=Rswap, protocols=[protocolL, protocolR], nodes=[path[-numR]])
@@ -219,25 +216,21 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
                 protocol = DistillationProtocol(F=Fdistilled, R=Rdistilled, protocols=[protocol, copy(swap_protocol)],
                                                 nodes=[path[0], path[-1]])
 
-            logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
-                                                                                                 num))
+            logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F,
+                                                                                                        protocol.R,
+                                                                                                        num))
             logger.debug("Underlying link protocols have Fl={},Rl={} and Fr={},Rr={}".format(protocolL.F, protocolL.R,
-                                                                                      protocolR.F, protocolR.R))
+                                                                                             protocolR.F, protocolR.R))
 
             protocols.append((protocol, protocolL.R, protocolR.R))
         num += 1
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
-        # if len(path) <= 3:
-        #     protocols = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-5:]
-        #     for protocol, Rl, Rr in protocols:
-        #         if protocol is not None:
-        #             rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
-        #             protocol.R = rate
         protocol, Rl, Rr = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-1]
-        logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F, protocol.R,
-                                                                                             num + 1))
+        logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F,
+                                                                                                    protocol.R,
+                                                                                                    num + 1))
 
         return protocol, Rl, Rr
 
@@ -313,9 +306,7 @@ def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
     if protocol is None:
         logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
-    # else:
-    #     rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
-    #     protocol.R = rate
+
     return protocol
 
 
@@ -336,7 +327,7 @@ def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
         if numGens > 2**(minResources - 1):
             continue
 
-        numRounds = num_rounds(numGens, minNodeComms, minResources-minNodeComms)
+        numRounds = num_rounds(numGens, minNodeComms, minResources - minNodeComms)
         binary_rate = R / numRounds
         if binary_rate < Rmin:
             continue
@@ -354,7 +345,8 @@ def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
         currProtocol.R = binary_rate
         if currProtocol.F > Fmin and currProtocol.R >= Rmin:
             logger.debug(
-                "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R, numGens))
+                "Found distillation protocol using F={},R={},numGens={}".format(currProtocol.F, currProtocol.R,
+                                                                                numGens))
             protocols.append(currProtocol)
 
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
@@ -391,7 +383,7 @@ def bitcount(n):
     count = 0
     while n > 0:
         count = count + 1
-        n = n & (n-1)
+        n = n & (n - 1)
     return count
 
 

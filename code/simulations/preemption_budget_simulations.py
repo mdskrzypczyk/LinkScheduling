@@ -24,7 +24,7 @@ def get_schedulers():
     return schedulers
 
 
-def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=5):
     num_nodes = 6
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
@@ -50,8 +50,7 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
                 for k in range(num_end_node_storage_q):
                     Gcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
 
-            G.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability,
-                           weight=link_length)
+            G.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
 
     return Gcq, G
 
@@ -84,7 +83,7 @@ def main():
                         for task in taskset:
                             task.k = new_k
                         scheduler_key = type(scheduler).__name__ + "_{}s".format(preemption_budget)
-                        print("Running scheduler {} with preemption_budget".format(scheduler_key))
+                        print("Running scheduler {} with preemption_budget {}".format(scheduler_key, preemption_budget))
                         scheduler_results = schedule_taskset(scheduler, taskset, topology, slot_size)
                         fidelity_data[scheduler_key] = scheduler_results
                 else:
@@ -99,7 +98,7 @@ def main():
         results[run_key] = run_results
         try:
             write_results(results_file.format(run_key), results)
-        except:
+        except Exception:
             import pdb
             pdb.set_trace()
         print("Completed run {}".format(num_results))

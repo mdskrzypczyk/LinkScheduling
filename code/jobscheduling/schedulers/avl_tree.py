@@ -23,14 +23,14 @@ class AVLTree:
         return (self.height == 0)
 
     def is_empty(self):
-        return self.node == None
+        return self.node is None
 
     def insert(self, key, data, note=0):
         tree = self.node
 
         newnode = Node(key, data, note)
 
-        if tree == None:
+        if tree is None:
             self.node = newnode
             self.node.left = AVLTree()
             self.node.right = AVLTree()
@@ -91,11 +91,11 @@ class AVLTree:
         A.right.node = T
 
     def update_heights(self, recurse=True):
-        if not self.node == None:
+        if self.node is not None:
             if recurse:
-                if self.node.left != None:
+                if self.node.left is not None:
                     self.node.left.update_heights()
-                if self.node.right != None:
+                if self.node.right is not None:
                     self.node.right.update_heights()
 
             self.height = max(self.node.left.height,
@@ -104,11 +104,11 @@ class AVLTree:
             self.height = -1
 
     def update_balances(self, recurse=True):
-        if not self.node == None:
+        if self.node is not None:
             if recurse:
-                if self.node.left != None:
+                if self.node.left is not None:
                     self.node.left.update_balances()
-                if self.node.right != None:
+                if self.node.right is not None:
                     self.node.right.update_balances()
 
             self.balance = self.node.left.height - self.node.right.height
@@ -116,20 +116,20 @@ class AVLTree:
             self.balance = 0
 
     def delete(self, key):
-        if self.node != None:
+        if self.node is not None:
             if self.node.key == key:
-                if self.node.left.node == None and self.node.right.node == None:
+                if self.node.left.node is None and self.node.right.node is None:
                     self.node = None  # leaves can be killed at will
                 # if only one subtree, take that
-                elif self.node.left.node == None:
+                elif self.node.left.node is None:
                     self.node = self.node.right.node
-                elif self.node.right.node == None:
+                elif self.node.right.node is None:
                     self.node = self.node.left.node
 
                 # worst-case: both children present. Find logical successor
                 else:
                     replacement = self.logical_successor(self.node)
-                    if replacement != None:  # sanity check
+                    if replacement is not None:  # sanity check
                         self.node.key = replacement.key
                         self.node.data = replacement.data
                         self.node.note = replacement.note
@@ -153,9 +153,9 @@ class AVLTree:
         Find the biggest valued node in LEFT child
         '''
         node = node.left.node
-        if node != None:
-            while node.right != None:
-                if node.right.node == None:
+        if node is not None:
+            while node.right is not None:
+                if node.right.node is None:
                     return node
                 else:
                     node = node.right.node
@@ -166,17 +166,17 @@ class AVLTree:
         Find the smallese valued node in RIGHT child
         '''
         node = node.right.node
-        if node != None:  # just a sanity check
+        if node is not None:  # just a sanity check
 
-            while node.left != None:
-                if node.left.node == None:
+            while node.left is not None:
+                if node.left.node is None:
                     return node
                 else:
                     node = node.left.node
         return node
 
     def check_balanced(self):
-        if self == None or self.node == None:
+        if self is None or self.node is None:
             return True
 
         # We always need to make sure we are balanced
@@ -185,7 +185,7 @@ class AVLTree:
         return ((abs(self.balance) < 2) and self.node.left.check_balanced() and self.node.right.check_balanced())
 
     def inorder_traverse(self):
-        if self.node == None:
+        if self.node is None:
             return []
 
         inlist = []
@@ -202,13 +202,13 @@ class AVLTree:
         return inlist
 
     def minimum(self):
-        if self.node == None:
+        if self.node is None:
             return None
 
         if self.node.note:
             self.node.data[1] = max(self.node.data[1], self.node.note)
 
-        if self.node and self.node.left.node == None:
+        if self.node and self.node.left.node is None:
             return self.node
 
         else:

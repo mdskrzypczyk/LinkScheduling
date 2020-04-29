@@ -1,0 +1,6 @@
+graphviz
+intervaltree
+matplotlib
+networkx
+numpy
+scipy

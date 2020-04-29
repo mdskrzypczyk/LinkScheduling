@@ -5,7 +5,8 @@ from jobscheduling.task import get_lcm_for
 from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset
 
 
-def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                      link_length=5):
     num_nodes = 4
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
@@ -44,8 +45,7 @@ def gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
             for k in range(num_end_node_comm_q):
                 Gcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
 
-        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
-                       weight=link_length)
+        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
 
     return Gcq, G
 
@@ -55,7 +55,7 @@ def main():
     topology = gen_plus_topology(num_rep_comm_q=2, num_rep_storage_q=4)
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "plus_results/plus_rep_2c4s_results_{}.json"
+    results_file = "plus_results/plus_test_results_{}.json"
     num_results = 0
     while num_results < 100:
         print("Starting new run {}".format(num_results))
@@ -82,7 +82,7 @@ def main():
         results[run_key] = run_results
         try:
             write_results(results_file.format(run_key), results)
-        except:
+        except Exception:
             import pdb
             pdb.set_trace()
         print("Completed run {}".format(num_results))

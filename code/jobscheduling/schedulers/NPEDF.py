@@ -1,11 +1,10 @@
 import networkx as nx
-from copy import copy
 from collections import defaultdict
 from queue import PriorityQueue
 from intervaltree import Interval, IntervalTree
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, ResourceDAGTask, PeriodicResourceDAGTask, PeriodicBudgetResourceDAGTask
+from jobscheduling.task import get_lcm_for, PeriodicBudgetResourceDAGTask
 
 
 logger = LSLogger()
@@ -81,7 +80,8 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             resource_interval_trees = self.extract_resource_intervals(next_task, start_time)
 
             # Introduce any new instances that are now available
-            self.check_for_released_tasks(ready_queue, resource_interval_trees, taskset_lookup, instance_count, next_task_release, hyperperiod)
+            self.check_for_released_tasks(ready_queue, resource_interval_trees, taskset_lookup, instance_count,
+                                          next_task_release, hyperperiod)
 
             # Add the schedule information to the overall schedule
             schedule.append((start_time, start_time + next_task.c, next_task))
@@ -90,7 +90,8 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             if taskset:
                 self.update_resource_occupations(global_resource_occupations, resource_interval_trees)
                 min_chop = min(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
-                self.remove_useless_resource_occupations(global_resource_occupations, resource_interval_trees.keys(), min_chop)
+                self.remove_useless_resource_occupations(global_resource_occupations, resource_interval_trees.keys(),
+                                                         min_chop)
 
         # Check validity
         valid = verify_schedule(original_taskset, schedule)
@@ -99,20 +100,10 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         return schedule, valid
 
     def get_start_time(self, task, resource_occupations, node_resources, earliest):
-        offset = max(0, earliest - task.a)
-
-        # Find the earliest start
-        # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-        # task.resources = list(set(resource_relations.values()))
-        # for subtask in task.subtasks:
-        #     new_resources = []
-        #     for resource in subtask.resources:
-        #         new_resources.append(resource_relations[resource])
-        #     subtask.resources = new_resources
-
         offset = self.find_earliest_start(task, resource_occupations, earliest)
         while True:
-            # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained resource can be scheduled
+            # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained
+            # resource can be scheduled
             scheduleable, step = self.attempt_schedule(task, offset, resource_occupations)
 
             if scheduleable:
@@ -135,7 +126,7 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
 
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
         resource_intervals = list(sorted(resource_interval_list, key=lambda ri: ri[1].begin()))
-        offset = start-task.a
+        offset = start - task.a
         for resource, itree in resource_intervals:
             for interval in itree:
                 intervals = sorted(resource_occupations[resource][interval.begin + offset:interval.end + offset])

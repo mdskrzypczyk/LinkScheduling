@@ -7,12 +7,13 @@ from jobscheduling.log import LSLogger
 from jobscheduling.protocols import convert_protocol_to_task, schedule_dag_for_resources
 from jobscheduling.task import get_lcm_for
 from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset, \
-    get_protocol_without_rate_constraint, check_resource_utilization, balance_taskset_resource_utilization
+    get_protocol_without_rate_constraint, balance_taskset_resource_utilization
 
 logger = LSLogger()
 
 
-def gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+def gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                       link_length=5):
     num_nodes = 4
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
@@ -51,13 +52,13 @@ def gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
             for k in range(num_end_node_comm_q):
                 Gcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
 
-        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
-                       weight=link_length)
+        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
 
     return Gcq, G
 
 
-def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                       link_length=5):
     num_nodes = 4
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
@@ -69,12 +70,15 @@ def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
     comm_qs = []
     storage_qs = []
     i = num_nodes - 1
-    for c in range(num_rep_comm_q, 2*num_rep_comm_q):
+
+    for c in range(num_rep_comm_q, 2 * num_rep_comm_q):
         comm_q_id = "{}-C{}".format(i, c)
         comm_qs.append(comm_q_id)
-    for s in range(num_rep_storage_q, 2*num_rep_storage_q):
+
+    for s in range(num_rep_storage_q, 2 * num_rep_storage_q):
         storage_q_id = "{}-S{}".format(i, s)
         storage_qs.append(storage_q_id)
+
     Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
     G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=False)
 
@@ -82,12 +86,15 @@ def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
     for i in range(num_nodes - 1):
         comm_qs = []
         storage_qs = []
-        for c in range(num_end_node_comm_q, 2*num_end_node_comm_q):
+
+        for c in range(num_end_node_comm_q, 2 * num_end_node_comm_q):
             comm_q_id = "{}-C{}".format(i, c)
             comm_qs.append(comm_q_id)
-        for s in range(num_end_node_storage_q, 2*num_end_node_storage_q):
+
+        for s in range(num_end_node_storage_q, 2 * num_end_node_storage_q):
             storage_q_id = "{}-S{}".format(i, s)
             storage_qs.append(storage_q_id)
+
         Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
         G.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
 
@@ -96,8 +103,7 @@ def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
             for k in range(num_end_node_comm_q):
                 Gcq.add_edge("{}-C{}".format(center_node_id, j), "{}-C{}".format(i, k))
 
-        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability,
-                       weight=link_length)
+        G.add_edge("{}".format(center_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
 
     return Gcq, G
 
@@ -153,9 +159,9 @@ def main():
     full_topology = gen_plus_topology1(num_end_node_comm_q=2, num_end_node_storage_q=6, num_rep_comm_q=2,
                                        num_rep_storage_q=6)
     half_topology1 = gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
-                                       num_rep_storage_q=3)
+                                        num_rep_storage_q=3)
     half_topology2 = gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
-                                       num_rep_storage_q=3)
+                                        num_rep_storage_q=3)
     slot_size = 0.01
     schedulers = get_schedulers()
     results_file = "resource_results/resource_results_{}.json"
@@ -189,7 +195,7 @@ def main():
         results[run_key] = run_results
         try:
             write_results(results_file.format(run_key), results)
-        except:
+        except Exception:
             import pdb
             pdb.set_trace()
         print("Completed run {}".format(num_results))

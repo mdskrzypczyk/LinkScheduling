@@ -6,7 +6,7 @@ from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.avl_tree import AVLTree
 from jobscheduling.schedulers.scheduler import Scheduler, get_lcm_for, verify_schedule
-from jobscheduling.task import PeriodicResourceDAGTask, generate_non_periodic_task_set, ResourceTask
+from jobscheduling.task import PeriodicResourceDAGTask, ResourceTask
 
 
 logger = LSLogger()
@@ -46,7 +46,7 @@ class UniResourceCEDFScheduler:
         instance_count = dict([(t.name, hyperperiod // t.p - 1) for t in original_taskset])
         taskset = self.initialize_taskset(original_taskset)
 
-        taskset = list(sorted(taskset, key=lambda task: (task.a, task.d)))
+        taskset = list(sorted(taskset, key=lambda task: (task.d, task.a)))
         for task in taskset:
             s_min = task.a
             s_max = task.d - task.c
@@ -57,8 +57,7 @@ class UniResourceCEDFScheduler:
 
         # Let time evolve and simulate scheduling, start at first task
         curr_time = taskset[0].a
-        loop = 0
-        while taskset or not critical_queue.is_empty():
+        while taskset or not critical_queue.is_empty() or not ready_queue.empty():
             while taskset and taskset[0].a <= curr_time:
                 task = taskset.pop(0)
                 ready_queue.put((task.d, task))
@@ -66,16 +65,14 @@ class UniResourceCEDFScheduler:
             if not ready_queue.empty():
                 _, task_i = ready_queue.get()
                 original_taskname, instance = task_i.name.split('|')
+                index_structure[original_taskname][0] = curr_time
                 si_min, si_max, _, ck_i = index_structure[original_taskname]
                 sj_min, sj_max, task_j, ck_j = critical_queue.minimum().data
                 original_taskname_j = task_j.name.split('|')[0]
                 index_structure[original_taskname_j][0] = curr_time
+                sj_min = curr_time
 
                 if si_min + task_i.c > sj_max and task_i != task_j and sj_min <= sj_max:
-                    if loop > 1000:
-                        import pdb
-                        pdb.set_trace()
-                    loop += 1
                     if si_min + task_i.c > si_max:
                         # Remove task_i from critical queue
                         critical_queue.delete(key=ck_i)
@@ -93,7 +90,7 @@ class UniResourceCEDFScheduler:
                 else:
                     # Remove next_task from critical queue
                     critical_queue.delete(ck_i)
-                    if curr_time > task_i.d:
+                    if curr_time + task_i.c > task_i.d:
                         return [(None, None, False)]
                     schedule.append((curr_time, curr_time + task_i.c, task_i))
                     instance = int(instance)
@@ -117,7 +114,6 @@ class UniResourceCEDFScheduler:
         valid = True
         for start, end, task in schedule:
             if task.d < end:
-                # print("Task {} with deadline {} finishes at end time {}".format(task.name, task.d, end))
                 valid = False
 
         return [(original_taskset, schedule, valid)]
@@ -140,9 +136,9 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p*instance
+        release_offset = dag_copy.a + dag_copy.p * instance
         task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                     d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
+                                     d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
         return task_instance
 
     def schedule_tasks(self, taskset, topology):
@@ -182,14 +178,16 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             si_min, si_max, _, ck_i = index_structure[original_taskname]
             last_start = last_task_start[original_taskname]
 
-            start_time = self.get_start_time(task_i, global_resource_occupations, node_resources, max([si_min, earliest, last_start]))
+            start_time = self.get_start_time(task_i, global_resource_occupations, node_resources,
+                                             max([si_min, earliest, last_start]))
 
             j_starts = [(float('inf'), float('inf'), float('inf'), task_i, ck_i)]
             for resource in taskset_lookup[original_taskname].resources:
                 sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
 
                 if task_j != task_i:
-                    j_start = self.get_start_time(task_j, global_resource_occupations, node_resources, max([sj_min, last_start]))
+                    j_start = self.get_start_time(task_j, global_resource_occupations, node_resources,
+                                                  max([sj_min, last_start]))
                     taskname_j, instance = task_j.name.split('|')
                     index_structure[taskname_j][0] = j_start
                     sj_min = j_start
@@ -252,9 +250,11 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
                 # Update windowed resource schedules
                 if taskset:
-                    min_chop = max(min(list(last_task_start.values())), min(list([sj_min for sj_min, _, _, _ in index_structure.values()])))
+                    min_chop = max(min(list(last_task_start.values())), min(list([sj_min for sj_min, _, _, _ in
+                                                                                  index_structure.values()])))
                     for resource in task_i.resources:
-                        resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
+                        resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in
+                                                              resource_intervals[resource])
                         if global_resource_occupations[resource] & resource_interval_tree:
                             import pdb
                             pdb.set_trace()
@@ -277,9 +277,6 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
         start = earliest
         distance_to_free = float('inf')
         while distance_to_free != 0:
-            offset = start - task.a
-            # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-            # task.resources = list(set(resource_relations.values()))
             distance_to_free = 0
             sched_interval = Interval(start, start + task.c)
             for resource in task.resources:
@@ -299,8 +296,8 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
             resource_type = resource_id[0]
             resource_string = self.get_resource_string(resource)
             if not resource_relations.get(resource_string):
-                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
-                                                               'comm_qs' if resource_type == "C" else "storage_qs"]))
+                related_resources = node_resources[resource_node]['comm_qs' if resource_type == "C" else "storage_qs"]
+                resource_relations[resource_string] = list(sorted(related_resources))
 
         virtual_to_map = {}
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]

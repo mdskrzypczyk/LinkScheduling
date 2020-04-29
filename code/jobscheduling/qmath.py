@@ -9,36 +9,37 @@ def distill_links(F1, F2):
 
 
 def undistill_link(Ftarget, Finitial):
-    return (2 * Ftarget * Finitial - Finitial - 5 * Ftarget + 1) / (8 * Ftarget * Finitial - 10 * Finitial - 2 * Ftarget + 1)
+    return (2 * Ftarget * Finitial - Finitial - 5 * Ftarget + 1) / \
+           (8 * Ftarget * Finitial - 10 * Finitial - 2 * Ftarget + 1)
 
 
 def undistill_link_even(Ftarget):
-    return (3*sqrt(-4*Ftarget**2 + 6*Ftarget -1) - 2*Ftarget + 1) / (10 - 8*Ftarget)
+    return (3 * sqrt(-4 * Ftarget**2 + 6 * Ftarget - 1) - 2 * Ftarget + 1) / (10 - 8 * Ftarget)
 
 
 def swap_links(F1, F2):
-    return (4/3) * F1 * F2 - (1/3)*F1 - (1/3)*F2 + (1/3)
+    return (4 / 3) * F1 * F2 - (1 / 3) * F1 - (1 / 3) * F2 + (1 / 3)
 
 
 def unswap_links(Ftarget):
     a = 4 / 3
     b = -2 / 3
-    c = (1/3) - Ftarget
+    c = (1 / 3) - Ftarget
     try:
-        x1 = (-b + sqrt(b**2 - 4*a*c)) / (2*a)
+        x1 = (-b + sqrt(b**2 - 4 * a * c)) / (2 * a)
         return x1
-    except:
+    except Exception:
         import pdb
         pdb.set_trace()
         return 1
 
 
 def unswap_three_links_equal_fidelity(Ftarget):
-    return (1/4)*((3**(2/3))*(4*Ftarget-1)**(1/3) + 1)
+    return (1 / 4) * ((3**(2 / 3)) * (4 * Ftarget - 1)**(1 / 3) + 1)
 
 
 def unswap_three_links(Fmiddle, Ftarget):
-    return (3*sqrt((4*Fmiddle - 1)*(4*Ftarget - 1)) - 4*Fmiddle + 1) / (4 - 16*Fmiddle)
+    return (3 * sqrt((4 * Fmiddle - 1) * (4 * Ftarget - 1)) - 4 * Fmiddle + 1) / (4 - 16 * Fmiddle)
 
 
 def distillations_for_fidelity(Finitial, Ftarget):

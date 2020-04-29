@@ -17,11 +17,11 @@ class UniResourceBlockNPEDFScheduler(Scheduler):
 
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p*instance
+        release_offset = dag_copy.a + dag_copy.p * instance
         for subtask in dag_copy.subtasks:
             subtask.a += release_offset
         dag_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
-                                    d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
+                                    d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
         return dag_instance
 
     def initialize_taskset(self, tasks):
@@ -99,9 +99,9 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
 
     def create_new_task_instance(self, periodic_task, instance):
         dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p*instance
+        release_offset = dag_copy.a + dag_copy.p * instance
         task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                     d=dag_copy.a + dag_copy.p*(instance + 1), resources=dag_copy.resources)
+                                     d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
         return task_instance
 
     def schedule_tasks(self, taskset, topology):
@@ -144,7 +144,8 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
-            start_time = self.get_start_time(next_task, global_resource_occupations, node_resources, max([next_task.a, earliest, last_start]))
+            start_time = self.get_start_time(next_task, global_resource_occupations, node_resources,
+                                             max([next_task.a, earliest, last_start]))
             if start_time + next_task.c > next_task.d:
                 return None, False
 
@@ -184,7 +185,8 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
                 min_chop = max(min(list(last_task_start.values())), min(list([t.a for t in taskset])))
                 earliest = min_chop
                 for resource in next_task.resources:
-                    resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in resource_intervals[resource])
+                    resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in
+                                                          resource_intervals[resource])
                     global_resource_occupations[resource] |= resource_interval_tree
                     global_resource_occupations[resource].chop(0, min_chop)
                     global_resource_occupations[resource].merge_overlaps(strict=False)
@@ -204,10 +206,6 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
         start = earliest
         distance_to_free = float('inf')
         while distance_to_free != 0:
-            offset = start - task.a
-            # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-            # task.resources = list(set(resource_relations.values()))
-
             distance_to_free = 0
             sched_interval = Interval(start, start + task.c)
             for resource in task.resources:
@@ -227,8 +225,8 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
             resource_type = resource_id[0]
             resource_string = self.get_resource_string(resource)
             if not resource_relations.get(resource_string):
-                resource_relations[resource_string] = list(sorted(node_resources[resource_node][
-                                                                      'comm_qs' if resource_type == "C" else "storage_qs"]))
+                related_resources = node_resources[resource_node]['comm_qs' if resource_type == "C" else "storage_qs"]
+                resource_relations[resource_string] = list(sorted(related_resources))
 
         virtual_to_map = {}
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]

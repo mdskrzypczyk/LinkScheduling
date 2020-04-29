@@ -5,14 +5,14 @@ from jobscheduling.task import get_lcm_for
 from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset
 
 
-def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3, link_length=5):
+def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                   link_length=5):
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
     # Line
     Gcq = nx.Graph()
     G = nx.Graph()
 
-    nodes = ['0', '1', '2', '3', '4', '5']
     end_nodes = ['0', '2', '3', '5']
     repeater_nodes = ['1', '4']
     edges = [
@@ -59,7 +59,7 @@ def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm
             for k in range(num_comm_node2):
                 Gcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
 
-    return (Gcq, G)
+    return Gcq, G
 
 
 def main():
@@ -96,7 +96,7 @@ def main():
         results[run_key] = run_results
         try:
             write_results(results_file, results)
-        except:
+        except Exception:
             import pdb
             pdb.set_trace()
         print("Completed run {}".format(len(results.keys())))

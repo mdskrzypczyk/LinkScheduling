@@ -1,6 +1,7 @@
 PYTHON        = python3
 PIP           = pip3
-SOURCEDIR     = linkscheduling
+SOURCEDIR     = jobscheduling
+SIMULATIONDIR = simulations
 TESTS         = tests
 
 clean: _clean_pyc _clean_dist
@@ -18,7 +19,7 @@ install: verify build
 	@$(PIP) install dist/*.whl
 
 lint:
-	@$(PYTHON) -m flake8 $(SOURCEDIR) $(TESTS)
+	@$(PYTHON) -m flake8 $(SIMULATIONDIR) $(SOURCEDIR) $(TESTS)
 
 python-deps:
 	@$(PIP) install -r requirements.txt

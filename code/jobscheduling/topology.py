@@ -1,18 +1,15 @@
 import networkx as nx
 from device_characteristics.nv_links import load_link_data
-from jobscheduling.haversine import distance
 from math import sqrt
-
-SURFNET_GML = "Surfnet.gml"
 
 
 def get_dimensions(n):
     divisors = []
     for currentDiv in range(n):
         if n % float(currentDiv + 1) == 0:
-            divisors.append(currentDiv+1)
+            divisors.append(currentDiv + 1)
 
-    hIndex = min(range(len(divisors)), key=lambda i: abs(divisors[i]-sqrt(n)))
+    hIndex = min(range(len(divisors)), key=lambda i: abs(divisors[i] - sqrt(n)))
     wIndex = hIndex + 1
 
     return divisors[hIndex], divisors[wIndex]
@@ -29,26 +26,32 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
         node = "{}".format(i)
         comm_qs = []
         storage_qs = []
+
         for c in range(num_comm_q):
             comm_q_id = "{}-C{}".format(i, c)
             comm_qs.append(comm_q_id)
+
         for s in range(num_storage_q):
             storage_q_id = "{}-S{}".format(i, s)
             storage_qs.append(storage_q_id)
+
         ringGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
         ringG.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
         ringG.nodes[node]["end_node"] = True
+
         if i > 0:
             prev_node_id = i - 1
             for j in range(num_comm_q):
                 for k in range(num_comm_q):
                     ringGcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
-            ringG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_distance)
+            ringG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability,
+                           weight=link_distance)
 
-    ringG.add_edge("{}".format(0), "{}".format(n-1), capabilities=link_capability, weight=link_distance)
+    ringG.add_edge("{}".format(0), "{}".format(n - 1), capabilities=link_capability, weight=link_distance)
     for j in range(1):
         for k in range(1):
-            ringGcq.add_edge("{}-{}".format(0, j), "{}-{}".format(n-1, k), capabilities=link_capability, weight=link_distance)
+            ringGcq.add_edge("{}-{}".format(0, j), "{}-{}".format(n - 1, k), capabilities=link_capability,
+                             weight=link_distance)
 
     # Demo
     demoGcq = nx.Graph()
@@ -56,12 +59,15 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
     for i in range(4):
         comm_qs = []
         storage_qs = []
+
         for c in range(num_comm_q):
             comm_q_id = "{}-C{}".format(i, c)
             comm_qs.append(comm_q_id)
+
         for s in range(num_storage_q):
             storage_q_id = "{}-S{}".format(i, s)
             storage_qs.append(storage_q_id)
+
         demoGcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
         demoG.add_node("{}".format(i), comm_qs=comm_qs, storage_qs=storage_qs)
         if i > 0:
@@ -94,11 +100,11 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
 
             # Connect upward
             if j > 0:
-                gridG.add_edge("{},{}".format(i, j), "{},{}".format(i, j-1), capabilities=link_capability,
+                gridG.add_edge("{},{}".format(i, j), "{},{}".format(i, j - 1), capabilities=link_capability,
                                weight=link_distance)
                 for k in range(num_comm_q):
                     for l in range(num_comm_q):
-                        gridGcq.add_edge("{},{}-C{}".format(i, j-1, k), "{},{}-C{}".format(i, j, l),
+                        gridGcq.add_edge("{},{}-C{}".format(i, j - 1, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
             # Connect left
             if i > 0:
@@ -106,7 +112,7 @@ def gen_topologies(n, num_comm_q=2, num_storage_q=2, link_distance=5):
                                weight=link_distance)
                 for k in range(num_comm_q):
                     for l in range(num_comm_q):
-                        gridGcq.add_edge("{},{}-C{}".format(i-1, j, k), "{},{}-C{}".format(i, j, l),
+                        gridGcq.add_edge("{},{}-C{}".format(i - 1, j, k), "{},{}-C{}".format(i, j, l),
                                          capabilities=link_capability, weight=link_distance)
 
     return [(ringGcq, ringG), (gridGcq, gridG), (demoGcq, demoG)]
@@ -140,7 +146,7 @@ def gen_line_topology(num_nodes=5, num_comm_q=1, num_storage_q=3, link_distance=
             lineG.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability,
                            weight=link_distance)
 
-    return (lineGcq, lineG)
+    return lineGcq, lineG
 
 
 def gen_grid_topology(num_nodes=9, end_node_resources=(1, 3), repeater_resources=(1, 3), link_distance=5):
@@ -151,7 +157,6 @@ def gen_grid_topology(num_nodes=9, end_node_resources=(1, 3), repeater_resources
     gridG = nx.Graph()
 
     end_nodes = ['0', '2', '6', '8']
-    repeater_nodes = ['1', '3', '4', '5', '7']
 
     # Then make the end nodes
     for i in range(num_nodes):
@@ -185,68 +190,3 @@ def gen_grid_topology(num_nodes=9, end_node_resources=(1, 3), repeater_resources
                 gridGcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
 
     return gridGcq, gridG
-
-def load_surfnet():
-    # Load graph data
-    G = nx.read_gml(SURFNET_GML)
-
-    # Compute edge distances
-    for edge in G.edges:
-        node1, node2 = edge
-        lat1 = G.nodes[node1]["Latitude"]
-        lon1 = G.nodes[node1]["Longitude"]
-        lat2 = G.nodes[node2]["Latitude"]
-        lon2 = G.nodes[node2]["Longitude"]
-        d = distance((lat1, lon1), (lat2, lon2))
-        G.edges[edge]["length"] = d
-
-    edges_to_remove = [e for e in G.edges if G.edges[e]["length"] > 50]
-    G.remove_edges_from(edges_to_remove)
-    nodes_to_remove = [n for n in G.nodes if G.degree[n] == 0]
-    G.remove_nodes_from(nodes_to_remove)
-
-    return G
-
-def gen_surfnet_topology(end_node_resources, repeater_node_resources):
-    G = load_surfnet()
-    Gcq = nx.Graph()
-    end_nodes = [n for n in G.nodes if G.degree[n] > 2 or G.degree == 1]
-    repeater_nodes = [n for n in G.nodes if n not in end_nodes]
-
-    end_node_comms, end_node_storage = end_node_resources
-    for node in end_nodes:
-        G.nodes[node]["end_node"] = True
-        comm_qs = []
-        storage_qs = []
-        for c in range(end_node_comms):
-            comm_q_id = "{}-C{}".format(node, c)
-            comm_qs.append(comm_q_id)
-        for s in range(end_node_storage):
-            storage_q_id = "{}-S{}".format(node, s)
-            storage_qs.append(storage_q_id)
-        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
-
-    repeater_node_comms, repeater_node_storage = repeater_node_resources
-    for node in repeater_nodes:
-        G.nodes[node]["end_node"] = False
-        comm_qs = []
-        storage_qs = []
-        for c in range(repeater_node_comms):
-            comm_q_id = "{}-C{}".format(node, c)
-            comm_qs.append(comm_q_id)
-        for s in range(repeater_node_storage):
-            storage_q_id = "{}-S{}".format(node, s)
-            storage_qs.append(storage_q_id)
-        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
-
-    for edge in G.edges:
-        node1, node2 = edge
-        node1_comms = end_node_resources[0] if node1 in end_nodes else repeater_node_resources[0]
-        node2_comms = end_node_resources[0] if node1 in end_nodes else repeater_node_resources[0]
-        for i in range(node1_comms):
-            for j in range(node2_comms):
-                Gcq.add_edge("{}-C{}".format(node1, i), "{}-C{}".format(node2, j))
-
-    return Gcq, G
-
-

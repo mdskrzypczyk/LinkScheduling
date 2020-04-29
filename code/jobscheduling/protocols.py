@@ -2,18 +2,16 @@ import itertools
 from collections import defaultdict
 from math import ceil
 from jobscheduling.log import LSLogger
-#from jobscheduling.protocolgen import LinkProtocol, DistillationProtocol, SwapProtocol
-from jobscheduling.task import DAGResourceSubTask, ResourceDAGTask, PeriodicBudgetResourceDAGTask, get_dag_exec_time
+from jobscheduling.task import DAGResourceSubTask, PeriodicBudgetResourceDAGTask, get_dag_exec_time
 from intervaltree import Interval, IntervalTree
 from random import randint
-from jobscheduling.visualize import draw_DAG
 
 logger = LSLogger()
 
 
 def print_resource_schedules(resource_schedules):
     schedule_length = max([rs[-1][0] + 1 for rs in resource_schedules.values() if rs])
-    timeline_string = " R" + " "*max([len(r) + 1 for r in resource_schedules.keys()])
+    timeline_string = " R" + " " * max([len(r) + 1 for r in resource_schedules.keys()])
     timeline_string += ''.join(["|{:>3} ".format(i) for i in range(schedule_length)])
     print(timeline_string)
     for r in sorted(resource_schedules.keys()):
@@ -21,7 +19,8 @@ def print_resource_schedules(resource_schedules):
         resource_timeline = defaultdict(lambda: None)
         for s, t in resource_schedules[r]:
             resource_timeline[s] = t
-        schedule_string += ''.join(["|{:>3} ".format("V" if resource_timeline[i] is None else resource_timeline[i].name[0]) for i in range(schedule_length)])
+        schedule_string += ''.join(["|{:>3} ".format("V" if resource_timeline[i] is None else
+                                                     resource_timeline[i].name[0]) for i in range(schedule_length)])
         print(schedule_string)
 
 
@@ -46,7 +45,7 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
     protocol_action, child_action = (protocol, None)
     parent_tasks = defaultdict(list)
     last_action = None
-    while stack or protocol_action != None:
+    while stack or protocol_action is not None:
         if protocol_action is not None:
             stack.append((protocol_action, child_action))
 
@@ -75,8 +74,8 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
                 resources = peek_protocol_action.nodes
 
                 dagtask = DAGResourceSubTask(name=name, c=ceil(peek_protocol_action.duration / slot_size),
-                                             parents=parent_tasks[peek_protocol_action.name], dist=peek_protocol_action.dist,
-                                             resources=resources)
+                                             parents=parent_tasks[peek_protocol_action.name],
+                                             dist=peek_protocol_action.dist, resources=resources)
 
                 F = round(peek_protocol_action.F, 2)
                 R = round(peek_protocol_action.R, 2)
@@ -94,8 +93,8 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
 
     source, dest, fidelity, rate = request
     task_id = randint(0, 100)
-    main_dag_task = PeriodicBudgetResourceDAGTask(name="S={}, D={}, F={}, R={}, ID={}".format(source, dest, fidelity, rate, task_id), tasks=tasks,
-                                                  p=ceil(1 / rate / slot_size), k=100)
+    task_name = "S={}, D={}, F={}, R={}, ID={}".format(source, dest, fidelity, rate, task_id)
+    main_dag_task = PeriodicBudgetResourceDAGTask(name=task_name, tasks=tasks, p=ceil(1 / rate / slot_size), k=100)
     return main_dag_task
 
 
@@ -152,8 +151,7 @@ def schedule_dag_asap(dagtask, topology):
             else:
                 possible_task_resources = get_possible_resources_for_task(peek_task, node_comm_resources,
                                                                           all_node_resources)
-                used_resources = schedule_task_asap(peek_task, possible_task_resources, resource_schedules,
-                                                    comm_to_storage_resources)
+                schedule_task_asap(peek_task, possible_task_resources, resource_schedules, comm_to_storage_resources)
 
                 last_task = stack.pop()
 
@@ -182,7 +180,8 @@ def get_possible_resources_for_task(task, node_comm_resources, all_node_resource
 
     else:
         possible_task_resources = get_resources_from_parents(task, all_node_resources)
-        if task.name[0] == "D" and len(possible_task_resources) != 4 or task.name[0] == "S" and len(possible_task_resources) != 2:
+        if task.name[0] == "D" and len(possible_task_resources) != 4 or task.name[0] == "S" and \
+                len(possible_task_resources) != 2:
             import pdb
             pdb.set_trace()
 
@@ -227,8 +226,10 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     for resource_set in list(itertools.product(*task_resources)):
         earliest_start = max([0] + [p.a + ceil(p.c) for p in task.parents if set(resource_set) & set(p.resources)])
 
-        possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set, resource_schedules, storage_resources)
-        if earliest_start <= possible_start < earliest_possible_start and (earliest_mapping is None or len(earliest_mapping.keys()) >= len(locked_storage_mapping.keys())):
+        possible_start, locked_storage_mapping = get_earliest_start_for_resources(earliest_start, task, resource_set,
+                                                                                  resource_schedules, storage_resources)
+        if earliest_start <= possible_start < earliest_possible_start and \
+                (earliest_mapping is None or len(earliest_mapping.keys()) >= len(locked_storage_mapping.keys())):
             earliest_possible_start = possible_start
             earliest_resources = resource_set
             earliest_mapping = locked_storage_mapping
@@ -285,14 +286,14 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
     if task.name[0] == "L" and earliest_mapping == {}:
         task.locked_resources = list(task.resources)
         for lr in sr_mapping.keys():
-            t = max([s[0] for s in sr_mapping.values()])
-            if sr_mapping[lr][1] != lr and sr_mapping[lr][1] in earliest_resources:#t + 1 <= earliest_possible_start:
+            if sr_mapping[lr][1] != lr and sr_mapping[lr][1] in earliest_resources:
                 task.locked_resources.remove(lr)
 
     elif task.name[0] == "D":
         task.locked_resources = task.resources[1:4:2]
 
-    logger.debug("Scheduled {} with resources {} and locked resources {} at t={}".format(task.name, task.resources, task.locked_resources, task.a))
+    logger.debug("Scheduled {} with resources {} and locked resources {} at t={}".format(task.name, task.resources,
+                                                                                         task.locked_resources, task.a))
     return list(set(earliest_resources))
 
 
@@ -412,7 +413,8 @@ def schedule_task_alap(task, resource_schedules):
         possible += [min(child_starts)]
     latest = max(possible)
 
-    latest = min([latest] + [resource_schedules[r][0][0] - ceil(task.c) for r in task.resources if resource_schedules[r]])
+    latest = min([latest] + [resource_schedules[r][0][0] - ceil(task.c) for r in task.resources
+                             if resource_schedules[r]])
 
     slots = [(s, task) for s in range(latest, latest + ceil(task.c))]
     for r in list(set(task.resources)):
@@ -492,7 +494,8 @@ def verify_dag(dagtask, node_resources=None):
             if child.a < subtask.a + ceil(subtask.c) and set(child.resources) & set(subtask.resources):
                 valid = False
 
-        if subtask.name[0] == "L" and (len(set(subtask.locked_resources)) != 2 or len(set(subtask.resources)) not in [2, 3, 4]):
+        if subtask.name[0] == "L" and \
+                (len(set(subtask.locked_resources)) != 2 or len(set(subtask.resources)) not in [2, 3, 4]):
             logger.error("Link generation subtask has incorrect set of resources")
             valid = False
 
@@ -516,7 +519,9 @@ def verify_dag(dagtask, node_resources=None):
 
                 if resource_intervals[resource].overlap(subtask_interval.begin, subtask_interval.end):
                     overlapping = sorted(resource_intervals[resource][subtask_interval.begin:subtask_interval.end])[0]
-                    logger.error("Subtask {} overlaps at resource {} during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin, overlapping.end, overlapping.data.name))
+                    logger.error("Subtask {} overlaps at resource {}"
+                                 " during interval {},{} with task {}".format(subtask.name, resource, overlapping.begin,
+                                                                              overlapping.end, overlapping.data.name))
                     valid = False
                 resource_intervals[resource].add(subtask_interval)
 
