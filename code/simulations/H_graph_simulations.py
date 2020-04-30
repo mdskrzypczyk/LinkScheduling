@@ -1,4 +1,3 @@
-import networkx as nx
 import time
 from jobscheduling.task import get_lcm_for
 from jobscheduling.topology import gen_H_topology

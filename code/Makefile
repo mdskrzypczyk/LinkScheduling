@@ -1,5 +1,6 @@
 PYTHON        = python3
 PIP           = pip3
+PYTEST        = pytest
 SOURCEDIR     = jobscheduling
 SIMULATIONDIR = simulations
 TESTS         = tests
@@ -25,7 +26,7 @@ python-deps:
 	@$(PIP) install -r requirements.txt
 
 tests:
-	@$(PYTHON) -m unittest discover -s $(SOURCEDIR) $(TESTS)
+	@$(PYTEST)
 
 verify: clean python-deps lint tests
 

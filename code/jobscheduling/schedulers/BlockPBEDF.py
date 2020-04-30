@@ -197,31 +197,6 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
         taskset = original_taskset
         return [(taskset, self.schedule, valid)]
 
-    def check_feasible(self, schedule, taskset):
-        # Check validity
-        valid = True
-        task_starts = {}
-        task_ends = {}
-        for s, e, task in schedule:
-            if task.name not in task_starts.keys():
-                task_starts[task.name] = s
-            task_ends[task.name] = e
-
-        for task in taskset:
-            if task.d < task_ends[task.name]:
-                print("Task {} with deadline {} starts at {} and ends at {}".format(task.name, task.d,
-                                                                                    task_starts[task.name],
-                                                                                    task_ends[task.name]))
-                valid = False
-
-            if task_ends[task.name] - task_starts[task.name] > task.c + task.k:
-                print("Task {} with budget {} and comp time {}"
-                      " starts at {} and ends at {}".format(task.name, task.k, task.c, task_starts[task.name],
-                                                            task_ends[task.name]))
-                valid = False
-
-        return valid
-
     def merge_adjacent_entries(self):
         for i in range(len(self.schedule)):
             if i >= len(self.schedule):

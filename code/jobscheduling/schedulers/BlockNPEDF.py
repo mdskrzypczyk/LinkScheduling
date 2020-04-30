@@ -5,7 +5,7 @@ from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, generate_non_periodic_task_set, ResourceTask, PeriodicResourceDAGTask
+from jobscheduling.task import get_lcm_for, ResourceTask, PeriodicResourceDAGTask
 
 
 logger = LSLogger()
@@ -75,14 +75,6 @@ class UniResourceBlockNPEDFScheduler(Scheduler):
         taskset = original_taskset
 
         return [(taskset, schedule, valid)]
-
-    def check_feasibility(self, taskset):
-        pass
-
-
-class PeriodicUniResourceBlockNPEDFScheduler(UniResourceBlockNPEDFScheduler):
-    def preprocess_taskset(self, taskset):
-        return generate_non_periodic_task_set(taskset)
 
 
 class MultiResourceBlockNPEDFScheduler(Scheduler):
@@ -217,50 +209,6 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
             start += distance_to_free
 
         return start
-
-    def map_task_resources(self, task, resource_occupations, node_resources, offset):
-        resource_relations = {}
-        for resource in list(sorted(set(task.resources))):
-            resource_node, resource_id = resource.split('-')
-            resource_type = resource_id[0]
-            resource_string = self.get_resource_string(resource)
-            if not resource_relations.get(resource_string):
-                related_resources = node_resources[resource_node]['comm_qs' if resource_type == "C" else "storage_qs"]
-                resource_relations[resource_string] = list(sorted(related_resources))
-
-        virtual_to_map = {}
-        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: (ri[1].begin(), ri[0])))
-        for resource, itree in resource_intervals:
-            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
-            available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
-                                                                offset_itree)
-            dist, mapped = available_resources[0]
-            virtual_to_map[resource] = mapped
-            resource_string = self.get_resource_string(resource)
-            resource_relations[resource_string].remove(mapped)
-
-        return virtual_to_map
-
-    def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
-        resource_string = self.get_resource_string(resource)
-        possible_resources = sorted(resource_relations[resource_string])
-        available_resources = []
-        for pr in possible_resources:
-            dist = 0
-            for interval in itree:
-                intervals = sorted(resource_occupations[pr][interval.begin:interval.end])
-                if intervals:
-                    overlapping_interval = intervals[0]
-                    dist = max(dist, overlapping_interval.end - interval.begin)
-            available_resources.append((dist, pr))
-
-        return list(sorted(available_resources))
-
-    def get_resource_string(self, resource):
-        resource_node, resource_id = resource.split('-')
-        resource_type = resource_id[0]
-        return resource_node + resource_type
 
 
 class MultipleResourceBlockNPEDFScheduler(Scheduler):

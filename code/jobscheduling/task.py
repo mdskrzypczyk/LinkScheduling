@@ -45,55 +45,11 @@ def to_ranges(iterable):
         yield group[0][1], group[-1][1]
 
 
-def generate_non_periodic_task_set(periodic_task_set):
-    periods = [task.p for task in periodic_task_set]
-    schedule_length = get_lcm_for(periods)
-    logger.debug("Computed hyperperiod {}".format(schedule_length))
-    taskset = []
-    for task in periodic_task_set:
-        # Generate a task for each period the task executes
-        num_tasks = schedule_length // task.p
-        for i in range(num_tasks):
-            taskset.append(Task(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p * i,
-                                d=task.a + task.p * (i + 1)))
-
-    return taskset
-
-
-def generate_non_periodic_dagtask_set(periodic_task_set):
-    periods = [task.p for task in periodic_task_set]
-    schedule_length = get_lcm_for(periods)
-    logger.debug("Computed hyperperiod {}".format(schedule_length))
-    taskset = []
-    for task in periodic_task_set:
-        # Generate a task for each period the task executes
-        num_tasks = schedule_length // task.p
-        for i in range(num_tasks):
-            dag_copy = copy(task)
-            release_offset = dag_copy.a + dag_copy.p * i
-            for subtask in dag_copy.subtasks:
-                subtask.a += release_offset
-            new_task = ResourceDAGTask(name="{}|{}".format(dag_copy.name, i), a=release_offset,
-                                       d=dag_copy.a + dag_copy.p * (i + 1), tasks=dag_copy.subtasks)
-            taskset.append(new_task)
-
-    return taskset
-
-
-def generate_non_periodic_budget_task_set(periodic_task_set):
-    periods = [task.p for task in periodic_task_set]
-    schedule_length = get_lcm_for(periods)
-    logger.debug("Computed hyperperiod {}".format(schedule_length))
-    taskset = []
-    for task in periodic_task_set:
-        # Generate a task for each period the task executes
-        num_tasks = schedule_length // task.p
-        for i in range(num_tasks):
-            taskset.append(
-                BudgetTask(name="{}|{}".format(task.name, i), c=task.c, a=task.a + task.p * i,
-                           d=task.a + task.p * (i + 1), k=task.k))
-
-    return taskset
+def get_dag_exec_time(dag):
+    if not dag.subtasks:
+        import pdb
+        pdb.set_trace()
+    return max([subtask.a + subtask.c for subtask in dag.subtasks]) - min([source.a for source in dag.sources])
 
 
 def find_dag_task_preemption_points(budget_dag_task, resources=None):
@@ -144,6 +100,21 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
 
 class Task:
     def __init__(self, name, c, a=0, d=None, description=None, **kwargs):
+        """
+        Basic task class, has a name, execution time (c), absolute release time (a), and absolute deadline (d). The
+        description can be used to encode other information
+        :param name: type str
+            The name of the task
+        :param c: type int
+            The number of time units needed to execute the task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param description: type obj
+            Any information to attach to the task
+        :param kwargs:
+        """
         self.name = name
         self.a = a
         self.c = c
@@ -151,9 +122,21 @@ class Task:
         self.description = description
 
     def __lt__(self, other):
+        """
+        Comparison of tasks, just by name
+        :param other: type Task
+            The task to compare to
+        :return: type bool
+            Whether this task is less than the other task
+        """
         return self.name < other.name
 
     def __copy__(self):
+        """
+        Used to create a copy of the task
+        :return: type Task
+            A instance of a Task object with the same name, release, computation time, and deadline
+        """
         return Task(name=self.name, a=self.a, c=self.c, d=self.d)
 
 
@@ -197,18 +180,6 @@ class ResourceTask(Task):
                 resource_intervals[resource].add(interval)
         return resource_intervals
 
-    def remap_resources(self, resource_relations):
-        new_resources = []
-        for resource in self.resources:
-            new_resources.append(resource_relations[resource])
-
-        new_locked_resources = []
-        for resource in self.locked_resources:
-            new_locked_resources.append(resource_relations[resource])
-
-        self.resources = new_resources
-        self.locked_resources = new_locked_resources
-
 
 class BudgetResourceTask(ResourceTask):
     def __init__(self, name, c, a=0, d=None, k=0, preemption_points=None, resources=None, locked_resources=None):
@@ -243,8 +214,8 @@ class PeriodicBudgetTask(BudgetTask):
 
 
 class PeriodicResourceTask(ResourceTask):
-    def __init__(self, name, c, p=None, resources=None, locked_resources=None):
-        super(PeriodicResourceTask, self).__init__(name=name, c=c, resources=resources,
+    def __init__(self, name, c, a=0, p=None, resources=None, locked_resources=None):
+        super(PeriodicResourceTask, self).__init__(name=name, a=a, c=c, resources=resources,
                                                    locked_resources=locked_resources)
         self.p = p
 
@@ -254,8 +225,8 @@ class PeriodicResourceTask(ResourceTask):
 
 
 class PeriodicBudgetResourceTask(PeriodicResourceTask):
-    def __init__(self, name, c, p=None, k=0, preemption_points=None, resources=None, locked_resources=None):
-        super(PeriodicBudgetResourceTask, self).__init__(name=name, c=c, p=p, resources=resources,
+    def __init__(self, name, c, a=0, p=None, k=0, preemption_points=None, resources=None, locked_resources=None):
+        super(PeriodicBudgetResourceTask, self).__init__(name=name, c=c, a=a, p=p, resources=resources,
                                                          locked_resources=locked_resources)
         self.k = k
         self.preemption_points = preemption_points
@@ -315,13 +286,6 @@ class DAGBudgetResourceSubTask(DAGResourceSubTask):
         return DAGBudgetResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k, parents=self.parents,
                                         children=self.children, resources=self.resources,
                                         locked_resources=self.locked_resources, dist=self.dist)
-
-
-def get_dag_exec_time(dag):
-    if not dag.subtasks:
-        import pdb
-        pdb.set_trace()
-    return max([subtask.a + subtask.c for subtask in dag.subtasks]) - min([source.a for source in dag.sources])
 
 
 class DAGTask(Task):

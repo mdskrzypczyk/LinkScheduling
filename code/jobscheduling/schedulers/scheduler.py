@@ -230,60 +230,6 @@ class CommonScheduler:
 
         return dag_instance
 
-    def map_task_resources(self, task, resource_occupations, node_resources, offset):
-        resource_relations = {}
-        for resource in list(sorted(set(task.resources))):
-            resource_node, resource_id = resource.split('-')
-            resource_type = resource_id[0]
-            resource_string = self.get_resource_string(resource)
-            if not resource_relations.get(resource_string):
-                related_resources = node_resources[resource_node]['comm_qs' if resource_type == "C" else "storage_qs"]
-                resource_relations[resource_string] = list(sorted(related_resources))
-
-        virtual_to_map = {}
-        resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
-        resource_intervals = list(sorted(resource_interval_list, key=lambda ri: (ri[1].begin(), ri[0])))
-        for resource, itree in resource_intervals:
-            offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset) for i in itree])
-            available_resources = self.sort_map_by_availability(resource, resource_relations, resource_occupations,
-                                                                offset_itree)
-            dist, mapped = available_resources[0]
-            virtual_to_map[resource] = mapped
-            resource_string = self.get_resource_string(resource)
-            resource_relations[resource_string].remove(mapped)
-
-        return virtual_to_map
-
-    def remap_task_resources(self, task, offset, resource_occupations, node_resources):
-        resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-        task.resources = list(sorted(set(resource_relations.values())))
-        for subtask in task.subtasks:
-            new_resources = []
-            new_locked_resources = []
-            for resource in subtask.resources:
-                new_resources.append(resource_relations[resource])
-            for resource in subtask.locked_resources:
-                new_locked_resources.append(resource_relations[resource])
-            subtask.resources = new_resources
-            subtask.locked_resources = new_locked_resources
-
-        return task
-
-    def sort_map_by_availability(self, resource, resource_relations, resource_occupations, itree):
-        resource_string = self.get_resource_string(resource)
-        possible_resources = sorted(resource_relations[resource_string])
-        available_resources = []
-        for pr in possible_resources:
-            dist = 0
-            for interval in itree:
-                intervals = sorted(resource_occupations[pr][interval.begin:interval.end])
-                if intervals:
-                    overlapping_interval = intervals[0]
-                    dist = max(dist, overlapping_interval.end - interval.begin)
-            available_resources.append((dist, pr))
-
-        return list(sorted(available_resources))
-
     def get_resource_string(self, resource):
         resource_node, resource_id = resource.split('-')
         resource_type = resource_id[0]
@@ -309,7 +255,6 @@ class CommonScheduler:
         # Find the earliest start
 
         while True:
-            # task = self.remap_task_resources(task, offset, resource_occupations, node_resources)
             segment_tasks = self.get_segment_tasks(task)
 
             segment_intervals = []

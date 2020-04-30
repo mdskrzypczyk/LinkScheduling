@@ -154,19 +154,6 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         else:
             return False, min(distances_to_free)
 
-    def subtask_constrained(self, subtask, resource_occupations, offset):
-        # Check if the start time of this resource is affected by the available intervals
-        for resource in subtask.resources:
-            rightmost_interval = resource_occupations[resource].end()
-            if subtask.a + offset < rightmost_interval:
-                return True
-
-        return False
-
-
-class PeriodicMultipleResourceNPEDFScheduler(MultiResourceNPEDFScheduler):
-    pass
-
 
 class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
     def schedule_tasks(self, dagset, topology):
@@ -196,7 +183,7 @@ class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
             tasksets.append(taskset)
 
         # For each set of tasks use NPEDFScheduler
-        scheduler = PeriodicMultipleResourceNPEDFScheduler()
+        scheduler = MultiResourceNPEDFScheduler()
         schedules = []
         for taskset in tasksets:
             schedule, valid = scheduler.schedule_tasks(taskset, topology)
