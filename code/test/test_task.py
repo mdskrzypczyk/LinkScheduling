@@ -222,10 +222,271 @@ class TestPeriodicTasks(unittest.TestCase):
 
 
 class TestDagSubTasks(unittest.TestCase):
-    def test_init(self):
-        pass
+    def test_init_dag_subtask(self):
+        test_name = "ABC"
+        test_proc_time = 10
+        test_deadline = 100
+        test_dist = 2
+
+        task = DAGSubTask(name=test_name, c=test_proc_time)
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertIsNone(task.d)
+        self.assertEqual(task.children, [])
+        self.assertEqual(task.parents, [])
+
+        test_parents = [DAGSubTask(name="Parent", c=2)]
+        test_children = [DAGSubTask(name="Child", c=3)]
+        task = DAGSubTask(name=test_name, c=test_proc_time, d=test_deadline, parents=test_parents,
+                          children=test_children, dist=test_dist)
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.children, test_children)
+        self.assertEqual(task.parents, test_parents)
+
+    def test_init_dag_resource_subtask(self):
+        test_name = "ABC"
+        test_proc_time = 10
+        test_deadline = 100
+        test_dist = 2
+
+        task = DAGResourceSubTask(name=test_name, c=test_proc_time)
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertIsNone(task.d)
+        self.assertEqual(task.children, [])
+        self.assertEqual(task.parents, [])
+        self.assertEqual(task.resources, [])
+        self.assertEqual(task.locked_resources, [])
+
+        test_parents = [DAGSubTask(name="Parent", c=2)]
+        test_children = [DAGSubTask(name="Child", c=3)]
+        test_resources = ['2']
+        test_locked_resources = ['5']
+        task = DAGResourceSubTask(name=test_name, c=test_proc_time, d=test_deadline, parents=test_parents,
+                          children=test_children, dist=test_dist, resources=test_resources,
+                          locked_resources=test_locked_resources)
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.children, test_children)
+        self.assertEqual(task.parents, test_parents)
+        self.assertEqual(task.resources, test_resources)
+        self.assertEqual(task.locked_resources, test_locked_resources)
+
+    def test_init_dag_budget_resource_subtask(self):
+        test_name = "ABC"
+        test_proc_time = 10
+        test_deadline = 100
+        test_dist = 2
+
+        task = DAGBudgetResourceSubTask(name=test_name, c=test_proc_time)
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertIsNone(task.d)
+        self.assertEqual(task.k, 0)
+        self.assertEqual(task.children, [])
+        self.assertEqual(task.parents, [])
+        self.assertEqual(task.resources, [])
+        self.assertEqual(task.locked_resources, [])
+
+        test_parents = [DAGSubTask(name="Parent", c=2)]
+        test_children = [DAGSubTask(name="Child", c=3)]
+        test_resources = ['2']
+        test_locked_resources = ['5']
+        test_budget = 10
+        task = DAGBudgetResourceSubTask(name=test_name, c=test_proc_time, d=test_deadline, k=test_budget,
+                                        parents=test_parents, children=test_children, dist=test_dist,
+                                        resources=test_resources, locked_resources=test_locked_resources)
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.c, test_proc_time)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.k, test_budget)
+        self.assertEqual(task.children, test_children)
+        self.assertEqual(task.parents, test_parents)
+        self.assertEqual(task.resources, test_resources)
+        self.assertEqual(task.locked_resources, test_locked_resources)
 
 
 class TestDagTasks(unittest.TestCase):
-    def test_init_task(self):
+    def test_init_dagtask(self):
+        test_name = "ABC"
+        test_subtask_proc = 3
+        test_task = DAGSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = DAGTask(name=test_name, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertIsNone(task.d)
+
+        test_task2 = DAGSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task])
+        test_task.add_child(test_task2)
+        task = DAGTask(name=test_name, tasks=[test_task, test_task2])
+
+        test_deadline = 100
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertIsNone(task.d, test_deadline)
+
+    def test_init_resource_dagtask(self):
+        test_name = "ABC"
+        test_subtask_proc = 3
+        test_deadline = 100
+
+        test_task = DAGResourceSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = ResourceDAGTask(name=test_name, d=test_deadline, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.resources, set())
+
+        test_resources1 = ['1', '2']
+        test_task = DAGResourceSubTask(name="Subtask1", c=4, a=0, resources=test_resources1)
+        test_resources2 = ['3']
+        test_task2 = DAGResourceSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task],
+                                        resources=test_resources2)
+        test_task.add_child(test_task2)
+        task = ResourceDAGTask(name=test_name, d=test_deadline, tasks=[test_task, test_task2])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.resources, set(test_task.resources + test_task2.resources))
+
+    def test_init_budget_resource_dagtask(self):
+        test_name = "ABC"
+        test_subtask_proc = 3
+        test_deadline = 100
+
+        test_task = DAGResourceSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = BudgetResourceDAGTask(name=test_name, d=test_deadline, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.k, 0)
+        self.assertEqual(task.resources, set())
+
+        test_resources1 = ['1', '2']
+        test_task = DAGResourceSubTask(name="Subtask1", c=4, a=0, resources=test_resources1)
+        test_resources2 = ['3']
+        test_task2 = DAGResourceSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task],
+                                        resources=test_resources2)
+        test_task.add_child(test_task2)
+        test_budget = 20
+        task = BudgetResourceDAGTask(name=test_name, d=test_deadline, k=test_budget, tasks=[test_task, test_task2])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertEqual(task.d, test_deadline)
+        self.assertEqual(task.k, test_budget)
+        self.assertEqual(task.resources, set(test_task.resources + test_task2.resources))
+
+    def test_init_periodic_dagtask(self):
+        test_name = "ABC"
+        test_period = 100
+        test_subtask_proc = 3
+        test_task = DAGSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = PeriodicDAGTask(name=test_name, p=test_period, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertEqual(task.p, test_period)
+
+        test_task2 = DAGSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task])
+        test_task.add_child(test_task2)
+        task = PeriodicDAGTask(name=test_name, p=test_period, tasks=[test_task, test_task2])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertEqual(task.p, test_period)
+
+    def test_init_periodic_resource_dagtask(self):
+        test_name = "ABC"
+        test_period = 100
+        test_subtask_proc = 3
+        test_task = DAGResourceSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = PeriodicResourceDAGTask(name=test_name, p=test_period, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertEqual(task.p, test_period)
+        self.assertEqual(task.resources, set())
+
+        test_resources1 = ['1', '2']
+        test_task = DAGResourceSubTask(name="Subtask1", c=4, a=0, resources=test_resources1)
+        test_resources2 = ['3']
+        test_task2 = DAGResourceSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task],
+                                        resources=test_resources2)
+        test_task.add_child(test_task2)
+
+        task = PeriodicResourceDAGTask(name=test_name, p=test_period, tasks=[test_task, test_task2])
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertEqual(task.p, test_period)
+        self.assertEqual(task.resources, set(test_task.resources + test_task2.resources))
+
+    def test_init_periodic_budget_resource_dagtask(self):
         pass
+
+

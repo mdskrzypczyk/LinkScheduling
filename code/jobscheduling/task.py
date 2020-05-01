@@ -142,6 +142,22 @@ class Task:
 
 class BudgetTask(Task):
     def __init__(self, name, c, a=0, d=None, k=0, preemption_points=None):
+        """
+        Budget task class, has a name, execution time (c), release time (a), deadline (d), and preemption budget(k).
+        Additionally specifies a set of preemption points where preemption is allowed.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param k: type int
+            The number of time units the task may spend preempted
+        :param preemption_points: type list
+            List of preemption points
+        """
         super(BudgetTask, self).__init__(name=name, c=c, a=a, d=d)
         self.k = k
         self.preemption_points = preemption_points
@@ -153,6 +169,22 @@ class BudgetTask(Task):
 
 class ResourceTask(Task):
     def __init__(self, name, c, a=0, d=None, resources=None, locked_resources=None):
+        """
+        Resource task class, similar to a Task but additionally specifies a set of resources needed to execute as
+        well as a set of resources that are locked after execution.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        """
         super(ResourceTask, self).__init__(name=name, c=c, a=a, d=d)
         if resources is None:
             resources = []
@@ -166,6 +198,10 @@ class ResourceTask(Task):
                             locked_resources=self.locked_resources)
 
     def get_resource_schedules(self):
+        """
+        :return: type dict
+            A dictionary of resource identifier to set of slots where the resource is in use.
+        """
         resource_schedules = defaultdict(list)
         slots = [(self.a + i, self) for i in range(ceil(self.c))]
         for resource in self.resources:
@@ -173,6 +209,10 @@ class ResourceTask(Task):
         return dict(resource_schedules)
 
     def get_resource_intervals(self):
+        """
+        :return: type dict
+            A dictionary of resource identifier to an interval tree containing intervals where the resource is in use.
+        """
         resource_intervals = defaultdict(IntervalTree)
         if self.c > 0:
             interval = Interval(self.a, self.a + self.c)
@@ -183,6 +223,25 @@ class ResourceTask(Task):
 
 class BudgetResourceTask(ResourceTask):
     def __init__(self, name, c, a=0, d=None, k=0, preemption_points=None, resources=None, locked_resources=None):
+        """
+        Combination of a BudgetTask and a ResourceTask. Can specify all the parameters available to these objects.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param k: type int
+            The number of time units the task may spend preempted
+        :param preemption_points: type list
+            A list of preemption point information
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        """
         super(BudgetResourceTask, self).__init__(name=name, c=c, a=a, d=d, resources=resources,
                                                  locked_resources=locked_resources)
         self.k = k
@@ -196,6 +255,18 @@ class BudgetResourceTask(ResourceTask):
 
 class PeriodicTask(Task):
     def __init__(self, name, c, a=0, p=None):
+        """
+        Basic Periodic Task class. Specifies a name, execution time, release offset, and a period at which it is
+        released into the system.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete an instance of the task
+        :param a: type int
+            The time unit at which the first task instance becomes available
+        :param p: type int
+            The number of time units between periodic releases of the task
+        """
         super(PeriodicTask, self).__init__(name=name, a=a, c=c)
         self.p = p
 
@@ -205,6 +276,21 @@ class PeriodicTask(Task):
 
 class PeriodicBudgetTask(BudgetTask):
     def __init__(self, name, c, a=0, p=None, k=0, preemption_points=None):
+        """
+        Combination of a PeriodicTask and a BudgetTask.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete an instance of the task
+        :param a: type int
+            The time unit at which the first task instance becomes available
+        :param p: type int
+            The number of time units between periodic releases of the task
+        :param k: type int
+            The number of time units an instance of the periodic task may spend preempted
+        :param preemption_points: type list
+            List of preemption points
+        """
         super(PeriodicBudgetTask, self).__init__(name=name, a=a, c=c, k=k, preemption_points=preemption_points)
         self.p = p
 
@@ -215,6 +301,21 @@ class PeriodicBudgetTask(BudgetTask):
 
 class PeriodicResourceTask(ResourceTask):
     def __init__(self, name, c, a=0, p=None, resources=None, locked_resources=None):
+        """
+        Combination of a PeriodicTask and a ResourceTask.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete an instance of the task
+        :param a: type int
+            The time unit at which the first task instance becomes available
+        :param p: type int
+            The number of time units between periodic releases of the task
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        """
         super(PeriodicResourceTask, self).__init__(name=name, a=a, c=c, resources=resources,
                                                    locked_resources=locked_resources)
         self.p = p
@@ -226,6 +327,25 @@ class PeriodicResourceTask(ResourceTask):
 
 class PeriodicBudgetResourceTask(PeriodicResourceTask):
     def __init__(self, name, c, a=0, p=None, k=0, preemption_points=None, resources=None, locked_resources=None):
+        """
+        Combination of a PeriodicTask, BudgetTask, and ResourceTask.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete an instance of the task
+        :param a: type int
+            The time unit at which the first task instance becomes available
+        :param p: type int
+            The number of time units between periodic releases of the task
+        :param k: type int
+            The number of time units an instance of the periodic task may spend preempted
+        :param preemption_points: type list
+            List of preemption points
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        """
         super(PeriodicBudgetResourceTask, self).__init__(name=name, c=c, a=a, p=p, resources=resources,
                                                          locked_resources=locked_resources)
         self.k = k
@@ -238,12 +358,51 @@ class PeriodicBudgetResourceTask(PeriodicResourceTask):
 
 
 class DAGSubTask(Task):
-    def __init__(self, name, c, d=None, parents=None, children=None, dist=0):
-        super(DAGSubTask, self).__init__(name, c=c, d=None)
-        self.d = d
+    def __init__(self, name, c, a=0, d=None, parents=None, children=None, dist=0):
+        """
+        A Task class that represents a sub-task of a DAGTask. Specifies precedence relations with parents and children
+        arguments. dist can be used to specify a distance from the sink node in the DAG.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param parents: type list
+            A list of DAGSubTask objects that this DAGSubTask depends on
+        :param children: type list
+            A list of DAGSubTask objects that depend on this DAGSubTask
+        :param dist: type int
+            Amount of distance from the sink node of the DAG
+        """
+        super(DAGSubTask, self).__init__(name=name, c=c, a=a, d=d)
+        if parents is None:
+            parents = []
         self.parents = parents
+        if children is None:
+            children = []
         self.children = children
         self.dist = dist
+
+    def add_parent(self, task):
+        """
+        Adds a parent to the internal set of parents
+        :param task: type DAGSubTask
+            A DAGSubTask that this DAGSubTask depends on
+        :return: None
+        """
+        self.parents = list(set(self.parents + [task]))
+
+    def add_child(self, task):
+        """
+        Adds a child to the internal set of children
+        :param task: type DAGSubTask
+            A DAGSubTask that depends on this DAGSubTask
+        :return: None
+        """
+        self.children = list(set(self.children + [task]))
 
     def __copy__(self):
         return DAGSubTask(name=self.name, c=self.c, d=self.d, dist=self.dist)
@@ -252,6 +411,27 @@ class DAGSubTask(Task):
 class DAGResourceSubTask(ResourceTask):
     def __init__(self, name, c=1, a=0, d=None, parents=None, children=None, resources=None, locked_resources=None,
                  dist=0):
+        """
+        A combination of a DAGSubTask and a ResourceTask.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param parents: type list
+            A list of DAGSubTask objects that this DAGSubTask depends on
+        :param children: type list
+            A list of DAGSubTask objects that depend on this DAGSubTask
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        :param dist: type int
+            Amount of distance from the sink node of the DAG
+        """
         super(DAGResourceSubTask, self).__init__(name, a=a, c=c, d=d, resources=resources,
                                                  locked_resources=locked_resources)
         self.d = d
@@ -264,9 +444,21 @@ class DAGResourceSubTask(ResourceTask):
         self.dist = dist
 
     def add_parent(self, task):
+        """
+        Adds a parent to the internal set of parents
+        :param task: type DAGSubTask
+            A DAGSubTask that this DAGSubTask depends on
+        :return: None
+        """
         self.parents = list(set(self.parents + [task]))
 
     def add_child(self, task):
+        """
+        Adds a child to the internal set of children
+        :param task: type DAGSubTask
+            A DAGSubTask that depends on this DAGSubTask
+        :return: None
+        """
         self.children = list(set(self.children + [task]))
 
     def __copy__(self):
@@ -277,6 +469,29 @@ class DAGResourceSubTask(ResourceTask):
 class DAGBudgetResourceSubTask(DAGResourceSubTask):
     def __init__(self, name, c=1, a=0, d=None, k=0, parents=None, children=None, resources=None, locked_resources=None,
                  dist=0):
+        """
+        A combination of a DAGSubTask, ResourceTask, and BudgetTask.
+        :param name: type str
+            Name of the task
+        :param c: type int
+            Number of time units needed to complete task
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The time unit at which the task is due
+        :param k: type int
+            The number of time units the task may spend preempted
+        :param parents: type list
+            A list of DAGSubTask objects that this DAGSubTask depends on
+        :param children: type list
+            A list of DAGSubTask objects that depend on this DAGSubTask
+        :param resources: type list
+            List of resource identifiers (any object)
+        :param locked_resources: type list
+            List of resource identifiers (any object)
+        :param dist: type int
+            Amount of distance from the sink node of the DAG
+        """
         super(DAGBudgetResourceSubTask, self).__init__(name=name, c=c, a=a, d=d, parents=parents, children=children,
                                                        resources=resources, locked_resources=locked_resources,
                                                        dist=dist)
@@ -290,13 +505,23 @@ class DAGBudgetResourceSubTask(DAGResourceSubTask):
 
 class DAGTask(Task):
     def __init__(self, name, tasks, d=None):
+        """
+        A DAGTask that encodes a set of subtasks with precedence relations.
+        :param name: type str
+            The name of the DAGTask
+        :param tasks: type list
+            List of DAGSubTasks that make up the precedence relation DAG
+        :param d: type int
+            The deadline that the set of sinks must complete before.
+        """
         self.sources = []
         self.sinks = []
         self.tasks = {}
+        self.subtasks = tasks
         for task in tasks:
-            if task.parents is None:
+            if not task.parents:
                 self.sources.append(task)
-            if task.children is None:
+            if not task.children:
                 self.sinks.append(task)
             self.tasks[task.name] = task
 
@@ -329,6 +554,15 @@ class DAGTask(Task):
 
 class PeriodicDAGTask(PeriodicTask):
     def __init__(self, name, tasks, p):
+        """
+        A combination of the PeriodicTask and DAGTask.
+        :param name: type str
+            The name of the PeriodicDAGTask
+        :param tasks: type list
+            List of DAGSubTasks used to initialize DAGTask instances
+        :param p: type int
+            The number of time units between periodic releases of the task
+        """
         self.sources = []
         self.sinks = []
         self.tasks = {}
@@ -365,6 +599,17 @@ class PeriodicDAGTask(PeriodicTask):
 
 class ResourceDAGTask(ResourceTask):
     def __init__(self, name, tasks, a=0, d=None):
+        """
+        Combination of a DAGTask and a ResourceTask that tracks the resources needed for the entire DAG
+        :param name: type str
+            The name of the DAGTask
+        :param tasks: type list
+            List of DAGSubTasks that make up the precedence relation DAG
+        :param a: type int
+            The time unit at which the task becomes available
+        :param d: type int
+            The deadline that the set of sinks must complete before.
+        """
         self.sources = []
         self.sinks = []
         self.tasks = {}

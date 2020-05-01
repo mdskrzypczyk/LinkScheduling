@@ -105,8 +105,8 @@ def create_protocol(path, nodeG, Fmin, Rmin):
         cache_key.append(numStorResources)
 
     cache_key = tuple(cache_key)
-    if cache_key in cache.keys():
-        return cache[cache_key]
+    # if cache_key in cache.keys():
+    #     return cache[cache_key]
 
     try:
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
