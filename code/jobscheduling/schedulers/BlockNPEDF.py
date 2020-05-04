@@ -1,12 +1,9 @@
-import networkx as nx
-from copy import copy
 from collections import defaultdict
 from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
-from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, ResourceTask, BudgetResourceTask, PeriodicResourceDAGTask, \
-    find_dag_task_preemption_points
+from jobscheduling.schedulers.scheduler import Scheduler, BaseMultipleResourceScheduler, verify_schedule
+from jobscheduling.task import get_lcm_for
 
 
 logger = LSLogger()
@@ -71,22 +68,6 @@ class UniResourceBlockNPEDFScheduler(Scheduler):
 
 
 class MultiResourceBlockNPEDFScheduler(Scheduler):
-    def create_new_task_instance(self, periodic_task, instance):
-        """
-        Creates a new task instance for a periodic task
-        :param periodic_task: type PeriodicTask
-            The periodic task to produce an instance for
-        :param instance: type int
-            The instance number of the new instance
-        :return: type Task
-            The new task instance
-        """
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                     d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
-        return task_instance
-
     def schedule_tasks(self, taskset, topology):
         """
         Main scheduling function for RCPSP NP-FPR
@@ -237,48 +218,5 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
         return start
 
 
-class MultipleResourceBlockNPEDFScheduler(Scheduler):
-    def schedule_tasks(self, dagset, topology):
-        """
-        Performs some preprocessing for the tasksets in RCPSP NP-FPR
-        :param taskset: type list
-            List of PeriodicTasks to schedule
-        :param topology: tuple
-            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
-        :return: list
-            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
-            taskset obtained from preprocessing
-        """
-        # Convert DAGs into tasks
-        tasks = {}
-        resources = set()
-        for dag_task in dagset:
-            block_task = PeriodicResourceDAGTask(name=dag_task.name, tasks=dag_task.subtasks, p=dag_task.p)
-            tasks[block_task.name] = block_task
-            resources |= block_task.resources
-
-        # Separate tasks based on resource requirements
-        G = nx.Graph()
-        for r in resources:
-            G.add_node(r)
-        for block_task in tasks.values():
-            G.add_node(block_task.name)
-            for r in block_task.resources:
-                G.add_edge(block_task.name, r)
-
-        sub_graphs = nx.connected_components(G)
-        tasksets = []
-        for nodes in sub_graphs:
-            task_names = nodes - resources
-            taskset = [tasks[name] for name in task_names]
-            tasksets.append(taskset)
-
-        # For each set of tasks use NPEDFScheduler
-        scheduler = MultiResourceBlockNPEDFScheduler()
-        schedules = []
-        for taskset in tasksets:
-            schedule, valid = scheduler.schedule_tasks(taskset, topology)
-            schedules.append((taskset, schedule, valid))
-
-        # Set of schedules is the schedule for each group of resources
-        return schedules
+class MultipleResourceBlockNPEDFScheduler(BaseMultipleResourceScheduler):
+    internal_scheduler_class = MultiResourceBlockNPEDFScheduler

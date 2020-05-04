@@ -6,7 +6,7 @@ from collections import defaultdict
 from os import listdir
 
 font = {'family': 'normal',
-            'size': 18}
+        'size': 18}
 
 matplotlib.rc('font', **font)
 
@@ -186,7 +186,7 @@ def plot_pb_results(data):
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF"
     }
-    schedulers = [#"MultipleResourceNonBlockNPEDFScheduler",
+    schedulers = ["MultipleResourceNonBlockNPEDFScheduler",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_0.01s",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_0.1s",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_1s",
@@ -237,8 +237,8 @@ def plot_pb_results(data):
         for i, fidelity in enumerate(means.keys()):
             ydata = [means[fidelity][sched] for sched in schedulers]
             yerr = [errs[fidelity][sched] for sched in schedulers]
-            if metric in ["throughput"]:  # , "wcrt"]:
-                ax.bar(x - offset + i * width, ydata, width=width, label="$F$={}".format(fidelity))
+            if metric in ["throughput"]:
+                ax.bar(x - offset + i * width, ydata, yerr=yerr, width=width, label="$F$={}".format(fidelity))
             else:
                 ax.bar(x - offset + i * width, ydata, width=width, label="$F$={}".format(fidelity))
 

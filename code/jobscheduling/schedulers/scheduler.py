@@ -1,8 +1,10 @@
+import networkx as nx
 from abc import abstractmethod
 from collections import defaultdict
 from copy import copy
 from queue import PriorityQueue
-from jobscheduling.task import find_dag_task_preemption_points, get_lcm_for, BudgetResourceDAGTask, BudgetResourceTask
+from jobscheduling.task import find_dag_task_preemption_points, get_lcm_for, BudgetResourceDAGTask, \
+    BudgetResourceTask, PeriodicBudgetResourceDAGTask
 from jobscheduling.log import LSLogger
 from intervaltree import IntervalTree, Interval
 
@@ -486,23 +488,23 @@ class CommonScheduler:
             original_taskname, instance = next_task.name.split('|')
             last_start = last_task_start[original_taskname]
 
-            preemption_point_intervals = self.get_start_time(next_task, global_resource_occupations, node_resources,
-                                                             max([next_task.a, earliest, last_start]))
+            pp_intervals = self.get_start_time(next_task, global_resource_occupations, node_resources,
+                                               max([next_task.a, earliest, last_start]))
 
             # Check if time violated deadline
-            last_pp_interval, last_pp_tasks = preemption_point_intervals[-1]
+            last_pp_interval, last_pp_tasks = pp_intervals[-1]
             last_pp_start, last_pp_end = last_pp_interval
             if last_pp_end > next_task.d:
                 return None, False
 
             # Record start time
-            first_interval, _ = preemption_point_intervals[0]
+            first_interval, _ = pp_intervals[0]
             start_time = first_interval[0]
             last_task_start[original_taskname] = start_time
 
             # Add schedule information to resource schedules
-            resource_intervals = self.extract_resource_intervals_from_preemption_point_intervals(preemption_point_intervals)
-            self.schedule_preemption_point_intervals(schedule, preemption_point_intervals)
+            resource_intervals = self.extract_resource_intervals_from_preemption_point_intervals(pp_intervals)
+            self.schedule_preemption_point_intervals(schedule, pp_intervals)
 
             # Introduce any new instances that are now available
             self.check_for_released_tasks(ready_queue, resource_intervals, taskset_lookup, instance_count,
@@ -520,3 +522,51 @@ class CommonScheduler:
 
         taskset = original_taskset
         return schedule, valid
+
+
+class BaseMultipleResourceScheduler(Scheduler):
+    def schedule_tasks(self, dagset, topology):
+        """
+        Performs some preprocessing for the tasksets in RCPSP schedulers
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
+            taskset obtained from preprocessing
+        """
+        # Convert DAGs into tasks
+        tasks = {}
+        resources = set()
+        for dag_task in dagset:
+            block_task = PeriodicBudgetResourceDAGTask(name=dag_task.name, tasks=dag_task.subtasks, p=dag_task.p,
+                                                       k=int(dag_task.k))
+            tasks[block_task.name] = block_task
+            resources |= block_task.resources
+
+        # Separate tasks based on resource requirements
+        G = nx.Graph()
+        for r in resources:
+            G.add_node(r)
+        for block_task in tasks.values():
+            G.add_node(block_task.name)
+            for r in block_task.resources:
+                G.add_edge(block_task.name, r)
+
+        sub_graphs = nx.connected_components(G)
+        tasksets = []
+        for nodes in sub_graphs:
+            task_names = nodes - resources
+            taskset = [tasks[name] for name in task_names]
+            tasksets.append(taskset)
+
+        # For each set of tasks use NPEDFScheduler
+        scheduler = self.internal_scheduler_class()
+        schedules = []
+        for taskset in tasksets:
+            schedule, valid = scheduler.schedule_tasks(taskset, topology)
+            schedules.append((taskset, schedule, valid))
+
+        # Set of schedules is the schedule for each group of resources
+        return schedules

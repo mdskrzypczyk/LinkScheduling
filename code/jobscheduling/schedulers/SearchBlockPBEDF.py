@@ -1,11 +1,9 @@
-import networkx as nx
 from collections import defaultdict
 from intervaltree import Interval, IntervalTree
 from jobscheduling.log import LSLogger
-from jobscheduling.schedulers.scheduler import Scheduler, CommonScheduler, verify_budget_schedule, \
-    verify_segmented_budget_schedule
-from jobscheduling.task import find_dag_task_preemption_points, PeriodicBudgetResourceDAGTask, ResourceTask, \
-    ResourceDAGTask
+from jobscheduling.schedulers.scheduler import CommonScheduler, BaseMultipleResourceScheduler, \
+    verify_budget_schedule, verify_segmented_budget_schedule
+from jobscheduling.task import find_dag_task_preemption_points, ResourceTask, ResourceDAGTask
 
 
 logger = LSLogger()
@@ -410,7 +408,8 @@ class MRCFixedPointSegmentBlockPreemptionBudgetScheduler(MRCFixedPointBlockPreem
                 import pdb
                 pdb.set_trace()
             resource_occupations[resource] |= resource_interval_tree
-            resource_occupations[resource].merge_overlaps(strict=False, data_reducer=lambda curr_task, new_task: new_task)
+            resource_occupations[resource].merge_overlaps(strict=False,
+                                                          data_reducer=lambda curr_task, new_task: new_task)
 
     def get_segment_tasks(self, task):
         """
@@ -532,71 +531,25 @@ class MRCFixedPointSegmentPreemptionBudgetScheduler(MRCFixedPointSegmentBlockPre
         return start
 
 
-class MultipleResourceInconsiderateBlockPreemptionBudgetScheduler(Scheduler):
+class MultipleResourceInconsiderateBlockPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRIFixedPointBlockPreemptionBudgetScheduler
 
-    def schedule_tasks(self, dagset, topology):
-        """
-        Performs some preprocessing for the tasksets in RCPSP PB schedulers
-        :param taskset: type list
-            List of PeriodicTasks to schedule
-        :param topology: tuple
-            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
-        :return: list
-            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
-            taskset obtained from preprocessing
-        """
-        # Convert DAGs into tasks
-        tasks = {}
-        resources = set()
-        for dag_task in dagset:
-            block_task = PeriodicBudgetResourceDAGTask(name=dag_task.name, tasks=dag_task.subtasks, p=dag_task.p,
-                                                       k=int(dag_task.k))
-            tasks[block_task.name] = block_task
-            resources |= block_task.resources
 
-        # Separate tasks based on resource requirements
-        G = nx.Graph()
-        for r in resources:
-            G.add_node(r)
-        for block_task in tasks.values():
-            G.add_node(block_task.name)
-            for r in block_task.resources:
-                G.add_edge(block_task.name, r)
-
-        sub_graphs = nx.connected_components(G)
-        tasksets = []
-        for nodes in sub_graphs:
-            task_names = nodes - resources
-            taskset = [tasks[name] for name in task_names]
-            tasksets.append(taskset)
-
-        # For each set of tasks use NPEDFScheduler
-        scheduler = self.internal_scheduler_class()
-        schedules = []
-        for taskset in tasksets:
-            schedule, valid = scheduler.schedule_tasks(taskset, topology)
-            schedules.append((taskset, schedule, valid))
-
-        # Set of schedules is the schedule for each group of resources
-        return schedules
-
-
-class MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateBlockPreemptionBudgetScheduler):
+class MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRIFixedPointSegmentBlockPreemptionBudgetScheduler
 
 
-class MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler(MultipleResourceInconsiderateBlockPreemptionBudgetScheduler):
+class MultipleResourceInconsiderateSegmentPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRIFixedPointSegmentPreemptionBudgetScheduler
 
 
-class MultipleResourceConsiderateBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
+class MultipleResourceConsiderateBlockPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRCFixedPointBlockPreemptionBudgetScheduler
 
 
-class MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
+class MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRCFixedPointSegmentBlockPreemptionBudgetScheduler
 
 
-class MultipleResourceConsiderateSegmentPreemptionBudgetScheduler(MultipleResourceInconsiderateSegmentBlockPreemptionBudgetScheduler):
+class MultipleResourceConsiderateSegmentPreemptionBudgetScheduler(BaseMultipleResourceScheduler):
     internal_scheduler_class = MRCFixedPointSegmentPreemptionBudgetScheduler

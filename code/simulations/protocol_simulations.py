@@ -12,7 +12,7 @@ from simulations.common import get_protocol_without_rate_constraint
 logger = LSLogger()
 
 font = {'family': 'normal',
-            'size': 18}
+        'size': 18}
 
 matplotlib.rc('font', **font)
 

@@ -90,12 +90,13 @@ def gen_star_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
         :param link_length: type int
             Length of each link connecting any two nodes
         :return: type tuple
-            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
-            in the network along with the link capabilities of each link.
+            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of
+            nodes in the network along with the link capabilities of each link.
         """
     num_nodes = 4
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
+
     # Line
     Gcq = nx.Graph()
     G = nx.Graph()
@@ -151,8 +152,8 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
         :param link_length: type int
             Length of each link connecting any two nodes
         :return: type tuple
-            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
-            in the network along with the link capabilities of each link.
+            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of
+            nodes in the network along with the link capabilities of each link.
         """
     num_nodes = 6
     d_to_cap = load_link_data()

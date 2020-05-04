@@ -1,7 +1,7 @@
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_budget_schedule
-from jobscheduling.task import get_lcm_for, find_dag_task_preemption_points, BudgetResourceTask
+from jobscheduling.task import get_lcm_for
 
 
 logger = LSLogger()
@@ -636,9 +636,13 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(UniResourcePreem
                         for active_task, entry_time in active_tasks:
                             original_name_active_task = active_task.name.split('|')[0]
                             completed_comp_time = self.taskset_lookup[original_name_active_task].c - active_task.c
-                            current_preemption_point = list(filter(lambda pp: pp[0][1] - active_task.a == completed_comp_time, active_task.preemption_points))[0]
+                            filtered_points = filter(lambda pp: pp[0][1] - active_task.a == completed_comp_time,
+                                                     active_task.preemption_points)
+                            current_preemption_point = list(filtered_points)[0]
                             all_locked_resources += current_preemption_point[1]
-                            required_resume_resources += [r for pp in active_task.preemption_points for r in pp[2] if pp[0][0] - active_task.a >= completed_comp_time]
+                            resuming_points = [pp for pp in active_task.preemption_points
+                                               if pp[0][0] - active_task.a >= completed_comp_time]
+                            required_resume_resources += [r for pp in resuming_points for r in pp[2]]
 
                         # Check if next_ready_task has the resources it needs and leaves resources unlocked for
                         # resuming tasks
