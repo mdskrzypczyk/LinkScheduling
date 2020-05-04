@@ -2,6 +2,11 @@ import json
 
 
 def load_link_data():
+    """
+    Loads the link capability information
+    :return: type dict
+        Dictionary of link lengths to lists of link capabilities
+    """
     with open("device_characteristics/data.json") as f:
         data = json.load(f)
 
@@ -26,10 +31,3 @@ if __name__ == "__main__":
         for F, R in reversed(sorted(cap)):
             string += " & {}".format(round(R, 1))
         print(string)
-    # string = ""
-    # for F,R in dist_to_cap["5"]:
-    #     string += " & {}".format(round(F,2))
-    #
-    # print(string)
-    import pdb
-    pdb.set_trace()

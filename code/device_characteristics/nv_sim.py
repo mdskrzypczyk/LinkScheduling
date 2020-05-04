@@ -14,6 +14,11 @@ import matplotlib.pyplot as plt
 
 
 def main(no_output=False):
+    """
+    Simulation used for obtaining link capabilities of NV in Diamond
+    :param no_output:
+    :return:
+    """
     gss_factory = NVStateDeliverySamplerFactory()
 
     d_to_rates = {}

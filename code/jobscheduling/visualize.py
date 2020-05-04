@@ -4,6 +4,16 @@ from matplotlib.collections import PolyCollection
 
 
 def draw_DAG(dag, name=None, view=False):
+    """
+    Draws a DAG that represents the repeater protocol to be executed
+    :param dag: type DAGTask
+        The DAGTask representing the repeater protocol to execute
+    :param name: type str
+        Name to give to the graph file
+    :param view: type bool
+        Toggles if the drawn DAG is opened in a viewer
+    :return: None
+    """
     graph_dir = "graphs/"
     if name is not None:
         dot = Digraph(name=graph_dir + name)
@@ -25,10 +35,25 @@ def draw_DAG(dag, name=None, view=False):
 
 
 def get_original_taskname(task):
+    """
+    Obtains the original name of a task instance
+    :param task: type DAGTask
+        An instance of a Periodic DAG Task to obtain the original task name from
+    :return: type str
+        The original PeriodicDAGTask's name
+    """
     return task.name.split("|")[0]
 
 
 def schedule_timeline(taskset, schedule):
+    """
+    Produces a visualization of the timeline where repeater protocols are executed in the schedule
+    :param taskset: type list
+        List of PeriodicDAGTask's representing the repeater protocols scheduled into the network
+    :param schedule: type list
+        List of tuples (start, end, task_instance) that describes the schedule of repeater protocols in the network
+    :return: None
+    """
     cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     colormapping = dict([(name, "C{}".format(i - 1)) for name, i in cats.items()])
 
@@ -59,6 +84,14 @@ def schedule_timeline(taskset, schedule):
 
 
 def resource_timeline(taskset, schedule):
+    """
+    Produces a visualization of the timeline where resources are used schedule
+    :param taskset: type list
+        List of PeriodicDAGTask's representing the repeater protocols scheduled into the network
+    :param schedule: type list
+        List of tuples (start, end, task_instance) that describes the schedule of repeater protocols in the network
+    :return: None
+    """
     resources = list(sorted(list(set([r for task in taskset for r in task.resources]))))
     cats = dict([(r, i + 1) for i, r in enumerate(resources)])
     colormapping = dict([(t.name, "C{}".format(i)) for i, t in enumerate(taskset)])
@@ -96,6 +129,12 @@ def resource_timeline(taskset, schedule):
 
 
 def protocol_timeline(scheduled_protocol_task):
+    """
+    Produces a visualization of the timeline of resource utilization by a protocol
+    :param scheduled_protocol_task: type DAGTask
+        The DAGTask to visualize on resources
+    :return: None
+    """
     resources = list(sorted(scheduled_protocol_task.resources))
     resource_intervals = scheduled_protocol_task.get_resource_intervals()
     cats = dict([(r, i + 1) for i, r in enumerate(resources)])
@@ -135,6 +174,15 @@ def protocol_timeline(scheduled_protocol_task):
 
 
 def schedule_and_resource_timelines(taskset, schedule, plot_title=None, plot_sep=True, save_plot=False):
+    """
+    Produces a visualization of the timeline where resources are used schedule and where repeater protocols are
+    executed
+    :param taskset: type list
+        List of PeriodicDAGTask's representing the repeater protocols scheduled into the network
+    :param schedule: type list
+        List of tuples (start, end, task_instance) that describes the schedule of repeater protocols in the network
+    :return: None
+    """
     task_cats = dict([(task.name, i + 1) for i, task in enumerate(taskset)])
     task_colormapping = dict([(name, "C{}".format(i - 1)) for name, i in task_cats.items()])
 
