@@ -731,6 +731,14 @@ class ResourceDAGTask(ResourceTask):
 
 class BudgetResourceDAGTask(ResourceDAGTask):
     def __init__(self, name, tasks, a=0, d=None, k=0):
+        """
+
+        :param name:
+        :param tasks:
+        :param a:
+        :param d:
+        :param k:
+        """
         super(BudgetResourceDAGTask, self).__init__(name=name, tasks=tasks, a=a, d=d)
         self.k = k
 
