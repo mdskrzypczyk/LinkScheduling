@@ -10,6 +10,17 @@ logger = LSLogger()
 
 
 def get_protocol_rate(demand, protocol, topology):
+    """
+    Obtains the rate that a protocol can be executed at
+    :param demand: type tuple
+        Tuple describing the source, destination, Fmin, and Rmin
+    :param protocol: type Protocol
+        The repeater protocol to obtain the rate of
+    :param topology: type tuple
+        Tuple of the communication resource and connectivity graphs
+    :return: type float
+        The maximum rate the protocol may be executed
+    """
     slot_size = 0.01
     task = convert_protocol_to_task(demand, protocol, slot_size)
     scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
@@ -19,6 +30,17 @@ def get_protocol_rate(demand, protocol, topology):
 
 
 def convert_protocol_to_task(request, protocol, slot_size=0.1):
+    """
+    Converts a protocol to a DAGTask that is not mapped to time or hardware
+    :param request: type tuple
+        Tuple describing the source, destination, Fmin, Rmin of network demand
+    :param protocol: type Protocol
+        The protocol to be converted to a DAGTask
+    :param slot_size: type float
+        Size of a time slot in seconds
+    :return: type DAGTask
+        DAGTask representing the repeater protocol
+    """
     tasks = []
     labels = {
         "L": 0,
@@ -84,6 +106,17 @@ def convert_protocol_to_task(request, protocol, slot_size=0.1):
 
 
 def schedule_dag_for_resources(dagtask, topology):
+    """
+    Schedules a protocol DAGTask onto network resources. Performs ASAP, then ALAP, then shifts swaps and distillations
+    as early as possible
+    :param dagtask: type DAGTask
+        The DAGTask representing the protocol to map to resources
+    :param topology: tuple
+        Tuple of networkx.Graphs that represent the communication and connectivity graphs of the quantum network
+    :return: type tuple
+        Tuple of the scheduled DAGTask, the cumulative amount of time that links decohered, and a boolean representing
+        whether the mapping is correct or not
+    """
     logger.debug("Scheduling task ASAP")
     asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(dagtask, topology)
     logger.debug("ASAP Schedule latency {} total decoherence {}, correct={}".format(asap_latency, asap_decoherence,
@@ -106,6 +139,15 @@ def schedule_dag_for_resources(dagtask, topology):
 
 
 def schedule_dag_asap(dagtask, topology):
+    """
+    Schedules a protocol DAGTask to network resources in ASAP fashion
+    :param dagtask: type DAGTask
+        The DAGTask representing the protocol to be scheduled
+    :param topology: type tuple
+        Tuple of networkx.Graphs that represent the communication resources and connectivity information o the quantum
+        network
+    :return:
+    """
     comm_q_topology, node_topology = topology
     [sink] = dagtask.sinks
     nodes = dagtask.resources
@@ -157,6 +199,17 @@ def schedule_dag_asap(dagtask, topology):
 
 
 def get_possible_resources_for_task(task, node_comm_resources, all_node_resources):
+    """
+    Obtains the resources that may be used for the task.
+    :param task: type DAGSubTask
+        Task representing a protocol action to map to resource
+    :param node_comm_resources: type dict
+        Dictionary of node to communication resource identifiers
+    :param all_node_resources: type dict
+        Dictionary of node to all both communication and storage resources
+    :return: type list
+        List of the resources that may be used for the task
+    """
     if task.name[0] == "L":
         possible_task_resources = [node_comm_resources[n] for n in task.resources]
         if len(possible_task_resources) not in [2, 3, 4]:
@@ -174,6 +227,16 @@ def get_possible_resources_for_task(task, node_comm_resources, all_node_resource
 
 
 def get_resources_from_parents(task, all_node_resources):
+    """
+    Searches the subtrees the incoming task depends on for resources to use. Used for finding resources for
+    entanglement swaps and entanglement distillations.
+    :param task: type DAGSubTask
+        The task to find resources for
+    :param all_node_resources: type dict
+        Dictionary of nodes to network resources
+    :return: type list
+        List of resources available to the node at the task
+    """
     possible_task_resources = []
     task_nodes = task.resources
 
@@ -194,6 +257,16 @@ def get_resources_from_parents(task, all_node_resources):
 
 
 def get_resources_for_task_nodes(task, task_nodes, all_node_resources):
+    """
+    Obtains the resources available at task's nodes from the set of task_nodes
+    :param task: type DAGSubTask
+        The task to obtain resources for
+    :param task_nodes: type list
+        List of DAGSubTasks to obtain resources from
+    :param all_node_resources: type dict
+        Dictionary of nodes to network resources
+    :return:
+    """
     if task.name[0] == "D":
         return [[r] for r in list(sorted(task.locked_resources)) for tn in task_nodes if r in all_node_resources[tn]]
     elif task.name[0] == "L":
@@ -204,6 +277,19 @@ def get_resources_for_task_nodes(task, task_nodes, all_node_resources):
 
 
 def schedule_task_asap(task, task_resources, resource_schedules, storage_resources):
+    """
+    Schedules a task onto the node resources as soon as possible.
+    :param task: type DAGSubTask
+        The task to schedule onto resources
+    :param task_resources: type list
+        List of resources that may be used to execute the task
+    :param resource_schedules: type dict
+        Dictionary of resource identifiers to the time periods where they are occupied by other tasks
+    :param storage_resources: type dict
+        Dictionary of storage resources to the communication resource they may interact with for storing a link
+    :return: type list
+        A list of the resources that are used for the task
+    """
     earliest_possible_start = float('inf')
     earliest_resources = None
     earliest_mapping = None
@@ -283,6 +369,21 @@ def schedule_task_asap(task, task_resources, resource_schedules, storage_resourc
 
 
 def get_earliest_start_for_resources(earliest, task, resource_set, resource_schedules, storage_resources):
+    """
+    Finds the earliest point in time where the set of resources may be used for executing a task
+    :param earliest: type int
+        The earliest point in time where the task may begin
+    :param task: type DAGSubTask
+        The task to obtain the earliest start time for
+    :param resource_set: type list
+        List of resources to use for task.
+    :param resource_schedules: type dict
+        Dictionary of resource identifiers to the time periods where they are occupied by other tasks
+    :param storage_resources: type dict
+        Dictionary of storage resource identifiers to communication resource identifiers that can interact
+    :return: type int
+        The earliest slot where the task may begin using the set of resources
+    """
     # Always get the first earliest pair of communication qubits and storage qubits, if no storage qubits left leave
     # the link in the comm qubits
     occupied_slots = defaultdict(list)
@@ -350,6 +451,13 @@ def get_earliest_start_for_resources(earliest, task, resource_set, resource_sche
 
 
 def to_ranges(iterable):
+    """
+    Converts a list of ints to a set of ranges that cover the list
+    :param iterable: type list
+        List of ints
+    :return: type list
+        List of tuples that represent ranges that cover the iterable
+    """
     iterable = sorted(set(iterable))
     for key, group in itertools.groupby(enumerate(iterable),
                                         lambda t: t[1] - t[0]):
@@ -358,12 +466,28 @@ def to_ranges(iterable):
 
 
 def task_locks_resource(task, resources):
+    """
+    Checks if a task locks the resources. This is used for checking if a resource is occupied storing a link between
+    protocol actions
+    :param task: type DAGSubTask
+        The task that may/may not lock the resources
+    :param resources: type list
+        List of resources to check if task locks
+    :return: type bool
+        True/False if task locks the resources
+    """
     link_lock = (task.name[0] == "L" and any([r in task.locked_resources for r in resources]))
     distill_lock = (task.name[0] == "D" and any([r in list(sorted(task.locked_resources)) for r in resources]))
     return link_lock or distill_lock
 
 
 def convert_task_to_alap(dagtask):
+    """
+    Converts a task that was mapped to resources in ASAP fashion to ALAP fashion
+    :param dagtask: type DAGTask
+        The DAGTask representing the repeater protocol
+    :return: None
+    """
     # Last task doesn't move
     queue = list(sorted(dagtask.subtasks, key=lambda task: -task.a))
     resource_schedules = defaultdict(list)
@@ -392,6 +516,14 @@ def convert_task_to_alap(dagtask):
 
 
 def schedule_task_alap(task, resource_schedules):
+    """
+    Schedules a task to resources in ALAP fashion
+    :param task: type DAGSubTask
+        The task representing the protocol action to schedule
+    :param resource_schedules: type dict
+        Dictionary of resource identifiers to the time periods where the resource is occupied
+    :return: None
+    """
     possible = [task.a]
     child_starts = [ct.a - ceil(task.c) for ct in task.children if set(task.resources) & set(ct.resources)]
     if child_starts:
@@ -412,6 +544,17 @@ def schedule_task_alap(task, resource_schedules):
 
 
 def get_latest_slot_for_resources(latest, task, schedule_set):
+    """
+    Finds the latest opportunity that a task may be executed
+    :param latest: type int
+        A maximum bound on the latest point where a task may be executed
+    :param task: type DAGSubTask
+        The task to obtain the latest starting slot for
+    :param schedule_set: type list
+        List of occupied time slots of the resources used for the task
+    :return: type int
+        The latest slot where task may begin
+    """
     occupied_slots = set()
     for rs in schedule_set:
         occupied_slots |= set(rs)
@@ -429,6 +572,12 @@ def get_latest_slot_for_resources(latest, task, schedule_set):
 
 
 def shift_distillations_and_swaps(dagtask):
+    """
+    Shifts the tasks for entanglement swap and entanglement distillation ASAP
+    :param dagtask: type DAGTask
+        The task representing the repeater protocol to modify
+    :return: None
+    """
     resource_schedules = defaultdict(IntervalTree)
     for link_task in dagtask.sources:
         begin = link_task.a
@@ -472,6 +621,15 @@ def shift_distillations_and_swaps(dagtask):
 
 
 def verify_dag(dagtask, node_resources=None):
+    """
+    Verifies whether the repeater protocol in the DAGTask is correct
+    :param dagtask: type DAGTask
+        Task representing the repeater protocol
+    :param node_resources: type list
+        List of the resources held across the nodes over which the task executes
+    :return: type bool
+        True/False if the DAGTask is correct
+    """
     resource_intervals = defaultdict(IntervalTree)
     valid = True
     for subtask in dagtask.subtasks:
@@ -527,6 +685,15 @@ def verify_dag(dagtask, node_resources=None):
 
 
 def get_schedule_decoherence(resource_schedules, completion_time):
+    """
+    Obtains the number of time slots where links sits idle between protocol actions
+    :param resource_schedules: type dict
+        Dictionary of resource identifiers to time periods where the resource is occupied
+    :param completion_time: type int
+        The time slot where the protocol is completed
+    :return: type int
+        The number of time slots where links are decohering
+    """
     total_decoherence = 0
     resource_decoherences = {}
     for r in sorted(resource_schedules.keys()):
