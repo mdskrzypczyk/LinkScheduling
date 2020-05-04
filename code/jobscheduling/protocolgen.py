@@ -11,6 +11,15 @@ logger = LSLogger()
 
 class Protocol:
     def __init__(self, F, R, nodes):
+        """
+        Basic class for a protocol action
+        :param F: type float
+            Fidelity of the protocol
+        :param R: type float
+            Rate at which protocol may be executed
+        :param nodes: type list
+            Set of nodes involved in protocol action
+        """
         self.F = F
         self.R = R
         self.nodes = nodes
@@ -29,6 +38,15 @@ class LinkProtocol(Protocol):
     count = 0
 
     def __init__(self, F, R, nodes):
+        """
+        Protocol action class for Link generation
+        :param F: type float
+            The initial fidelity of the generated link
+        :param R: type float
+            The rate at which the link may be generated
+        :param nodes: type list
+            List of the nodes involved in generating the link
+        """
         super(LinkProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.name = self.name_template.format(self.count, *nodes)
         self.dist = self.duration
@@ -44,6 +62,17 @@ class DistillationProtocol(LinkProtocol):
     distillation_duration = 0.01
 
     def __init__(self, F, R, protocols, nodes):
+        """
+        Protocol action class for entanglement distillation
+        :param F: type float
+            The fidelity of the link after distillation
+        :param R: type float
+            The rate at which distillation may be performed
+        :param protocols: type list
+            List of the two protocol actions the distillation builds upon
+        :param nodes: type list
+            List of the nodes performing entanglement distillation
+        """
         super(DistillationProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.protocols = list(sorted(protocols, key=lambda p: p.R))
         self.durations = [protocol.duration for protocol in self.protocols]
@@ -64,6 +93,17 @@ class SwapProtocol(Protocol):
     swap_duration = 0.01
 
     def __init__(self, F, R, protocols, nodes):
+        """
+        Protocol action class for performing entanglement swapping
+        :param F: type float
+            Fidelity of the link after performing entanglement swapping
+        :param R: type float
+            Rate at which entanglement swapping may be performed
+        :param protocols: type list
+            List of the protocol actions the swap builds upon
+        :param nodes: type list
+            List of the nodes that perform the entanglement swap
+        """
         super(SwapProtocol, self).__init__(F=F, R=R, nodes=nodes)
         self.protocols = list(sorted(protocols, key=lambda p: p.R))
         self.durations = [protocol.duration for protocol in self.protocols]
@@ -82,6 +122,20 @@ cache = {}
 
 
 def create_protocol(path, nodeG, Fmin, Rmin):
+    """
+    Attempts to create a protocol over the repeater chain specified by the path in the graph nodeG. If a protocol is
+    found it satisfies the minimum fidelity Fmin and rate Rmin
+    :param path: type list
+        List of the nodes that form the repeater chain in nodeG
+    :param nodeG: type ~networkx.Graph
+        Graph representing the quantum network
+    :param Fmin: type float
+        The minimum fidelity the protocol must provide
+    :param Rmin: type float
+        The minimum rate at which the protocol may be executed
+    :return: type Protocol
+        The sink protocol action of the repeater protocol for the path
+    """
     def filter_node(node):
         return node in path
 
@@ -123,6 +177,21 @@ def create_protocol(path, nodeG, Fmin, Rmin):
 
 
 def esss(path, pathResources, G, Fmin, Rmin):
+    """
+    Performs entanglement swap scheme search (ESSS) to find a protocol connecting the end nodes of path in the graph G.
+    :param path: type list
+        List of nodes that form the path to find a protocol for
+    :param pathResources: type dict
+        Dictionary of node to resources that are available at the node for generating entanglement
+    :param G: type networkx.Graph
+        Graph representing the quantum network
+    :param Fmin: type float
+        The minimum fidelity desired from the protocol
+    :param Rmin: type float
+        The minimum rate desired from the protocol
+    :return: type Protocol
+        The sink protocol action for the repeater protocol to use over the path
+    """
     logger.debug("ESSS on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
     if len(path) == 2:
         logger.debug("Down to elementary link, finding distillation protocol")
@@ -167,6 +236,26 @@ def esss(path, pathResources, G, Fmin, Rmin):
 
 
 def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
+    """
+    Finds a protocol by splitting the path into two sub-paths and constructing protocols for the sub-paths. A protocol
+    for the full path is then constructed by performing a swap at the pivot node specified by numL
+    :param path: type list
+        List of nodes that form the repeater chain
+    :param pathResources: type dict
+        Dictionary of node to resources for generating entanglement
+    :param G: type networkx.Graph
+        A graph representing the quantum network
+    :param Fmin: type float
+        The minimum desired fidelity of the protocol
+    :param Rmin: type float
+        The minimum desired rate of the protocol
+    :param numL: type int
+        Number of nodes in the left sub-path
+    :param numR: type int
+        Number of nodes in the right sub-path
+    :return: type Protocol
+        The sink node protocol action for the protocol to execute over the path
+    """
     protocols = []
 
     resourceCopy = dict([(k, dict(v)) for k, v in pathResources.items()])
@@ -250,6 +339,23 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
 
 def get_protocol_for_link(link_properties, G, Fmin, Rmin, nodes, nodeResources):
+    """
+    Finds a protocol for generating entanglement between two directly connected nodes
+    :param link_properties: type list
+        List of (fidelity, rate) capabilities that the link between the nodes supports
+    :param G: type networkx.Graph
+        Graph representing the quantum network
+    :param Fmin: type float
+        The minimum desired fidelity from the protocol
+    :param Rmin: type float
+        The minimum desired rate from the protocol
+    :param nodes: type list
+        A list of the two nodes that are connected in G to find a protocol for
+    :param nodeResources: type dict
+        A dictionary of node to resources for generating entanglement
+    :return: type Protocol
+        The sink node protocol action of the repeater protocol to use between the two nodes
+    """
     logger.debug("Getting protocol on link {} with Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
     if all([R < Rmin for _, R in link_properties]):
         logger.debug("Cannot satisfy rate {} between nodes {}".format(Rmin, nodes))
@@ -286,6 +392,23 @@ def get_protocol_for_link(link_properties, G, Fmin, Rmin, nodes, nodeResources):
 
 
 def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
+    """
+    Finds an entanglement pumping protocol between two directly connected nodes
+    :param nodes: type list
+        List of the nodes to find the protocol for
+    :param nodeResources: type dict
+        Dictionary of node to resources for generating entanglement
+    :param G: type networkx.Graph
+        Graph representing the quantum network
+    :param link_properties: type list
+        List of (fidelity,rate) capabilities that the link between the nodes supports
+    :param Fmin: type float
+        The minimum desired fidelity from the pumping protocol
+    :param Rmin: type float
+        The minimum desired rate from the pumping protocol
+    :return: type Protocol
+        The sink node protocol action for the repeater protocol to use between the nodes
+    """
     # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
@@ -324,6 +447,23 @@ def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
 
 
 def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
+    """
+    Finds a nested entanglement distillation protocol
+    :param nodes: type list
+        List of the connected nodes to create the protocol for
+    :param nodeResources: type dict
+        Dictionary of node to resources for entanglement generation
+    :param G: type networkx.Graph
+        Graph representing the quantum network
+    :param link_properties: type list
+        List of (fidelity, rate) capabilities that the link supports
+    :param Fmin: type float
+        The minimum desired fidelity of the distillation protocol
+    :param Rmin: type float
+        The minimum desired rate of the distillation protocol
+    :return: type Protocol
+        The sink node protocol action of the protocol to use between the nodes
+    """
     # Search for the link gen protocol with highest rate that satisfies fidelity
     protocols = []
     # Can only generate as fast as the most constrained node
@@ -373,6 +513,16 @@ def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
 
 
 def const_fidelity_distillation_max(Finitial, num):
+    """
+    Finds the fidelity of the final link when performing num levels of nested entanglement distillation using an initial
+    link fidelity of Finitial.
+    :param Finitial: type float
+        The initial link fidelity
+    :param num: type int
+        The number of levels of nested entanglement distillation
+    :return: type float
+        The maximum fidelity achieved
+    """
     Fout = Finitial
     for i in range(num):
         Fout = distill_links(Fout, Fout)
@@ -381,6 +531,16 @@ def const_fidelity_distillation_max(Finitial, num):
 
 
 def distillations_for_const_fidelity(Finitial, Ftarget):
+    """
+    Finds the number of distillations needed for achieving Ftarget using nested entanglement distillation with an
+    initial link fidelity of Finitial
+    :param Finitial: type float
+        The initial fidelity of the link
+    :param Ftarget: type float
+        The target fidelity of the link
+    :return: type int
+        The number of distillations performed in the nested entanglement distillation achieving Ftarget
+    """
     if Finitial < 0.5:
         return float('inf')
     num = 0
@@ -392,6 +552,13 @@ def distillations_for_const_fidelity(Finitial, Ftarget):
 
 
 def links_for_distillations(num_distillations):
+    """
+    Returns the number of links needed to perform num_distillations distillation operations
+    :param num_distillations: type int
+        The number of distillations to perform
+    :return: type int
+        The number of links required
+    """
     return num_distillations + 1
 
 
@@ -404,6 +571,18 @@ def bitcount(n):
 
 
 def num_rounds(num_links, num_comm, num_storage):
+    """
+    Finds the number of rounds of entanglement generation needed to generate num_links links using num_comm
+    communication qubits and num_storage storage qubits
+    :param num_links: type int
+        The number of links to be generated
+    :param num_comm: type int
+        The number of communication qubits available
+    :param num_storage: type int
+        The number of storage qubits available
+    :return: type int
+        The number of rounds of generating entanglement needed to generate num_links links
+    """
     num_rounds = 0
     generated = 0
     while generated < num_links:
