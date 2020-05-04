@@ -1,8 +1,14 @@
 import json
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from os import listdir
+
+font = {'family': 'normal',
+            'size': 18}
+
+matplotlib.rc('font', **font)
 
 
 def get_wcrt_in_slots(schedule, slot_size):
@@ -65,7 +71,7 @@ def plot_results(data):
         # "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
         # "UniResourceCEDFScheduler": "PTS-CEDF",
         # "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
-        "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-EDF-LBF",
+        "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
         "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
     }
@@ -180,7 +186,7 @@ def plot_pb_results(data):
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF"
     }
-    schedulers = ["MultipleResourceNonBlockNPEDFScheduler",
+    schedulers = [#"MultipleResourceNonBlockNPEDFScheduler",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_0.01s",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_0.1s",
                   "UniResourceConsiderateFixedPointPreemptionBudgetScheduler_1s",
@@ -232,7 +238,7 @@ def plot_pb_results(data):
             ydata = [means[fidelity][sched] for sched in schedulers]
             yerr = [errs[fidelity][sched] for sched in schedulers]
             if metric in ["throughput"]:  # , "wcrt"]:
-                ax.bar(x - offset + i * width, ydata, yerr=yerr, width=width, label="$F$={}".format(fidelity))
+                ax.bar(x - offset + i * width, ydata, width=width, label="$F$={}".format(fidelity))
             else:
                 ax.bar(x - offset + i * width, ydata, width=width, label="$F$={}".format(fidelity))
 
@@ -242,13 +248,13 @@ def plot_pb_results(data):
         ax.set_ylabel("{} {}".format(metric_to_label[metric], metric_to_units[metric]))
         ax.set_title('{} by Scheduler and Fidelity'.format(metric_to_label[metric]))
         ax.set_xticks(x)
-        ax.set_xticklabels(labels)
+        ax.set_xticklabels(labels, rotation=20)
         box = ax.get_position()
         ax.set_position([box.x0, box.y0 + box.height * 0.1,
                          box.width, box.height * 0.9])
 
         # Put a legend below current axis
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=4)
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=4)
 
         fig.tight_layout()
 
@@ -267,7 +273,7 @@ def plot_pb_results(data):
             ax.set_ylabel("% Increase".format(metric_to_label[metric], metric_to_units[metric]))
             ax.set_title('{} Increase by Scheduler and Fidelity'.format(metric_to_label[metric]))
             ax.set_xticks(x)
-            ax.set_xticklabels(labels)
+            ax.set_xticklabels(labels, rotation=20)
             ax.legend(loc='upper right')
 
             fig.tight_layout()
@@ -276,34 +282,40 @@ def plot_pb_results(data):
             ax.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
 
             # Put a legend below current axis
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=4)
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.23), ncol=4)
             ax.axhline(c="k")
             plt.show()
 
 
+def check_star_results():
+    files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    results = load_results_from_files(files)
+    plot_results(results)
+
+
 def check_H_results():
-    files = ["H_results/{}".format(file) for file in listdir("H_results")]
+    files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_line_results():
-    files = ["line_results/{}".format(file) for file in listdir("line_results")]
+    files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_pb_results():
-    files = ["pb_results/{}".format(file) for file in listdir("pb_results")]
+    files = ["results/pb_results/{}".format(file) for file in listdir("results/pb_results")]
     results = load_results_from_files(files)
     plot_pb_results(results)
 
 
-def check_plus_res_results():
-    files_1c3s = ["plus_results/{}".format(file) for file in listdir("plus_results") if "1c3s" in file]
-    files_1c4s = ["plus_results/{}".format(file) for file in listdir("plus_results") if "1c4s" in file]
-    files_2c3s = ["plus_results/{}".format(file) for file in listdir("plus_results") if "2c3s" in file]
-    files_2c4s = ["plus_results/{}".format(file) for file in listdir("plus_results") if "2c4s" in file]
+def check_star_res_results():
+    files_1c3s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    files_1c4s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c4s" in file]
+    files_2c3s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "2c3s" in file]
+    files_2c4s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "2c4s" in file]
 
     results_1c3s = load_results_from_files(files_1c3s)
     results_1c4s = load_results_from_files(files_1c4s)
@@ -378,7 +390,7 @@ def check_plus_res_results():
 
 
 def check_res_results():
-    files = ["resource_results/{}".format(file) for file in listdir("resource_results")]
+    files = ["results/resource_results/{}".format(file) for file in listdir("results/resource_results")]
     data = load_results_from_files(files)
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())

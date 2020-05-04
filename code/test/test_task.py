@@ -487,6 +487,43 @@ class TestDagTasks(unittest.TestCase):
         self.assertEqual(task.resources, set(test_task.resources + test_task2.resources))
 
     def test_init_periodic_budget_resource_dagtask(self):
-        pass
+        test_name = "ABC"
+        test_period = 100
+        test_subtask_proc = 3
+        test_task = DAGResourceSubTask(name="SubTask", c=test_subtask_proc)
+
+        task = PeriodicBudgetResourceDAGTask(name=test_name, p=test_period, tasks=[test_task])
+
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task])
+        self.assertEqual(task.subtasks, [test_task])
+        self.assertEqual(task.tasks, {test_task.name: test_task})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_subtask_proc)
+        self.assertEqual(task.p, test_period)
+        self.assertEqual(task.k, 0)
+        self.assertEqual(task.resources, set())
+
+        test_resources1 = ['1', '2']
+        test_task = DAGResourceSubTask(name="Subtask1", c=4, a=0, resources=test_resources1)
+        test_resources2 = ['3']
+        test_task2 = DAGResourceSubTask(name="Subtask2", c=4, a=test_task.c, parents=[test_task],
+                                        resources=test_resources2)
+        test_task.add_child(test_task2)
+        test_budget = 10
+        task = PeriodicBudgetResourceDAGTask(name=test_name, p=test_period, k=test_budget,
+                                             tasks=[test_task, test_task2])
+        self.assertEqual(task.name, test_name)
+        self.assertEqual(task.sources, [test_task])
+        self.assertEqual(task.sinks, [test_task2])
+        self.assertEqual(task.subtasks, [test_task, test_task2])
+        self.assertEqual(task.tasks, {test_task.name: test_task, test_task2.name: test_task2})
+        self.assertEqual(task.a, 0)
+        self.assertEqual(task.c, test_task.c + test_task2.c)
+        self.assertEqual(task.p, test_period)
+        self.assertEqual(task.k, test_budget)
+        self.assertEqual(task.resources, set(test_task.resources + test_task2.resources))
+
 
 

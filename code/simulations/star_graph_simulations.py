@@ -1,12 +1,13 @@
 import time
 from jobscheduling.task import get_lcm_for
-from jobscheduling.topology import gen_plus_topology
+from jobscheduling.topology import gen_star_topology
 from simulations.common import load_results, write_results, get_schedulers, get_balanced_taskset, schedule_taskset
 
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
-    topology = gen_plus_topology(num_rep_comm_q=2, num_rep_storage_q=4)
+    topology = gen_plus_topology(num_end_node_comm_q=1, num_end_node_storage_q=3,
+                                 num_rep_comm_q=1, num_rep_storage_q=3)
     slot_size = 0.01
     schedulers = get_schedulers()
     results_file = "plus_results/plus_test_results_{}.json"

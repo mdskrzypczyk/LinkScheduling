@@ -2,6 +2,7 @@ import networkx as nx
 from math import ceil
 from copy import copy
 from jobscheduling.log import LSLogger
+from jobscheduling.protocols import get_protocol_rate
 from jobscheduling.qmath import swap_links, unswap_links, distill_links, undistill_link_even, \
     fidelity_for_distillations, distillations_for_fidelity
 
@@ -158,6 +159,9 @@ def esss(path, pathResources, G, Fmin, Rmin):
         protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
         if protocol is None:
             logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(path, Fmin, Rmin))
+        else:
+            rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+            protocol.R = rate
 
         return protocol
 
@@ -227,6 +231,12 @@ def find_split_path_protocol(path, pathResources, G, Fmin, Rmin, numL, numR):
 
     # Choose protocol with maximum rate > Rmin
     if protocols:
+        if len(path) <= 3:
+            protocols = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-5:]
+            for protocol, Rl, Rr in protocols:
+                if protocol is not None:
+                    rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+                    protocol.R = rate
         protocol, Rl, Rr = sorted(protocols, key=lambda p: (p[0].R, p[0].F))[-1]
         logger.debug("Found Swap/Distill protocol achieving F={},R={},numSwappedDistills={}".format(protocol.F,
                                                                                                     protocol.R,
@@ -306,6 +316,9 @@ def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
     if protocol is None:
         logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+    else:
+        rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+        protocol.R = rate
 
     return protocol
 
@@ -352,6 +365,9 @@ def find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
     protocol = list(sorted(protocols, key=lambda p: (p.R, p.F)))[-1] if protocols else None
     if protocol is None:
         logger.debug("Failed to find protocol for path {} achieving Fmin {} and Rmin {}".format(nodes, Fmin, Rmin))
+    else:
+        rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
+        protocol.R = rate
 
     return protocol
 
