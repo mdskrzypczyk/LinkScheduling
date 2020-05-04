@@ -50,7 +50,7 @@ class TestTopologies(unittest.TestCase):
     def test_star_topology(self):
         expected_num_comm = 1
         expected_num_stor = 3
-        expected_num_nodes = 5
+        expected_num_nodes = 4
         expected_link_length = 5
         star_topology = gen_star_topology()
 
@@ -65,10 +65,9 @@ class TestTopologies(unittest.TestCase):
                 self.assertEqual(stor_q, "{}-S{}".format(node, i))
 
         expected_edges = {
-            ('4', '0'),
-            ('4', '1'),
-            ('4', '2'),
-            ('4', '3')
+            ('3', '0'),
+            ('3', '1'),
+            ('3', '2')
         }
         self.assertEqual(len(connectivity_graph.edges), expected_num_nodes - 1)
         self.assertEqual(set(connectivity_graph.edges), expected_edges)
@@ -93,10 +92,9 @@ class TestTopologies(unittest.TestCase):
                 self.assertEqual(stor_q, "{}-S{}".format(node, i))
 
         expected_edges = {
-            ('4', '0'),
-            ('4', '1'),
-            ('4', '2'),
-            ('4', '3')
+            ('3', '0'),
+            ('3', '1'),
+            ('3', '2')
         }
         self.assertEqual(len(connectivity_graph.edges), expected_num_nodes - 1)
         self.assertEqual(set(connectivity_graph.edges), expected_edges)

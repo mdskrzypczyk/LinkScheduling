@@ -29,6 +29,15 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         return resource_interval_trees
 
     def schedule_tasks(self, taskset, topology=None):
+        """
+        Main scheduling function for RCPSP NP-EDF
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         # Save the original task set
         original_taskset = taskset
 
@@ -100,6 +109,19 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         return schedule, valid
 
     def get_start_time(self, task, resource_occupations, node_resources, earliest):
+        """
+        Obtains the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param node_resources: type dict
+            A dictionary of node to resource identifiers held by a node
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         offset = self.find_earliest_start(task, resource_occupations, earliest)
         while True:
             # See if we can schedule now, otherwise get the minimum number of slots forward before the constrained
@@ -112,15 +134,21 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
             else:
                 # See if we can remove any of the constrained subtasks if we have to move forward by step
                 offset += step
-                # resource_relations = self.map_task_resources(task, resource_occupations, node_resources, offset)
-                # task.resources = list(set(resource_relations.values()))
-                # for subtask in task.subtasks:
-                #     new_resources = []
-                #     for resource in subtask.resources:
-                #         new_resources.append(resource_relations[resource])
-                #     subtask.resources = new_resources
 
     def find_earliest_start(self, task, resource_occupations, start):
+        """
+        Finds the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param node_resources: type dict
+            A dictionary of node to resource identifiers held by a node
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         # Iterate over the tasks and check if their interval overlaps with the resources
         distances_to_free = []
 
@@ -137,6 +165,17 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         return max([0] + distances_to_free)
 
     def attempt_schedule(self, task, offset, resource_occupations):
+        """
+        Attempts to schedule the task at the specified time offset
+        :param task: type DAGTask
+            The task to schedule
+        :param offset: type int
+            The time offset to attempt scheduling the task at
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to periods of time of occupation
+        :return: bool, int
+            True/False if can be scheduled, amount of time to shift offset forward
+        """
         # Iterate over the tasks and check if their interval overlaps with the resources
         distances_to_free = []
         resource_interval_list = [(resource, itree) for resource, itree in task.get_resource_intervals().items()]
@@ -157,6 +196,16 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
 
 class MultipleResourceNonBlockNPEDFScheduler(Scheduler):
     def schedule_tasks(self, dagset, topology):
+        """
+        Performs some preprocessing for the tasksets in RCPSP NP-EDF
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
+            taskset obtained from preprocessing
+        """
         # Convert DAGs into tasks
         tasks = {}
         resources = set()

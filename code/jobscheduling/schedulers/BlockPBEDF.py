@@ -1,4 +1,3 @@
-from copy import copy
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_budget_schedule
@@ -9,30 +8,16 @@ logger = LSLogger()
 
 
 class UniResourcePreemptionBudgetScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def create_new_task_instance(self, periodic_task, instance):
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        dag_copy.a = release_offset
-        for subtask in dag_copy.subtasks:
-            subtask.a += release_offset
-        dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
-                                          k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
-
-        return dag_instance
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
     def schedule_tasks(self, taskset, topology):
+        """
+        Main scheduling function for uniprocessor EDF-LBF
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         self.ready_queue = PriorityQueue()
@@ -188,7 +173,6 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
-        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -197,39 +181,56 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
         taskset = original_taskset
         return [(taskset, self.schedule, valid)]
 
-    def merge_adjacent_entries(self):
-        for i in range(len(self.schedule)):
-            if i >= len(self.schedule):
-                return
-            s, e, task = self.schedule[i]
-            c = 1
-            while i + c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
-                e = self.schedule[i + c][1]
-                c += 1
-            for j in range(1, c):
-                self.schedule.pop(i + 1)
-            self.schedule[i] = (s, e, task)
-
     def preempt_curr_task(self):
+        """
+        Preempts the current active task and places it in the active queue
+        :return: None
+        """
         task = self.curr_task
         entry_time = self.curr_time
         self.active_queue.append((task, entry_time))
         self.active_queue = list(sorted(self.active_queue, key=lambda t: (t[0].k, t[1], t[0].name)))
 
     def populate_ready_queue(self):
+        """
+        Populates the ready queue with any tasks that are available, sorted by deadline
+        :return: None
+        """
         while self.taskset and self.taskset[0].a <= self.curr_time:
             task = self.taskset.pop(0)
             self.ready_queue.put((task.d, task))
 
     def update_active_queue(self, time):
+        """
+        Updates the preemption budget of tasks in the active queue
+        :param time: type int
+            The amount of time to reduce from preemption budgets
+        :return: None
+        """
         for task, _ in self.active_queue:
             task.k -= time
 
     def add_to_schedule(self, task, duration):
+        """
+        Adds a task to the internal schedule and updates the preemption budgets of tasks in the active queue
+        :param task: type Task
+            The task to add to the schedule
+        :param duration: type int
+            The amount of time that the task executes for
+        :return: Nome
+        """
         super(UniResourcePreemptionBudgetScheduler, self).add_to_schedule(task, duration)
         self.update_active_queue(duration)
 
     def schedule_until_next_event(self, task, ttne=None):
+        """
+        Schedules a task until the next point we should make a new scheduling decision
+        :param task: type Task
+            The task to add to the schedule
+        :param ttne: type int
+            A preset time-til-next-event to run the task for rather than determining from system parameters
+        :return: None
+        """
         # Time To Release of next task into ready queue
         ttr = (self.taskset[0].a - self.curr_time) if self.taskset else float('inf')
 
@@ -271,30 +272,17 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
             self.curr_task = None
 
 
-class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def create_new_task_instance(self, periodic_task, instance):
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        dag_copy.a = release_offset
-        for subtask in dag_copy.subtasks:
-            subtask.a += release_offset
-        dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
-                                          k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
-        return dag_instance
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
+class UniResourceFixedPointPreemptionBudgetScheduler(UniResourcePreemptionBudgetScheduler):
     def schedule_tasks(self, taskset, topology):
+        """
+        Main scheduling function for uniprocessor EDF-LBF with fixed preemption points
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         self.ready_queue = PriorityQueue()
@@ -447,7 +435,6 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
                         self.preempt_curr_task()
                     self.schedule_until_next_event(next_ready_task)
 
-        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -456,39 +443,15 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
         taskset = original_taskset
         return [(taskset, self.schedule, valid)]
 
-    def merge_adjacent_entries(self):
-        for i in range(len(self.schedule)):
-            if i >= len(self.schedule):
-                return
-            s, e, task = self.schedule[i]
-            c = 1
-            while i + c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
-                e = self.schedule[i + c][1]
-                c += 1
-            for j in range(1, c):
-                self.schedule.pop(i + 1)
-            self.schedule[i] = (s, e, task)
-
-    def preempt_curr_task(self):
-        task = self.curr_task
-        entry_time = self.curr_time
-        self.active_queue.append((task, entry_time))
-        self.active_queue = list(sorted(self.active_queue, key=lambda t: (t[0].k, t[1], t[0].name)))
-
-    def populate_ready_queue(self):
-        while self.taskset and self.taskset[0].a <= self.curr_time:
-            task = self.taskset.pop(0)
-            self.ready_queue.put((task.d, task))
-
-    def update_active_queue(self, time):
-        for task, _ in self.active_queue:
-            task.k -= time
-
-    def add_to_schedule(self, task, duration):
-        super(UniResourceFixedPointPreemptionBudgetScheduler, self).add_to_schedule(task, duration)
-        self.update_active_queue(duration)
-
     def schedule_until_next_event(self, task, ttne=None):
+        """
+        Schedules a task until the next point we should make a new scheduling decision
+        :param task: type Task
+            The task to add to the schedule
+        :param ttne: type int
+            A preset time-til-next-event to run the task for rather than determining from system parameters
+        :return: None
+        """
         # Time To Empty Budget in active queue
         ttb = self.active_queue[0][0].k if self.active_queue and task.k > 0 else float('inf')
 
@@ -539,31 +502,17 @@ class UniResourceFixedPointPreemptionBudgetScheduler(Scheduler):
             self.curr_task = None
 
 
-class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def create_new_task_instance(self, periodic_task, instance):
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        dag_copy.a = release_offset
-        for subtask in dag_copy.subtasks:
-            subtask.a += release_offset
-        dag_instance = BudgetResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
-                                          d=release_offset + dag_copy.p, resources=dag_copy.resources,
-                                          k=dag_copy.k, preemption_points=find_dag_task_preemption_points(dag_copy))
-
-        return dag_instance
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
+class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(UniResourcePreemptionBudgetScheduler):
     def schedule_tasks(self, taskset, topology):
+        """
+        Main scheduling function for uniprocessor EDF-LBF with preemption points and resources
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         self.ready_queue = PriorityQueue()
@@ -775,7 +724,6 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
                         elif self.taskset:
                             self.curr_time = self.taskset[0].a
 
-        # self.merge_adjacent_entries()
         for _, _, t in self.schedule:
             original_taskname, _ = t.name.split('|')
             t.c = self.taskset_lookup[original_taskname].c
@@ -784,39 +732,15 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         taskset = original_taskset
         return [(taskset, self.schedule, valid)]
 
-    def merge_adjacent_entries(self):
-        for i in range(len(self.schedule)):
-            if i >= len(self.schedule):
-                return
-            s, e, task = self.schedule[i]
-            c = 1
-            while i + c < len(self.schedule) and self.schedule[i + c][2].name == task.name:
-                e = self.schedule[i + c][1]
-                c += 1
-            for j in range(1, c):
-                self.schedule.pop(i + 1)
-            self.schedule[i] = (s, e, task)
-
-    def preempt_curr_task(self):
-        task = self.curr_task
-        entry_time = self.curr_time
-        self.active_queue.append((task, entry_time))
-        self.active_queue = list(sorted(self.active_queue, key=lambda t: (t[0].k, t[1], t[0].name)))
-
-    def populate_ready_queue(self):
-        while self.taskset and self.taskset[0].a <= self.curr_time:
-            task = self.taskset.pop(0)
-            self.ready_queue.put((task.d, task))
-
-    def update_active_queue(self, time):
-        for task, _ in self.active_queue:
-            task.k -= time
-
-    def add_to_schedule(self, task, duration):
-        super(UniResourceConsiderateFixedPointPreemptionBudgetScheduler, self).add_to_schedule(task, duration)
-        self.update_active_queue(duration)
-
     def schedule_until_next_event(self, task, ttne=None):
+        """
+        Schedules a task until the next point we should make a new scheduling decision
+        :param task: type Task
+            The task to add to the schedule
+        :param ttne: type int
+            A preset time-til-next-event to run the task for rather than determining from system parameters
+        :return: None
+        """
         # Time to consider next ready task / release of next task into ready queue
         if not self.ready_queue.empty():
             ttnr = 1
@@ -837,9 +761,6 @@ class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(Scheduler):
         comp_times = sorted(filter(lambda time: time > 0, comp_times))
         max_proc_time = ttb
 
-        # if ttc <= max_proc_time:
-        #     proc_time = ttc
-        # else:
         proc_time = 0
         for ct in comp_times:
             if max_proc_time >= ct:

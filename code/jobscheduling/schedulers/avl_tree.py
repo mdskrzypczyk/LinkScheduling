@@ -1,5 +1,14 @@
 class Node:
     def __init__(self, key, data, note=None):
+        """
+        AVL Tree Node class
+        :param key: type obj
+            Key of the node
+        :param data: type obj
+            Data stored in the node
+        :param note: type obj
+            Note to use when modifying other nodes
+        """
         self.key = key
         self.data = data
         self.note = note
@@ -9,23 +18,51 @@ class Node:
 
 class AVLTree:
     def __init__(self):
+        """
+        Modified AVL Tree class that realizes the desired AVL tree functionality from CEDF
+        """
         self.node = None
         self.height = -1
         self.balance = 0
 
     def height(self):
+        """
+        Obtains the height of a tree
+        :return: type int
+            Tree height
+        """
         if self.node:
             return self.node.height
         else:
             return 0
 
     def is_leaf(self):
+        """
+        Checks if the AVLTree is only one node
+        :return: type bool
+            True/False
+        """
         return (self.height == 0)
 
     def is_empty(self):
+        """
+        Checks if the AVLTree is empty
+        :return: type bool
+            True/False
+        """
         return self.node is None
 
     def insert(self, key, data, note=0):
+        """
+        Inserts a node into the AVL Tree
+        :param key: type obj
+            Key to use for the node
+        :param data: type obj
+            Data stored within the node
+        :param note: type obj
+            Note to use when modifying other AVL Tree nodes
+        :return: None
+        """
         tree = self.node
 
         newnode = Node(key, data, note)
@@ -71,6 +108,9 @@ class AVLTree:
                 self.update_balances()
 
     def rrotate(self):
+        '''
+        Does a right rotation of the subtree
+        '''
         # Rotate left pivoting on self
         A = self.node
         B = self.node.left.node
@@ -81,6 +121,9 @@ class AVLTree:
         A.left.node = T
 
     def lrotate(self):
+        '''
+        Does a left rotation of the subtree
+        '''
         # Rotate left pivoting on self
         A = self.node
         B = self.node.right.node
@@ -91,6 +134,11 @@ class AVLTree:
         A.right.node = T
 
     def update_heights(self, recurse=True):
+        """
+        Updates the heights of the subtrees in the AVL tree
+        :param recurse:
+        :return:
+        """
         if self.node is not None:
             if recurse:
                 if self.node.left is not None:
@@ -104,6 +152,11 @@ class AVLTree:
             self.height = -1
 
     def update_balances(self, recurse=True):
+        """
+        Updates internal balances of left and right subtrees
+        :param recurse: bool
+            Whether recursion into subtrees should be performed
+        """
         if self.node is not None:
             if recurse:
                 if self.node.left is not None:
@@ -116,6 +169,12 @@ class AVLTree:
             self.balance = 0
 
     def delete(self, key):
+        """
+        Deletes a node in the AVL Tree with specified key
+        :param key: type obj
+            Key to search for
+        :return None
+        """
         if self.node is not None:
             if self.node.key == key:
                 if self.node.left.node is None and self.node.right.node is None:
@@ -163,7 +222,7 @@ class AVLTree:
 
     def logical_successor(self, node):
         '''
-        Find the smallese valued node in RIGHT child
+        Find the smallest valued node in RIGHT child
         '''
         node = node.right.node
         if node is not None:  # just a sanity check
@@ -176,6 +235,11 @@ class AVLTree:
         return node
 
     def check_balanced(self):
+        """
+        Checks if the tree is balanced
+        :return: bool
+            True/False
+        """
         if self is None or self.node is None:
             return True
 
@@ -185,6 +249,10 @@ class AVLTree:
         return ((abs(self.balance) < 2) and self.node.left.check_balanced() and self.node.right.check_balanced())
 
     def inorder_traverse(self):
+        """
+        Traverses the AVL tree in order
+        :return:
+        """
         if self.node is None:
             return []
 
@@ -202,6 +270,11 @@ class AVLTree:
         return inlist
 
     def minimum(self):
+        """
+        Obtains the minimum valued node in the AVL Tree
+        :return: type Node
+            The Node that is minimum
+        """
         if self.node is None:
             return None
 

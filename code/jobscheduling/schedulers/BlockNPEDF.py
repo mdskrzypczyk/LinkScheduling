@@ -5,34 +5,27 @@ from intervaltree import Interval, IntervalTree
 from queue import PriorityQueue
 from jobscheduling.log import LSLogger
 from jobscheduling.schedulers.scheduler import Scheduler, verify_schedule
-from jobscheduling.task import get_lcm_for, ResourceTask, PeriodicResourceDAGTask
+from jobscheduling.task import get_lcm_for, ResourceTask, BudgetResourceTask, PeriodicResourceDAGTask, \
+    find_dag_task_preemption_points
 
 
 logger = LSLogger()
 
 
 class UniResourceBlockNPEDFScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def create_new_task_instance(self, periodic_task, instance):
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        for subtask in dag_copy.subtasks:
-            subtask.a += release_offset
-        dag_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), c=dag_copy.c, a=release_offset,
-                                    d=dag_copy.a + dag_copy.p * (instance + 1), resources=dag_copy.resources)
-        return dag_instance
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
+    """
+    Uniprocessor NP-EDF scheduler
+    """
     def schedule_tasks(self, taskset, topology):
+        """
+        Main scheduling function for uniprocessor NP-EDF
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         original_taskset = taskset
         taskset = self.preprocess_taskset(taskset)
         queue = PriorityQueue()
@@ -78,18 +71,16 @@ class UniResourceBlockNPEDFScheduler(Scheduler):
 
 
 class MultiResourceBlockNPEDFScheduler(Scheduler):
-    def preprocess_taskset(self, taskset):
-        return taskset
-
-    def initialize_taskset(self, tasks):
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
-
-        return initial_tasks
-
     def create_new_task_instance(self, periodic_task, instance):
+        """
+        Creates a new task instance for a periodic task
+        :param periodic_task: type PeriodicTask
+            The periodic task to produce an instance for
+        :param instance: type int
+            The instance number of the new instance
+        :return: type Task
+            The new task instance
+        """
         dag_copy = copy(periodic_task)
         release_offset = dag_copy.a + dag_copy.p * instance
         task_instance = ResourceTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset, c=dag_copy.c,
@@ -97,6 +88,15 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
         return task_instance
 
     def schedule_tasks(self, taskset, topology):
+        """
+        Main scheduling function for RCPSP NP-FPR
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid
+        """
         original_taskset = taskset
         hyperperiod = get_lcm_for([t.p for t in original_taskset])
         logger.debug("Computed hyperperiod {}".format(hyperperiod))
@@ -190,11 +190,37 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
         return schedule, valid
 
     def get_start_time(self, task, resource_occupations, node_resources, earliest):
+        """
+        Obtains the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param node_resources: type dict
+            A dictionary of node to resource identifiers held by a node
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         # Find the earliest start
         offset = self.find_earliest_start(task, resource_occupations, node_resources, earliest)
         return offset
 
     def find_earliest_start(self, task, resource_occupations, node_resources, earliest):
+        """
+        Finds the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param node_resources: type dict
+            A dictionary of node to resource identifiers held by a node
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         start = earliest
         distance_to_free = float('inf')
         while distance_to_free != 0:
@@ -213,6 +239,16 @@ class MultiResourceBlockNPEDFScheduler(Scheduler):
 
 class MultipleResourceBlockNPEDFScheduler(Scheduler):
     def schedule_tasks(self, dagset, topology):
+        """
+        Performs some preprocessing for the tasksets in RCPSP NP-FPR
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
+            taskset obtained from preprocessing
+        """
         # Convert DAGs into tasks
         tasks = {}
         resources = set()

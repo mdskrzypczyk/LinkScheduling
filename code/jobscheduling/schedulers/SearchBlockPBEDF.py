@@ -13,9 +13,25 @@ logger = LSLogger()
 
 class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
     def verify_schedule(self, taskset, schedule):
+        """
+        Verifies the schedule using a specific verification function
+        :param taskset: type list
+            List of PeriodicTasks to verify in the schedule
+        :param schedule: type list
+            List of (start, end, task) information composing the schedule
+        :return: bool
+            True/False
+        """
         return verify_budget_schedule(taskset, schedule)
 
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
+        """
+        Obtains the intervals of task execution from the preemption points of the task
+        :param preemption_point_intervals: type list
+            List of tuples of ((start, end), task) representing the intervals of time where the task is scheduled/
+        :return: type dict(IntervalTree)
+            Dictionary of interval trees representing periods of resource occupation by tasks
+        """
         # Add schedule information to resource schedules
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
@@ -26,11 +42,27 @@ class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
         return resource_intervals
 
     def schedule_preemption_point_intervals(self, schedule, preemption_point_intervals):
+        """
+        Adds the preemption point intervals to the running schedule
+        :param schedule: type list
+            List of (start, end, task) information encoding the schedule
+        :param preemption_point_intervals: type list
+            List of ((start, end), segment task) to add to the schedule
+        :return: None
+        """
         for segment_interval, segment_task in preemption_point_intervals:
             segment_start, segment_end = segment_interval
             schedule.append((segment_start, segment_end, segment_task))
 
     def update_resource_occupations(self, resource_occupations, resource_intervals):
+        """
+        Updates the recorded occupation of resources in the system
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary from resource identifiers to interval trees representing the periods of occupation of resources
+        :param resource_intervals: type dict(IntervalTree)
+            A dictionary of the newly occupied time intervals to add to the recorded occupation
+        :return: None
+        """
         # Update windowed resource schedules
         for resource in resource_intervals.keys():
             resource_interval_tree = IntervalTree(
@@ -43,6 +75,20 @@ class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
             resource_occupations[resource].merge_overlaps(strict=False)
 
     def construct_segment_task(self, task, segment, comp_time, i):
+        """
+        Constructs a Task representing a segment of the DAGTask
+        :param task: type DAGTask
+            The DAGTask to construct the segment for
+        :param segment: type list
+            List of information describing the segment, (start, end), resources locked by segment, resources needed
+            by segment, DAGSubTasks of DAGTask that belong to the segment
+        :param comp_time: type int
+            The amount of computation time performed up to this segment
+        :param i: type int
+            An enumeration of the segment
+        :return: type Task
+            A Task representing the set of subtasks belonging to the segment
+        """
         segment_times, segment_locked_resources, segment_resources, segment_subtasks = segment
         segment_start_offset, segment_end_offset = segment_times
         segment_duration = segment_end_offset - segment_start_offset
@@ -54,6 +100,17 @@ class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
         return segment_task
 
     def find_earliest_start(self, task, resource_occupations, earliest):
+        """
+        Finds the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         start = earliest
         distance_to_free = 1
         while distance_to_free:
@@ -75,9 +132,32 @@ class MRIFixedPointBlockPreemptionBudgetScheduler(CommonScheduler):
 
 class MRIFixedPointSegmentBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBudgetScheduler):
     def verify_schedule(self, taskset, schedule):
+        """
+        Verifies the schedule using a specific verification function
+        :param taskset: type list
+            List of PeriodicTasks to verify in the schedule
+        :param schedule: type list
+            List of (start, end, task) information composing the schedule
+        :return: bool
+            True/False
+        """
         return verify_segmented_budget_schedule(taskset, schedule)
 
     def construct_segment_task(self, task, segment, comp_time, i):
+        """
+        Constructs a Task representing a segment of the DAGTask
+        :param task: type DAGTask
+            The DAGTask to construct the segment for
+        :param segment: type list
+            List of information describing the segment, (start, end), resources locked by segment, resources needed
+            by segment, DAGSubTasks of DAGTask that belong to the segment
+        :param comp_time: type int
+            The amount of computation time performed up to this segment
+        :param i: type int
+            An enumeration of the segment
+        :return: type Task
+            A Task representing the set of subtasks belonging to the segment
+        """
         segment_times, segment_locked_resources, segment_resources, segment_subtasks = segment
         segment_start_offset, segment_end_offset = segment_times
         segment_duration = segment_end_offset - segment_start_offset
@@ -90,6 +170,13 @@ class MRIFixedPointSegmentBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreem
 
 class MRIFixedPointSegmentPreemptionBudgetScheduler(MRIFixedPointSegmentBlockPreemptionBudgetScheduler):
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
+        """
+        Obtains the intervals of task execution from the preemption points of the task
+        :param preemption_point_intervals: type list
+            List of tuples of ((start, end), task) representing the intervals of time where the task is scheduled/
+        :return: type dict(IntervalTree)
+            Dictionary of interval trees representing periods of resource occupation by tasks
+        """
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
             segment_start, segment_end = segment_interval
@@ -105,6 +192,20 @@ class MRIFixedPointSegmentPreemptionBudgetScheduler(MRIFixedPointSegmentBlockPre
         return resource_intervals
 
     def construct_segment_task(self, task, segment, comp_time, i):
+        """
+        Constructs a Task representing a segment of the DAGTask
+        :param task: type DAGTask
+            The DAGTask to construct the segment for
+        :param segment: type list
+            List of information describing the segment, (start, end), resources locked by segment, resources needed
+            by segment, DAGSubTasks of DAGTask that belong to the segment
+        :param comp_time: type int
+            The amount of computation time performed up to this segment
+        :param i: type int
+            An enumeration of the segment
+        :return: type Task
+            A Task representing the set of subtasks belonging to the segment
+        """
         segment_times, segment_locked_resources, segment_resources, segment_subtasks = segment
         segment_start_offset, segment_end_offset = segment_times
         segment_task = ResourceDAGTask(name="{}|{}".format(task.name, i), a=segment_start_offset,
@@ -116,6 +217,14 @@ class MRIFixedPointSegmentPreemptionBudgetScheduler(MRIFixedPointSegmentBlockPre
 
 class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBudgetScheduler):
     def update_resource_occupations(self, resource_occupations, resource_intervals):
+        """
+        Updates the recorded occupation of resources in the system
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary from resource identifiers to interval trees representing the periods of occupation of resources
+        :param resource_intervals: type dict(IntervalTree)
+            A dictionary of the newly occupied time intervals to add to the recorded occupation
+        :return: None
+        """
         # Update windowed resource schedules
         for resource in resource_intervals.keys():
             resource_interval_tree = IntervalTree(
@@ -129,6 +238,13 @@ class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBu
                                                           data_reducer=lambda curr_task, new_task: new_task)
 
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
+        """
+        Obtains the intervals of task execution from the preemption points of the task
+        :param preemption_point_intervals: type list
+            List of tuples of ((start, end), task) representing the intervals of time where the task is scheduled/
+        :return: type dict(IntervalTree)
+            Dictionary of interval trees representing periods of resource occupation by tasks
+        """
         # Add schedule information to resource schedules
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
@@ -139,6 +255,13 @@ class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBu
         return resource_intervals
 
     def get_segment_tasks(self, task):
+        """
+        Gets the set of tasks representing the segments of the provided task
+        :param task: type DAGTask
+            The task to obtain segment tasks for
+        :return: type list
+            List of Task objects that describe the segments of the DAGTask
+        """
         segment_tasks = []
         segment_info = find_dag_task_preemption_points(task)
         comp_time = 0
@@ -160,6 +283,19 @@ class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBu
         return segment_tasks
 
     def get_start_time(self, task, resource_occupations, node_resources, earliest):
+        """
+        Obtains the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param node_resources: type dict
+            A dictionary of node to resource identifiers held by a node
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         segment_earliest = earliest
         # Find the earliest start
 
@@ -202,6 +338,17 @@ class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBu
                     return start_times
 
     def find_earliest_start(self, task, resource_occupations, earliest):
+        """
+        Finds the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         start = earliest
         distance_to_free = 1
         while distance_to_free:
@@ -231,9 +378,26 @@ class MRCFixedPointBlockPreemptionBudgetScheduler(MRIFixedPointBlockPreemptionBu
 
 class MRCFixedPointSegmentBlockPreemptionBudgetScheduler(MRCFixedPointBlockPreemptionBudgetScheduler):
     def verify_schedule(self, taskset, schedule):
+        """
+        Verifies the schedule using a specific verification function
+        :param taskset: type list
+            List of PeriodicTasks to verify in the schedule
+        :param schedule: type list
+            List of (start, end, task) information composing the schedule
+        :return: bool
+            True/False
+        """
         return verify_segmented_budget_schedule(taskset, schedule)
 
     def update_resource_occupations(self, resource_occupations, resource_intervals):
+        """
+        Updates the recorded occupation of resources in the system
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary from resource identifiers to interval trees representing the periods of occupation of resources
+        :param resource_intervals: type dict(IntervalTree)
+            A dictionary of the newly occupied time intervals to add to the recorded occupation
+        :return: None
+        """
         # Update windowed resource schedules
         for resource in resource_intervals.keys():
             resource_interval_tree = IntervalTree(
@@ -249,6 +413,13 @@ class MRCFixedPointSegmentBlockPreemptionBudgetScheduler(MRCFixedPointBlockPreem
             resource_occupations[resource].merge_overlaps(strict=False, data_reducer=lambda curr_task, new_task: new_task)
 
     def get_segment_tasks(self, task):
+        """
+        Gets the set of tasks representing the segments of the provided task
+        :param task: type DAGTask
+            The task to obtain segment tasks for
+        :return: type list
+            List of Task objects that describe the segments of the DAGTask
+        """
         segment_tasks = []
         segment_info = find_dag_task_preemption_points(task)
         comp_time = 0
@@ -270,6 +441,13 @@ class MRCFixedPointSegmentBlockPreemptionBudgetScheduler(MRCFixedPointBlockPreem
 
 class MRCFixedPointSegmentPreemptionBudgetScheduler(MRCFixedPointSegmentBlockPreemptionBudgetScheduler):
     def extract_resource_intervals_from_preemption_point_intervals(self, preemption_point_intervals):
+        """
+        Obtains the intervals of task execution from the preemption points of the task
+        :param preemption_point_intervals: type list
+            List of tuples of ((start, end), task) representing the intervals of time where the task is scheduled/
+        :return: type dict(IntervalTree)
+            Dictionary of interval trees representing periods of resource occupation by tasks
+        """
         resource_intervals = defaultdict(IntervalTree)
         for segment_interval, segment_task in preemption_point_intervals:
             segment_start, segment_end = segment_interval
@@ -285,6 +463,13 @@ class MRCFixedPointSegmentPreemptionBudgetScheduler(MRCFixedPointSegmentBlockPre
         return resource_intervals
 
     def get_segment_tasks(self, task):
+        """
+        Gets the set of tasks representing the segments of the provided task
+        :param task: type DAGTask
+            The task to obtain segment tasks for
+        :return: type list
+            List of Task objects that describe the segments of the DAGTask
+        """
         segment_tasks = []
         segment_info = find_dag_task_preemption_points(task)
         comp_time = 0
@@ -305,6 +490,17 @@ class MRCFixedPointSegmentPreemptionBudgetScheduler(MRCFixedPointSegmentBlockPre
         return segment_tasks
 
     def find_earliest_start(self, task, resource_occupations, earliest):
+        """
+        Finds the start time for a task
+        :param task: type DAGTask
+            The task to obtain the start time for
+        :param resource_occupations: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing resource occupations
+        :param earliest: type int
+            The earliest point in time the task is permitted to start
+        :return: type int
+            The earliest time the incoming task may start
+        """
         start = earliest
         distance_to_free = 1
         while distance_to_free:
@@ -340,6 +536,16 @@ class MultipleResourceInconsiderateBlockPreemptionBudgetScheduler(Scheduler):
     internal_scheduler_class = MRIFixedPointBlockPreemptionBudgetScheduler
 
     def schedule_tasks(self, dagset, topology):
+        """
+        Performs some preprocessing for the tasksets in RCPSP PB schedulers
+        :param taskset: type list
+            List of PeriodicTasks to schedule
+        :param topology: tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity graph of the network
+        :return: list
+            Contains a tuple of (taskset, schedule, valid) where valid indicates if the schedule is valid for each
+            taskset obtained from preprocessing
+        """
         # Convert DAGs into tasks
         tasks = {}
         resources = set()

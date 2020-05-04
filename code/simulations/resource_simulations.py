@@ -12,7 +12,7 @@ from simulations.common import load_results, write_results, get_schedulers, get_
 logger = LSLogger()
 
 
-def gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+def gen_star_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                        link_length=5):
     num_nodes = 4
     d_to_cap = load_link_data()
@@ -57,7 +57,7 @@ def gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_
     return Gcq, G
 
 
-def gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+def gen_star_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                        link_length=5):
     num_nodes = 4
     d_to_cap = load_link_data()
@@ -156,11 +156,11 @@ def get_full_taskset(taskset1, taskset2, topology, slot_size):
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
-    full_topology = gen_plus_topology1(num_end_node_comm_q=2, num_end_node_storage_q=6, num_rep_comm_q=2,
+    full_topology = gen_star_topology1(num_end_node_comm_q=2, num_end_node_storage_q=6, num_rep_comm_q=2,
                                        num_rep_storage_q=6)
-    half_topology1 = gen_plus_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
+    half_topology1 = gen_star_topology1(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
                                         num_rep_storage_q=3)
-    half_topology2 = gen_plus_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
+    half_topology2 = gen_star_topology2(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1,
                                         num_rep_storage_q=3)
     slot_size = 0.01
     schedulers = get_schedulers()
