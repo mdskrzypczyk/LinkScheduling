@@ -732,12 +732,17 @@ class ResourceDAGTask(ResourceTask):
 class BudgetResourceDAGTask(ResourceDAGTask):
     def __init__(self, name, tasks, a=0, d=None, k=0):
         """
-
-        :param name:
-        :param tasks:
-        :param a:
-        :param d:
-        :param k:
+        Combination of a DAGTask, BudgetTask, and ResourceTask
+        :param name: type str
+            Name of the task
+        :param tasks: type list
+            List of DAGSubTasks that compose the DAG
+        :param a: type int
+            The release time of the DAGTask
+        :param d: type int
+            The deadline of the DAGTask
+        :param k: type int
+            The preemption budget of the DAGTask
         """
         super(BudgetResourceDAGTask, self).__init__(name=name, tasks=tasks, a=a, d=d)
         self.k = k
@@ -763,6 +768,15 @@ class BudgetResourceDAGTask(ResourceDAGTask):
 
 class PeriodicResourceDAGTask(PeriodicDAGTask):
     def __init__(self, name, tasks, p):
+        """
+        A combination of a PeriodicDAGTask and a ResourceDAGTask
+        :param name: type str
+            Name of the dag task
+        :param tasks: type list
+            List of DAGSubTasks that represent the DAG of the task
+        :param p: type int
+            The period at which the task is released into the system
+        """
         super(PeriodicResourceDAGTask, self).__init__(name=name, tasks=tasks, p=p)
 
         self.resources = set()
@@ -850,6 +864,17 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
 
 class PeriodicBudgetResourceDAGTask(PeriodicResourceDAGTask):
     def __init__(self, name, tasks, p, k=0):
+        """
+        Combination of a PeriodicDAGTask and a BudgetResourceDAGTask
+        :param name: type str
+            Name of the dagtask
+        :param tasks: type list
+            List of DAGSubTasks that describe the DAG of the task
+        :param p: type int
+            The period at which the task is released
+        :param k: type int
+            The preemption budget of each instance of the DAGTask
+        """
         super(PeriodicBudgetResourceDAGTask, self).__init__(name=name, tasks=tasks, p=p)
         self.k = k
 
