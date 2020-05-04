@@ -4,6 +4,22 @@ from device_characteristics.nv_links import load_link_data
 
 def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                    link_length=5):
+    """
+    Generates an H shaped topology of a quantum network.
+    :param num_end_node_comm_q: type int
+        Number of communication qubits each end node has
+    :param num_end_node_storage_q: type int
+        Number of storage qubits each end node has
+    :param num_rep_comm_q: type int
+        Number of communication qubits each repeater has
+    :param num_rep_storage_q: type int
+        Number of storage qubits each repeater has
+    :param link_length: type int
+        Length of each link connecting any two nodes
+    :return: type tuple
+        Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+        in the network along with the link capabilities of each link.
+    """
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
     # Line
@@ -61,6 +77,22 @@ def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm
 
 def gen_star_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                       link_length=5):
+    """
+        Generates an star shaped topology of a quantum network.
+        :param num_end_node_comm_q: type int
+            Number of communication qubits each end node has
+        :param num_end_node_storage_q: type int
+            Number of storage qubits each end node has
+        :param num_rep_comm_q: type int
+            Number of communication qubits each repeater has
+        :param num_rep_storage_q: type int
+            Number of storage qubits each repeater has
+        :param link_length: type int
+            Length of each link connecting any two nodes
+        :return: type tuple
+            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+            in the network along with the link capabilities of each link.
+        """
     num_nodes = 5
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
@@ -106,6 +138,22 @@ def gen_star_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
 
 def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                       link_length=5):
+    """
+        Generates an line shaped topology of a quantum network.
+        :param num_end_node_comm_q: type int
+            Number of communication qubits each end node has
+        :param num_end_node_storage_q: type int
+            Number of storage qubits each end node has
+        :param num_rep_comm_q: type int
+            Number of communication qubits each repeater has
+        :param num_rep_storage_q: type int
+            Number of storage qubits each repeater has
+        :param link_length: type int
+            Length of each link connecting any two nodes
+        :return: type tuple
+            Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+            in the network along with the link capabilities of each link.
+        """
     num_nodes = 6
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
