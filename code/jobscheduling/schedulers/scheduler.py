@@ -310,7 +310,7 @@ class CommonScheduler(Scheduler):
                 if resource in periodic_task.resources and itree.end() >= release:
                     instance = instance_count[name]
                     task_instance = self.create_new_task_instance(periodic_task, instance)
-                    if hyperperiod // periodic_task.p == instance_count[name]:
+                    if hyperperiod // periodic_task.p - 1 == instance_count[name]:
                         next_task_release[name] = float('inf')
                     else:
                         instance_count[name] += 1
@@ -335,13 +335,15 @@ class CommonScheduler(Scheduler):
         """
         incoming_tasks = list(sorted(next_task_release.items(), key=lambda ntr: (ntr[1], ntr[0])))
         _, next_release = incoming_tasks[0]
+        if next_release == float('inf'):
+            return
         for name, release in incoming_tasks:
             if release != next_release:
                 break
             periodic_task = taskset_lookup[name]
             instance = instance_count[name]
             task_instance = self.create_new_task_instance(periodic_task, instance)
-            if hyperperiod // periodic_task.p == instance_count[name]:
+            if hyperperiod // periodic_task.p - 1 == instance_count[name]:
                 next_task_release[name] = float('inf')
             else:
                 instance_count[name] += 1
@@ -450,7 +452,7 @@ class CommonScheduler(Scheduler):
 
         schedule = []
         earliest = 0
-        while any([release != float('inf') for release in next_task_release.values()]):
+        while any([release != float('inf') for release in next_task_release.values()]) or not ready_queue.empty():
             # Introduce a new task if there are currently none
             if ready_queue.empty():
                 self.populate_ready_queue(ready_queue, taskset_lookup, instance_count, next_task_release, hyperperiod)

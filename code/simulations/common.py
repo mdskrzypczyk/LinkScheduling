@@ -5,7 +5,7 @@ import time
 from math import ceil
 from os.path import exists
 from collections import defaultdict
-from analysis import get_wcrt_in_slots, get_start_jitter_in_slots
+from simulations.analysis import get_wcrt_in_slots, get_start_jitter_in_slots
 from jobscheduling.task import get_lcm_for
 from jobscheduling.log import LSLogger
 from jobscheduling.protocolgen import create_protocol

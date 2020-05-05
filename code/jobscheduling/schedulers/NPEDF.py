@@ -81,7 +81,7 @@ class MultiResourceNPEDFScheduler(CommonScheduler):
         schedule = []
 
         # Continue scheduling until no more task instances left
-        while any([release != float('inf') for release in next_task_release.values()]):
+        while any([release != float('inf') for release in next_task_release.values()]) or not ready_queue.empty():
             # Introduce a new task if there are currently none
             if ready_queue.empty():
                 self.populate_ready_queue(ready_queue, taskset_lookup, instance_count, next_task_release, hyperperiod)

@@ -10,7 +10,7 @@ logger = LSLogger()
 
 
 class UniResourceCEDFScheduler(Scheduler):
-    def schedule_tasks(self, taskset, topology):
+    def schedule_tasks(self, taskset, topology=None):
         """
         Main scheduling function for uniprocessor CEDF
         :param taskset: type list
