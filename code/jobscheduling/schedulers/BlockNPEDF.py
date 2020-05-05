@@ -13,7 +13,7 @@ class UniResourceBlockNPEDFScheduler(Scheduler):
     """
     Uniprocessor NP-EDF scheduler
     """
-    def schedule_tasks(self, taskset, topology):
+    def schedule_tasks(self, taskset, topology=None):
         """
         Main scheduling function for uniprocessor NP-EDF
         :param taskset: type list

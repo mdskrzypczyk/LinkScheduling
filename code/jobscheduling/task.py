@@ -4,20 +4,36 @@ from jobscheduling.log import LSLogger
 from collections import defaultdict
 from copy import copy
 from intervaltree import IntervalTree, Interval
-import itertools
 
 logger = LSLogger()
 
 
 def lcm(a, b):
+    """
+    Obtains the least common multiple of to integers
+    :param a: type int
+    :param b: type int
+    :return: type int
+    """
     return a * b // gcd(a, b)
 
 
 def get_lcm_for(values):
+    """
+    Obtains the least common multiple of a list of integers
+    :param values: type list of int
+    :return: type int
+    """
     return reduce(lambda x, y: lcm(x, y), values)
 
 
 def gcd_rationals(x, y):
+    """
+    Computes the greatest common divisr of a pair of rational numbers
+    :param x: type float
+    :param y: type float
+    :return: type float
+    """
     a = x
     b = 1
     while int(a) != b * x:
@@ -34,18 +50,21 @@ def gcd_rationals(x, y):
 
 
 def get_gcd_for(values):
+    """
+    Obtains the greatest common divisor for a list of rational numbers
+    :param values: type list of float
+    :return: type float
+    """
     return reduce(lambda x, y: gcd_rationals(x, y), values)
 
 
-def to_ranges(iterable):
-    iterable = sorted(set(iterable))
-    for key, group in itertools.groupby(enumerate(iterable),
-                                        lambda t: t[1] - t[0]):
-        group = list(group)
-        yield group[0][1], group[-1][1]
-
-
 def get_dag_exec_time(dag):
+    """
+    Obtains the execution time of DAGTask
+    :param dag: type DAGTask
+        The DAGTask to obtain the execution time of
+    :return: type int
+    """
     if not dag.subtasks:
         import pdb
         pdb.set_trace()
@@ -53,6 +72,14 @@ def get_dag_exec_time(dag):
 
 
 def find_dag_task_preemption_points(budget_dag_task, resources=None):
+    """
+    Finds the preemption points of a DAGTask
+    :param budget_dag_task: type DAGTask
+        The DAGTask to find preemption points of
+    :param resources: type list
+        List of resources to find preemption points over
+    :return:
+    """
     if resources is None:
         resources = budget_dag_task.resources
 
@@ -498,9 +525,9 @@ class DAGBudgetResourceSubTask(DAGResourceSubTask):
         self.k = k
 
     def __copy__(self):
-        return DAGBudgetResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k, parents=self.parents,
-                                        children=self.children, resources=self.resources,
-                                        locked_resources=self.locked_resources, dist=self.dist)
+        return DAGBudgetResourceSubTask(name=self.name, c=self.c, a=self.a, d=self.d, k=self.k,
+                                        resources=self.resources, locked_resources=self.locked_resources,
+                                        dist=self.dist)
 
 
 class DAGTask(Task):
@@ -547,7 +574,8 @@ class DAGTask(Task):
                 task.add_parent(parent_task)
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         return DAGTask(name=self.name, tasks=list(tasks.values()), d=self.d)
 
@@ -592,7 +620,8 @@ class PeriodicDAGTask(PeriodicTask):
                 task.add_parent(parent_task)
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         return PeriodicDAGTask(name=self.name, tasks=list(tasks.values()), p=self.p)
 
@@ -627,7 +656,6 @@ class ResourceDAGTask(ResourceTask):
                 d = max([t.d for t in self.sinks])
 
         super(ResourceDAGTask, self).__init__(name=name, a=a, c=c, d=d)
-
         self.assign_subtask_deadlines()
 
         self.resources = set()
@@ -637,6 +665,10 @@ class ResourceDAGTask(ResourceTask):
                 self.resources |= set(task.locked_resources)
 
     def assign_subtask_deadlines(self):
+        """
+        Assigns deadlines to the DAGSubTasks composing the DAGTask
+        :return: None
+        """
         q = [t for t in self.sinks]
         processed = defaultdict(int)
         while q:
@@ -650,14 +682,12 @@ class ResourceDAGTask(ResourceTask):
                 if processed[t.name] == 0:
                     q.append(t)
 
-        if any([t.d > self.d for t in self.subtasks]):
-            import pdb
-            pdb.set_trace()
-
-    def earliest_deadline(self):
-        return min([subtask.d for subtask in self.sources])
-
     def get_resource_schedules(self):
+        """
+        Obtains the occupation schedules of the resources used by the DAGTask
+        :return: type dict
+            A dictionary of reosurce identifiers to lists of occupied time slots by the DAGTask's sub tasks
+        """
         full_resource_schedules = defaultdict(list)
         for task in self.subtasks:
             resource_schedules = task.get_resource_schedules()
@@ -687,6 +717,14 @@ class ResourceDAGTask(ResourceTask):
         return dict(full_resource_schedules)
 
     def get_resource_intervals(self, separate_occupation=False):
+        """
+        Obtains the intervaltrees representing the occupation of the resources used by the DAGTask
+        :param separate_occupation: type bool
+            Toggles whether occupation activities are split into separate tasks each time unit or one continuous
+            one
+        :return: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing the periods of occupation
+        """
         resource_schedules = self.get_resource_schedules()
         resource_intervals = defaultdict(IntervalTree)
         for resource, schedule in resource_schedules.items():
@@ -724,7 +762,8 @@ class ResourceDAGTask(ResourceTask):
                 task.add_parent(parent_task)
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         return ResourceDAGTask(name=self.name, tasks=list(tasks.values()), a=self.a, d=self.d)
 
@@ -761,7 +800,8 @@ class BudgetResourceDAGTask(ResourceDAGTask):
                 task.add_parent(parent_task)
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         return BudgetResourceDAGTask(name=self.name, tasks=list(tasks.values()), a=self.a, d=self.d, k=self.k)
 
@@ -786,9 +826,19 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
                 self.resources |= set(task.locked_resources)
 
     def get_resources(self):
+        """
+        Returns the tasks resources
+        :return: type set
+            A set of the resources used
+        """
         return self.resources
 
     def get_resource_schedules(self):
+        """
+        Obtains the occupation schedules of the resources used by the DAGTask
+        :return: type dict
+            A dictionary of reosurce identifiers to lists of occupied time slots by the DAGTask's sub tasks
+        """
         full_resource_schedules = defaultdict(list)
         for task in self.subtasks:
             resource_schedules = task.get_resource_schedules()
@@ -818,6 +868,14 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
         return dict(full_resource_schedules)
 
     def get_resource_intervals(self, separate_occupation=False):
+        """
+        Obtains the intervaltrees representing the occupation of the resources used by the DAGTask
+        :param separate_occupation: type bool
+            Toggles whether occupation activities are split into separate tasks each time unit or one continuous
+            one
+        :return: type dict(IntervalTree)
+            A dictionary of resource identifiers to interval trees representing the periods of occupation
+        """
         resource_schedules = self.get_resource_schedules()
         resource_intervals = defaultdict(IntervalTree)
         for resource, schedule in resource_schedules.items():
@@ -850,7 +908,8 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
             tasks[task.name] = task
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         for original_task in self.subtasks:
             task = tasks[original_task.name]
@@ -887,7 +946,8 @@ class PeriodicBudgetResourceDAGTask(PeriodicResourceDAGTask):
             tasks[task.name] = task
 
             for original_child_task in original_task.children:
-                q.append(original_child_task)
+                if original_child_task not in q:
+                    q.append(original_child_task)
 
         for original_task in self.subtasks:
             task = tasks[original_task.name]

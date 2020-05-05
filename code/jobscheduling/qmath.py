@@ -75,14 +75,6 @@ def unswap_links(Ftarget):
         pdb.set_trace()
         return 1
 
-#
-# def unswap_three_links_equal_fidelity(Ftarget):
-#     return (1 / 4) * ((3**(2 / 3)) * (4 * Ftarget - 1)**(1 / 3) + 1)
-#
-#
-# def unswap_three_links(Fmiddle, Ftarget):
-#     return (3 * sqrt((4 * Fmiddle - 1) * (4 * Ftarget - 1)) - 4 * Fmiddle + 1) / (4 - 16 * Fmiddle)
-
 
 def distillations_for_fidelity(Finitial, Ftarget):
     """

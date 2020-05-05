@@ -23,6 +23,11 @@ logger = LSLogger()
 
 
 def get_schedulers():
+    """
+    Obtains the set of schedulers to use for simulations
+    :return: type list
+        List of scheduler classes to be used
+    """
     schedulers = [
         UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
         UniResourceBlockNPEDFScheduler,
@@ -38,6 +43,15 @@ def get_schedulers():
 
 
 def get_network_demands(network_topology, num):
+    """
+    Generates a list of network demands on the provided network topology
+    :param network_topology: type tuple
+        Tuple of networkx.Graphs that describe the communication resources and connectivity of quantum network
+    :param num: type int
+        The number of demands desired
+    :return: type list
+        List of tuples (source, destination, fidelity, rate) describing the demand
+    """
     _, nodeG = network_topology
     demands = []
     end_nodes = [node for node in nodeG.nodes if nodeG.nodes[node]["end_node"] is True]
@@ -50,6 +64,15 @@ def get_network_demands(network_topology, num):
 
 
 def get_protocol_without_rate_constraint(network_topology, demand):
+    """
+    Obtains a protocol to satisfy a demand's fidelity requirement
+    :param network_topology: type tuple
+        Tuple of networkx.Graphs representing the communication resources and connectivity info of the quantum network
+    :param demand: type tuple
+        Tuple of source, destination, fidelity, rate requirements
+    :return: type Protocol
+        A repeater protocol for the network demand
+    """
     s, d, f, r = demand
     _, nodeG = network_topology
     path = nx.shortest_path(G=nodeG, source=s, target=d, weight="weight")
@@ -62,6 +85,14 @@ def get_protocol_without_rate_constraint(network_topology, demand):
 
 
 def select_rate(achieved_rate, slot_size):
+    """
+    Chooses a new rate for a demand that is lower than the achieved rate of a protocol
+    :param achieved_rate: type float
+        The achieved rate we want a lower rate than
+    :param slot_size: type float
+        The duration of a time slot in seconds
+    :return: type float
+    """
     rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
     rates = list(filter(lambda r: r < achieved_rate, rates))
     if rates:
@@ -71,6 +102,13 @@ def select_rate(achieved_rate, slot_size):
 
 
 def get_network_resources(topology):
+    """
+    Obtains the set of resources in the quantum network
+    :param topology: type tuple
+        Tuple of networkx.Graphs that describe the communication resources and connectivity of the quantum network
+    :return: type dict
+        A dictionary of nodes to a description of their resources
+    """
     _, nodeG = topology
     network_resources = {}
     network_nodes = nodeG.nodes
@@ -90,12 +128,27 @@ def get_network_resources(topology):
 
 
 def get_resource_string(resource):
+    """
+    Obtains a general resource identifier describing the node and resource type
+    :param resource: type str
+        A string identifier of the resource
+    :return: type str
+        A general identifier
+    """
     resource_node, resource_id = resource.split('-')
     resource_type = resource_id[0]
     return resource_node + resource_type
 
 
 def balance_taskset_resource_utilization(taskset, node_resources):
+    """
+    Balances the resources used by the repeater protocols in the taskset across the available network resources
+    :param taskset: type list
+        List of DAGTasks that represent the concrete repeater protocols for the network
+    :param node_resources: type dict
+        Dictionary of nodes to a description of the node resources
+    :return:
+    """
     resource_utilization = {}
     resource_types = defaultdict(set)
     for node in node_resources:
@@ -148,6 +201,13 @@ def balance_taskset_resource_utilization(taskset, node_resources):
 
 
 def check_resource_utilization(taskset):
+    """
+    Checks the resource utilization of a taskset and returns false if anything is overutilized
+    :param taskset: type list
+        List of PeriodicDAGTasks for the network
+    :return: type bool
+        Indicates if the taskset overutilizes a resource
+    """
     resource_utilization = defaultdict(float)
     result = True
     for task in taskset:
@@ -168,6 +228,13 @@ def check_resource_utilization(taskset):
 
 
 def get_resource_utilization(taskset):
+    """
+    Obtains the resource utilization of a set of concrete repeater protocols
+    :param taskset: type list
+        List of PeriodicDAGTasks representing the concrete repeater protocols to schedule
+    :return: type dict
+        A dictionary of resource identifiers to floats describing utilization
+    """
     resource_utilization = defaultdict(float)
     for task in taskset:
         resource_intervals = task.get_resource_intervals()
@@ -186,6 +253,19 @@ def get_resource_utilization(taskset):
 
 
 def get_taskset(num_tasks, fidelity, topology, slot_size):
+    """
+    Generates a taskset
+    :param num_tasks: type int
+        The number of concrete repeater protocols desired
+    :param fidelity: type float
+        Minimum fidelity of the concrete repeater protocols
+    :param topology: tuple
+        Tuple of networkx.Graphs that represent the communication resources and connectivity of the quantum network
+    :param slot_size: type float
+        The duration of a slot in the schedule
+    :return: type list
+        List of PeriodicDAGTasks that represent the concrete repeater protocols for the network
+    """
     taskset = []
     num_succ = 0
     while len(taskset) < num_tasks:
@@ -243,6 +323,17 @@ def get_taskset(num_tasks, fidelity, topology, slot_size):
 
 
 def get_balanced_taskset(topology, fidelity, slot_size):
+    """
+    Obtains a set of concrete repeater protocols that have resources balanced across the network
+    :param topology: type tuple
+        Tuple of networkx.Graphs that represent the communication resources and connectivity of the quantum network
+    :param fidelity: type float
+        Minimum fidelity of the concrete repeater protocols
+    :param slot_size: type float
+        The duration of a slot in the schedule
+    :return: type list
+        List of PeriodicDAGTasks representing the concrete repeater protocols
+    """
     taskset = []
     num_succ = 0
     Gcq, G = topology
@@ -325,6 +416,11 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 
 
 def load_results(filename):
+    """
+    Loads results from a file
+    :param filename:
+    :return:
+    """
     if exists(filename):
         try:
             return json.load(open(filename))

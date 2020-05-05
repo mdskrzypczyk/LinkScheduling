@@ -12,6 +12,15 @@ matplotlib.rc('font', **font)
 
 
 def get_wcrt_in_slots(schedule, slot_size):
+    """
+    Obtains the worst-case response time of a schedule
+    :param schedule: type list
+        List of (start, end, task) describing the schedule
+    :param slot_size: type float
+        The size of a slot in seconds
+    :return: type float
+        The worst-case response time observed in the schedule
+    """
     task_wcrts = defaultdict(int)
     for s, e, t in schedule:
         name_components = t.name.split("|")
@@ -27,6 +36,17 @@ def get_wcrt_in_slots(schedule, slot_size):
 
 
 def get_start_jitter_in_slots(taskset, schedule, slot_size):
+    """
+    Obtains the jitter of all tasks in a schedule
+    :param taskset: type list
+        List of the PeriodicTasks that were used for the schedule
+    :param schedule: type list
+        List of (start, end, task) describing the schedule
+    :param slot_size: type float
+        The size of a slot in seconds
+    :return: type float
+        The worst-case response time observed in the schedule
+    """
     periodic_task_starts = defaultdict(list)
     for s, e, t in schedule:
         name_components = t.name.split("|")
@@ -53,6 +73,13 @@ def get_start_jitter_in_slots(taskset, schedule, slot_size):
 
 
 def load_results_from_files(files):
+    """
+    Loads simulation results from a list of files
+    :param files: type list
+        List of filenames to load results from
+    :return: type dict
+        Dictionary of the results from the files
+    """
     results = {}
     for file in files:
         file_results = json.load(open(file))
@@ -62,6 +89,12 @@ def load_results_from_files(files):
 
 
 def plot_results(data):
+    """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
@@ -170,6 +203,12 @@ def plot_results(data):
 
 
 def plot_pb_results(data):
+    """
+    Plots preemption budget results
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     label_map = {
@@ -288,30 +327,50 @@ def plot_pb_results(data):
 
 
 def check_star_results():
+    """
+    Checks results for the star graph simulations
+    :return: None
+    """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_H_results():
+    """
+    Checks results for the H graph simulations
+    :return: None
+    """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_line_results():
+    """
+    Checks results for the line graph simulations
+    :return: None
+    """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_pb_results():
+    """
+    Checks results for the preemption budget simulations
+    :return: None
+    """
     files = ["results/pb_results/{}".format(file) for file in listdir("results/pb_results")]
     results = load_results_from_files(files)
     plot_pb_results(results)
 
 
 def check_star_res_results():
+    """
+    Checks results for the resource allocation simulations
+    :return: None
+    """
     files_1c3s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
     files_1c4s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c4s" in file]
     files_2c3s = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "2c3s" in file]
@@ -390,6 +449,10 @@ def check_star_res_results():
 
 
 def check_res_results():
+    """
+    Checks results for the resource to protocol allocation simulations
+    :return: None
+    """
     files = ["results/resource_results/{}".format(file) for file in listdir("results/resource_results")]
     data = load_results_from_files(files)
     entry_key = list(data.keys())[0]

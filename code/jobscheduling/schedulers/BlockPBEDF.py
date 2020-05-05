@@ -8,7 +8,7 @@ logger = LSLogger()
 
 
 class UniResourcePreemptionBudgetScheduler(Scheduler):
-    def schedule_tasks(self, taskset, topology):
+    def schedule_tasks(self, taskset, topology=None):
         """
         Main scheduling function for uniprocessor EDF-LBF
         :param taskset: type list
@@ -273,7 +273,7 @@ class UniResourcePreemptionBudgetScheduler(Scheduler):
 
 
 class UniResourceFixedPointPreemptionBudgetScheduler(UniResourcePreemptionBudgetScheduler):
-    def schedule_tasks(self, taskset, topology):
+    def schedule_tasks(self, taskset, topology=None):
         """
         Main scheduling function for uniprocessor EDF-LBF with fixed preemption points
         :param taskset: type list
@@ -503,7 +503,7 @@ class UniResourceFixedPointPreemptionBudgetScheduler(UniResourcePreemptionBudget
 
 
 class UniResourceConsiderateFixedPointPreemptionBudgetScheduler(UniResourcePreemptionBudgetScheduler):
-    def schedule_tasks(self, taskset, topology):
+    def schedule_tasks(self, taskset, topology=None):
         """
         Main scheduling function for uniprocessor EDF-LBF with preemption points and resources
         :param taskset: type list

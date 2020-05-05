@@ -1,5 +1,4 @@
 import networkx as nx
-from abc import abstractmethod
 from collections import defaultdict
 from copy import copy
 from queue import PriorityQueue
@@ -192,7 +191,7 @@ class Scheduler:
         Base class for periodic task schedulers
         """
         self.curr_time = 0
-        self.schedule = None
+        self.schedule = []
         self.taskset = None
 
     def preprocess_taskset(self, taskset):
@@ -253,7 +252,6 @@ class Scheduler:
 
         return initial_tasks
 
-    @abstractmethod
     def schedule_tasks(self, taskset):
         """
         Main method for scheduling a taskset
@@ -263,34 +261,30 @@ class Scheduler:
         pass
 
 
-class CommonScheduler:
+class CommonScheduler(Scheduler):
     """
     Base class for RCPSP Schedulers
     """
-    def preprocess_taskset(self, taskset):
+    def create_new_task_instance(self, periodic_task, instance):
         """
-        Overridable method for preprocessing the taskset
-        :param taskset: type list
-            List of Tasks to preprocess
-        :return: type list
-            The processed taskset
+        Creates a new task instance for a periodic task
+        :param periodic_task: type PeriodicTask
+            The periodic task to produce an instance for
+        :param instance: type int
+            The instance number of the new instance
+        :return: type Task
+            The new task instance
         """
-        return taskset
+        dag_copy = copy(periodic_task)
+        release_offset = dag_copy.a + dag_copy.p * instance
+        for subtask in dag_copy.subtasks:
+            subtask.a += release_offset
 
-    def initialize_taskset(self, tasks):
-        """
-        Produces the initial set of tasks to be scheduled
-        :param tasks: type list
-            List of the PeriodicTasks to produce intiial instances for
-        :return: type list
-            List of the intiial task instances
-        """
-        initial_tasks = []
-        for task in tasks:
-            task_instance = self.create_new_task_instance(task, 0)
-            initial_tasks.append(task_instance)
+        dag_instance = BudgetResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset,
+                                             d=dag_copy.a + dag_copy.p * (instance + 1), tasks=dag_copy.subtasks,
+                                             k=periodic_task.k)
 
-        return initial_tasks
+        return dag_instance
 
     def check_for_released_tasks(self, ready_queue, resource_intervals, taskset_lookup, instance_count,
                                  next_task_release, hyperperiod):
@@ -329,8 +323,6 @@ class CommonScheduler:
         Adds newly released task instances to the ready queue
         :param ready_queue: type PriorityQueue
             A priority queue of the task instances released into the system
-        :param resource_intervals: type dict(IntervalTree)
-            A dictionary of resource identifiers to interval trees where the resources are occupied
         :param taskset_lookup: type dict
             A dictionary of original periodic task names to original periodic tasks
         :param instance_count: type dict
@@ -355,27 +347,6 @@ class CommonScheduler:
                 instance_count[name] += 1
                 next_task_release[name] += periodic_task.p
             ready_queue.put((task_instance.d, task_instance))
-
-    def create_new_task_instance(self, periodic_task, instance):
-        """
-        Creates a new task instance for a periodic task
-        :param periodic_task: type PeriodicTask
-            The periodic task to produce an instance for
-        :param instance: type int
-            The instance number of the new instance
-        :return: type Task
-            The new task instance
-        """
-        dag_copy = copy(periodic_task)
-        release_offset = dag_copy.a + dag_copy.p * instance
-        for subtask in dag_copy.subtasks:
-            subtask.a += release_offset
-
-        dag_instance = BudgetResourceDAGTask(name="{}|{}".format(dag_copy.name, instance), a=release_offset,
-                                             d=dag_copy.a + dag_copy.p * (instance + 1), tasks=dag_copy.subtasks,
-                                             k=periodic_task.k)
-
-        return dag_instance
 
     def remove_useless_resource_occupations(self, resource_occupations, resources, chop):
         """
