@@ -183,3 +183,58 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
             G.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
 
     return Gcq, G
+
+
+def gen_symm_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                      link_length=5):
+    num_nodes = 8
+    d_to_cap = load_link_data()
+    link_capability = d_to_cap[str(link_length)]
+
+    Gcq = nx.Graph()
+    G = nx.Graph()
+
+    # Nodes 0-3 are the end nodes
+    for i in range(4):
+        node = "{}".format(i)
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_end_node_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_end_node_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
+
+    # Nodes 4-7 form the complete internal repeater network
+    for i in range(4, 8):
+        node = "{}".format(i)
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_rep_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_rep_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs, end_node=False)
+
+    # Internal complete network
+    repeater_connections = {
+        "4": ["0", "5", "6", "7"],
+        "5": ["1", "4", "6", "7"],
+        "6": ["2", "4", "5", "7"],
+        "7": ["3", "4", "5", "6"]
+    }
+    for node, connected_nodes in repeater_connections.items():
+        for prev_node_id in connected_nodes:
+            for j in range(num_end_node_comm_q):
+                for k in range(num_end_node_storage_q):
+                    Gcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(node, k))
+
+            G.add_edge("{}".format(prev_node_id), "{}".format(node), capabilities=link_capability, weight=link_length)
+
+    return Gcq, G

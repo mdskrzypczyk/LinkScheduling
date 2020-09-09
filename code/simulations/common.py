@@ -101,6 +101,27 @@ def select_rate(achieved_rate, slot_size):
         return 0
 
 
+def select_limited_rate(achieved_rate, max_rate, slot_size):
+    """
+    Chooses a new rate for a demand that is lower than the achieved rate of a protocol
+    :param achieved_rate: type float
+        The achieved rate we want a lower rate than
+    :param slot_size: type float
+        The duration of a time slot in seconds
+    :return: type float
+    """
+    rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
+    rates = list(filter(lambda r: r < achieved_rate, rates))
+    if rates:
+        allowed_rates = list(filter(lambda r: r < max_rate, rates))
+        if not allowed_rates:
+            return min(rates)
+        else:
+            return random.choice(allowed_rates)
+    else:
+        return 0
+
+
 def get_network_resources(topology):
     """
     Obtains the set of resources in the quantum network
@@ -415,6 +436,103 @@ def get_balanced_taskset(topology, fidelity, slot_size):
     return taskset
 
 
+def get_fixed_load_taskset(topology, fidelity, load, slot_size):
+    """
+        Obtains a set of concrete repeater protocols that have resources balanced across the network
+        :param topology: type tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity of the quantum network
+        :param fidelity: type float
+            Minimum fidelity of the concrete repeater protocols
+        :param slot_size: type float
+            The duration of a slot in the schedule
+        :return: type list
+            List of PeriodicDAGTasks representing the concrete repeater protocols
+        """
+    taskset = []
+    num_succ = 0
+    Gcq, G = topology
+    end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
+    all_node_resources = []
+    for node in G.nodes:
+        comm_qs = G.nodes[node]["comm_qs"]
+        storage_qs = G.nodes[node]["storage_qs"]
+        node_resources = comm_qs + storage_qs
+        all_node_resources += node_resources
+
+    resource_utilization = dict([(r, 0) for r in all_node_resources])
+    not_allowed = []
+    max_util = 1.2
+    demands = []
+    while sum([rate for _, _, _, rate in demands]) < load:
+        possible_nodes = []
+        for resource, utilization in resource_utilization.items():
+            if "C" in resource and utilization < max_util:
+                node, resource_id = resource.split('-')
+                if node in end_nodes:
+                    possible_nodes.append(node)
+
+        if len(possible_nodes) == 0:
+            break
+
+        elif len(possible_nodes) == 1:
+            source = possible_nodes[0]
+            destination = random.sample(end_nodes, 1)[0]
+            while destination == source or ((source, destination) in not_allowed):
+                destination = random.sample(end_nodes, 1)[0]
+
+        else:
+            source, destination = random.sample(possible_nodes, 2)
+            while destination == source or ((source, destination) in not_allowed):
+                destination = random.sample(end_nodes, 1)[0]
+
+        demand = (source, destination, fidelity, 1)
+        try:
+            logger.debug("Constructing protocol for request {}".format(demand))
+            protocol = get_protocol_without_rate_constraint(topology, demand)
+            if protocol is None:
+                logger.warning("Demand {} could not be satisfied!".format(demand))
+                not_allowed.append((source, destination))
+                continue
+
+            logger.debug("Converting protocol for request {} to task".format(demand))
+            task = convert_protocol_to_task(demand, protocol, slot_size)
+
+            logger.debug("Scheduling task for request {}".format(demand))
+
+            scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+
+            latency = scheduled_task.c * slot_size
+            achieved_rate = 1 / latency
+            current_load = sum([rate for _, _, _, rate in demands])
+            new_rate = select_limited_rate(achieved_rate, load - current_load, slot_size)
+
+            if new_rate == 0:
+                logger.warning("Could not provide rate for {}".format(demand))
+                not_allowed.append((source, destination))
+                continue
+
+            demand = (source, destination, fidelity, new_rate)
+            scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            scheduled_task.p = ceil(1 / new_rate / slot_size)
+            asap_dec, alap_dec, shift_dec = decoherence_times
+            logger.info("Results for {}:".format(demand))
+            num_succ += 1
+            logger.info(
+                "Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand,
+                                                                                                        num_succ))
+            taskset.append(scheduled_task)
+            demands.append(demand)
+
+        except Exception as err:
+            logger.exception("Error occurred while generating tasks: {}".format(err))
+
+        check_resource_utilization(taskset)
+        balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
+        resource_utilization.update(get_resource_utilization(taskset))
+
+    return taskset
+
+
 def load_results(filename):
     """
     Loads results from a file
@@ -446,7 +564,7 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
             total_rate_dict[1 / task.p] += 1
 
         logger.info("Scheduling tasks with {}".format(results_key))
-        start = time.time()
+        start = time.time() 
 
         for task in taskset:
             # First test the taskset if it is even feasible to schedule
@@ -511,3 +629,4 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
 
     except Exception as err:
         logger.exception("Error occurred while scheduling: {}".format(err))
+
