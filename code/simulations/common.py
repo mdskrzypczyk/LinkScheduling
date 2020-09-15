@@ -461,29 +461,12 @@ def get_fixed_load_taskset(topology, fidelity, load, slot_size):
 
     resource_utilization = dict([(r, 0) for r in all_node_resources])
     not_allowed = []
-    max_util = 1.2
     demands = []
     while sum([rate for _, _, _, rate in demands]) < load:
-        possible_nodes = []
-        for resource, utilization in resource_utilization.items():
-            if "C" in resource and utilization < max_util:
-                node, resource_id = resource.split('-')
-                if node in end_nodes:
-                    possible_nodes.append(node)
-
-        if len(possible_nodes) == 0:
-            break
-
-        elif len(possible_nodes) == 1:
-            source = possible_nodes[0]
+        possible_nodes = end_nodes
+        source, destination = random.sample(possible_nodes, 2)
+        while destination == source:
             destination = random.sample(end_nodes, 1)[0]
-            while destination == source or ((source, destination) in not_allowed):
-                destination = random.sample(end_nodes, 1)[0]
-
-        else:
-            source, destination = random.sample(possible_nodes, 2)
-            while destination == source or ((source, destination) in not_allowed):
-                destination = random.sample(end_nodes, 1)[0]
 
         demand = (source, destination, fidelity, 1)
         try:
@@ -529,6 +512,11 @@ def get_fixed_load_taskset(topology, fidelity, load, slot_size):
         check_resource_utilization(taskset)
         balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
         resource_utilization.update(get_resource_utilization(taskset))
+
+    task_load = sum([float(t.name.split("R=")[1].split(", ")[0]) for t in taskset])
+    if task_load < load:
+        import pdb
+        pdb.set_trace()
 
     return taskset
 

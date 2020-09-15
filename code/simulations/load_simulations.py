@@ -6,7 +6,7 @@ from simulations.common import load_results, write_results, get_schedulers, get_
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
-    network_loads = list(range(1, 21))
+    network_loads = [20, 25, 30, 35, 40]
     topology = gen_symm_topology()
     slot_size = 0.01
     schedulers = get_schedulers()
@@ -23,6 +23,10 @@ def main():
                 load_data = {}
                 print("Generating taskset for load {} ebit/s".format(load))
                 taskset = get_fixed_load_taskset(topology, fidelity, load, slot_size)
+                task_load = sum([float(t.name.split("R=")[1].split(", ")[0]) for t in taskset])
+                if task_load < load:
+                    import pdb
+                    pdb.set_trace()
                 print("Completed generating taskset of size {}".format(len(taskset)))
                 print("Hyperperiod: {}".format(get_lcm_for([task.p for task in taskset])))
                 for scheduler_class in schedulers:
