@@ -1,16 +1,16 @@
 import time
 from jobscheduling.task import get_lcm_for
-from jobscheduling.topology import gen_symm_topology
+from jobscheduling.topology import gen_H_topology
 from simulations.common import load_results, write_results, get_schedulers, get_fixed_load_taskset, schedule_taskset
 
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
-    network_loads = [20, 25, 30]
-    topology = gen_symm_topology()
+    network_loads = [0.5, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 80, 100]
+    topology = gen_H_topology()
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "load_results.json"
+    results_file = "H_load_results0.json"
 
     results = load_results(results_file)
     while True:
