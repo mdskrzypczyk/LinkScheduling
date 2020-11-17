@@ -6,7 +6,7 @@ from simulations.common import load_results, write_results, get_schedulers, get_
 
 def main():
     fidelities = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
-    network_loads = [20, 25, 30, 35, 40]
+    network_loads = [20, 25, 30]
     topology = gen_symm_topology()
     slot_size = 0.01
     schedulers = get_schedulers()
