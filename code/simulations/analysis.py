@@ -83,7 +83,17 @@ def load_results_from_files(files):
     """
     results = {}
     for file in files:
-        file_results = json.load(open(file))
+        try:
+            file_results = json.load(open(file))
+        except Exception as err:
+            print("Failed to read {}, {}".format(file, err))
+            file_contents = open(file).read()
+            if "\n}\n   " in file_contents:
+                print("Fixing")
+                file_contents = file_contents.replace("\n}\n   ", ",\n   ")
+                with open(file, "w") as f:
+                    f.write(file_contents)
+                file_results = json.load(open(file))
         results.update(file_results)
 
     return results
@@ -335,8 +345,10 @@ def plot_pb_results(data):
 def plot_load_v_throughput_results(data):
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
-    loads = [str(i) for i in [5, 10, 15, 20]]
-    schedulers = list(sorted(data[entry_key][fidelities[0]][loads[0]]))
+    fidelities = ['0.55', '0.65', '0.75', '0.85']
+    loads = [str(i) for i in [0.5, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 80, 100]]
+    load_key = list(data[entry_key][fidelities[0]].keys())[0]
+    schedulers = list(sorted(data[entry_key][fidelities[0]][load_key]))
     label_map = {
         "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
@@ -348,21 +360,30 @@ def plot_load_v_throughput_results(data):
         # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
     }
     schedulers = [sched for sched in schedulers if sched in label_map.keys()]
-    for fidelity in fidelities:
+
+    matplotlib.rc('font', **font)
+    fig, axs = plt.subplots(1, 4)
+    all_axes = axs # [ax for ax_list in axs for ax in ax_list]
+    for i, (fidelity, ax) in enumerate(zip(fidelities, all_axes)):
+        count = defaultdict(lambda:defaultdict(int))
         means = defaultdict(lambda: defaultdict(list))
         errs = defaultdict(lambda: defaultdict(float))
         for sched in schedulers:
             for run_key, run_data in data.items():
                 for load in loads:
-                    try:
-                        achieved_throughput = run_data[fidelity][load][sched]["throughput"]
-                        all_demands = run_data[fidelity][load][sched]["satisfied_demands"]
-                        all_demands += run_data[fidelity][load][sched]["unsatisfied_demands"]
-                        true_load = sum([float(demand.split("R=")[1].split(", ")[0]) for demand in all_demands])
-                        means[true_load][sched].append(achieved_throughput)
-                    except Exception:
-                        import pdb
-                        pdb.set_trace()
+                    if fidelity in run_data.keys() and load in run_data[fidelity].keys():
+                        try:
+                            achieved_throughput = run_data[fidelity][load][sched]["throughput"]
+                            all_demands = run_data[fidelity][load][sched]["satisfied_demands"]
+                            all_demands += run_data[fidelity][load][sched]["unsatisfied_demands"]
+                            true_load = sum([float(demand.split("R=")[1].split(", ")[0]) for demand in all_demands])
+                            if true_load >= float(load):
+                                means[true_load][sched].append(achieved_throughput)
+                                count[true_load][sched] += 1
+                        except Exception as err:
+                            # import pdb
+                            # pdb.set_trace()
+                            continue
 
         for sched in schedulers:
             for load in sorted(means.keys()):
@@ -373,32 +394,34 @@ def plot_load_v_throughput_results(data):
                 means[load][sched] = np.mean(means[load][sched])
 
         for sched in schedulers:
-            print(sched, [(load, means[load][sched]) for load in sorted(means.keys())])
+            print(sched, [(load, count[load][sched], means[load][sched]) for load in sorted(means.keys())])
 
-        if len(means.keys()) > 4:
-            import pdb
-            pdb.set_trace()
-
-        fig, ax = plt.subplots()
-        for sched in schedulers:
+        fmts = ["-o", "--P", "-.*", ":X", "-D", "--s"]
+        for sched, fmt in zip(schedulers, fmts):
             xdata = list(sorted(means.keys()))
             ydata = [means[load][sched] for load in xdata]
             yerr = [errs[load][sched] for load in xdata]
-            (_, caps, _) = ax.errorbar(xdata, ydata, yerr, fmt='-o', label=label_map[sched], markersize=8, capsize=6)
+            (_, caps, _) = ax.errorbar(xdata, ydata, yerr, fmt=fmt, fillstyle='none', label=label_map[sched], markersize=3, capsize=2)
             for cap in caps:
                 cap.set_markeredgewidth(2)
 
         # Add some text for labels, title and custom x-axis tick labels, etc.
-        ax.set_ylabel("Throughput (ebit/s)")
-        ax.set_title('Throughput vs. Network Load with F={}'.format(fidelity))
-        ax.set_xlabel("Network Load (ebit/s)")
+        ax.set_xlabel("Load (ebit/s)", fontsize=14)
+        if i in [0, 4]:
+            ax.set_ylabel("Throughput (ebit/s)", fontsize=14)
+        ax.set_title("$F={}$".format(fidelity), fontsize=14)
+        ax.tick_params(axis='both', labelsize=14)
 
-        # Put a legend below current axis
-        ax.legend()
+    # fig.delaxes(all_axes[-1])
+    handles, labels = all_axes[-1].get_legend_handles_labels()
+    fig.legend(handles, labels, bbox_to_anchor=(0.96, 0.35), loc='lower right', fontsize=10)
 
+    def on_resize(event):
         fig.tight_layout()
+        fig.canvas.draw()
 
-        plt.show()
+    fig.canvas.mpl_connect('resize_event', on_resize)
+    plt.show()
 
 
 def check_star_results():
@@ -407,8 +430,30 @@ def check_star_results():
     :return: None
     """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
     results = load_results_from_files(files)
     plot_results(results)
+
+
+def check_star_throughputs():
+    files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
+    results = load_results_from_files(files)
+    plot_achieved_throughput(results)
+
+
+def check_star_wcrts():
+    files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
+    results = load_results_from_files(files)
+    plot_achieved_wcrts(results)
+
+
+def check_star_jitters():
+    files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
+    files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
+    results = load_results_from_files(files)
+    plot_achieved_jitter(results)
 
 
 def check_H_results():
@@ -417,16 +462,31 @@ def check_H_results():
     :return: None
     """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
-    files += ["H_results.json"]
+    files += ["remote_results/H_results.json"]
     results = load_results_from_files(files)
     plot_results(results)
 
 
 def check_H_throughputs():
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
-    files += ["H_results.json"]
+    files += ["remote_results/H_results.json"]
     results = load_results_from_files(files)
     plot_achieved_throughput(results)
+
+
+def check_H_wcrts():
+    files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
+    files += ["remote_results/H_results.json"]
+    results = load_results_from_files(files)
+    plot_achieved_wcrts(results)
+
+
+def check_H_jitters():
+    files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
+    files += ["remote_results/H_results.json"]
+    results = load_results_from_files(files)
+    plot_achieved_jitter(results)
+
 
 def check_line_results():
     """
@@ -434,8 +494,30 @@ def check_line_results():
     :return: None
     """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
+    files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
     results = load_results_from_files(files)
     plot_results(results)
+
+
+def check_line_throughputs():
+    files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
+    files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
+    results = load_results_from_files(files)
+    plot_achieved_throughput(results)
+
+
+def check_line_wcrts():
+    files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
+    files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
+    results = load_results_from_files(files)
+    plot_achieved_wcrts(results)
+
+
+def check_line_jitters():
+    files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
+    files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
+    results = load_results_from_files(files)
+    plot_achieved_jitter(results)
     
     
 def check_symm_results():
@@ -443,7 +525,8 @@ def check_symm_results():
     Checks results for the line graph simulations
     :return: None
     """
-    files = ["symm_results.json", "remote_results/symm_results.json"]
+    files = ["results/symm_results/{}".format(file) for file in listdir("results/symm_results/")]
+    files += ["remote_results/symm_results.json"]
     results = load_results_from_files(files)
     print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
     plot_results(results)
@@ -550,6 +633,7 @@ def plot_achieved_throughput(data):
         """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
+    fidelities = ["0.55", "0.65", "0.75", "0.85"]
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
     label_map = {
         "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
@@ -570,32 +654,284 @@ def plot_achieved_throughput(data):
                     try:
                         achieved_throughput[fidelity][sched].append(run_data[fidelity][sched][metric])
                     except Exception:
-                        import pdb
-                        pdb.set_trace()
+                        pass
 
+        matplotlib.rc('font', **font)
+        fig, axs = plt.subplots(1, 4)
+        all_axes = axs  # [ax for ax_list in axs for ax in ax_list]
+        for i, (fidelity, ax) in enumerate(zip(fidelities, all_axes)):
+            fmts = ["-", "--", "-.", ":", "-", "--"]
+            for sched, fmt in zip(schedulers, fmts):
+                throughputs = list(sorted(achieved_throughput[fidelity][sched] + [0]))
+                throughput_counts = defaultdict(int)
+                for throughput in throughputs:
+                    throughput_counts[throughput] += 1
+                xdata = list(sorted(throughput_counts.keys()))
+                ydata = [throughput_counts[x] / len(throughputs) for x in xdata]
+                ax.hist(throughputs, len(xdata), linestyle=fmt, density=True, histtype='step', cumulative=True, label=label_map[sched])
+
+            # Add some text for labels, title and custom x-axis tick labels, etc.
+            ax.set_xlabel("Throughput (ebit/s)", fontsize=12)
+            ax.set_ylabel("", fontsize=12)
+            ax.set_title('$F={}$'.format(fidelity), fontsize=14)
+
+        # Put a legend below current axis
+        handles, labels = all_axes[-1].get_legend_handles_labels()
+        fig.legend(handles, labels, bbox_to_anchor=(1.0, 0.35), loc='lower right', fontsize=10)
+
+        fig.tight_layout()
+        plt.draw()
+
+        def on_resize(event):
+            fig.tight_layout()
+            fig.canvas.draw()
+
+        fig.canvas.mpl_connect('resize_event', on_resize)
+
+        plt.show()
+
+
+def plot_achieved_wcrts(data):
+    """
+        Plots the results obtained from simulation files
+        :param data: type dict
+            A dictionary of the simulation results
+        :return: None
+        """
+    entry_key = list(data.keys())[0]
+    fidelities = list(data[entry_key].keys())
+    schedulers = list(sorted(data[entry_key][fidelities[0]]))
+    label_map = {
+        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
+        "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
+        "UniResourceCEDFScheduler": "PTS-CEDF",
+        "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
+        # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
+        # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
+        # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
+    }
+    schedulers = [sched for sched in schedulers if sched in label_map.keys()]
+    for metric in ["wcrt"]:
+        achieved_throughput = defaultdict(lambda: defaultdict(list))
         for sched in schedulers:
+            for run_key, run_data in data.items():
+                for fidelity in fidelities:
+                    try:
+                        achieved_throughput[fidelity][sched].append(run_data[fidelity][sched][metric])
+                    except Exception:
+                        pass
+
+        for i, fidelity in enumerate(achieved_throughput.keys()):
             fig, ax = plt.subplots()
-            for i, fidelity in enumerate(achieved_throughput.keys()):
+            for sched in schedulers:
                 throughputs = achieved_throughput[fidelity][sched]
                 throughput_counts = defaultdict(int)
                 for throughput in throughputs:
                     throughput_counts[throughput] += 1
                 xdata = list(sorted(throughput_counts.keys()))
-                ydata = [throughput_counts[x] for x in xdata]
-                ax.scatter(xdata, ydata, label="F={}".format(fidelity))
+                ydata = [throughput_counts[x] / len(throughputs) for x in xdata]
+                ax.hist(throughputs, len(xdata), density=True, histtype='step', cumulative=True, label=label_map[sched])
 
             # Add some text for labels, title and custom x-axis tick labels, etc.
-            ax.set_xlabel("Throughput (ebit/s)")
-            ax.set_ylabel("Count")
-            ax.set_title('Throughput Distribution for {}'.format(sched))
+            ax.set_xlabel("Worst-case Response Time (s)")
+            ax.set_ylabel("")
+            ax.set_title('CDF of Worst-case Response Time for F={}'.format(fidelity))
 
             # Put a legend below current axis
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4)
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
 
             fig.tight_layout()
             plt.draw()
 
             plt.show()
+
+
+def plot_achieved_jitter(data):
+    """
+        Plots the results obtained from simulation files
+        :param data: type dict
+            A dictionary of the simulation results
+        :return: None
+        """
+    entry_key = list(data.keys())[0]
+    fidelities = list(data[entry_key].keys())
+    schedulers = list(sorted(data[entry_key][fidelities[0]]))
+    label_map = {
+        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
+        "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
+        "UniResourceCEDFScheduler": "PTS-CEDF",
+        "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
+        # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
+        # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
+        # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
+    }
+    schedulers = [sched for sched in schedulers if sched in label_map.keys()]
+    for metric in ["jitter"]:
+        achieved_throughput = defaultdict(lambda: defaultdict(list))
+        for sched in schedulers:
+            for run_key, run_data in data.items():
+                for fidelity in fidelities:
+                    try:
+                        achieved_throughput[fidelity][sched].append(run_data[fidelity][sched][metric])
+                    except Exception:
+                        pass
+
+        for i, fidelity in enumerate(achieved_throughput.keys()):
+            fig, ax = plt.subplots()
+            for sched in schedulers:
+                throughputs = achieved_throughput[fidelity][sched]
+                throughput_counts = defaultdict(int)
+                for throughput in throughputs:
+                    throughput_counts[throughput] += 1
+                xdata = list(sorted(throughput_counts.keys()))
+                ydata = [throughput_counts[x] / len(throughputs) for x in xdata]
+                ax.hist(throughputs, len(xdata), density=True, histtype='step', cumulative=True, label=label_map[sched])
+
+            # Add some text for labels, title and custom x-axis tick labels, etc.
+            ax.set_xlabel("Jitter (s^2)")
+            ax.set_ylabel("")
+            ax.set_title('CDF of Jitter for F={}'.format(fidelity))
+
+            # Put a legend below current axis
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
+
+            fig.tight_layout()
+            plt.draw()
+
+            plt.show()
+
+
+def plot_throughput_wcrt_hist2d(data):
+    """
+        Plots the results obtained from simulation files
+        :param data: type dict
+            A dictionary of the simulation results
+        :return: None
+        """
+    entry_key = list(data.keys())[0]
+    fidelities = list(data[entry_key].keys())
+    schedulers = list(sorted(data[entry_key][fidelities[0]]))
+    label_map = {
+        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
+        "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
+        "UniResourceCEDFScheduler": "PTS-CEDF",
+        "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
+        # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
+        # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
+        # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
+    }
+    schedulers = [sched for sched in schedulers if sched in label_map.keys()]
+
+    throughput_wcrt_data = defaultdict(lambda: defaultdict(list))
+    for sched in schedulers:
+        for run_key, run_data in data.items():
+            for fidelity in run_data.keys():
+                try:
+                    throughput_wcrt_data[fidelity][sched].append((run_data[fidelity][sched]["throughput"],
+                                                                  run_data[fidelity][sched]["wcrt"]))
+                except Exception:
+                    pass
+
+    for i, fidelity in enumerate(throughput_wcrt_data.keys()):
+        fig, axs = plt.subplots(2, 3)
+        all_axes = [ax for ax_list in axs for ax in ax_list]
+        for sched, ax in zip(schedulers, all_axes):
+            data = throughput_wcrt_data[fidelity][sched]
+            xdata = [d[0] for d in data]
+            ydata = [d[1] for d in data]
+            ax.hist2d(xdata, ydata, [40, 20], [[0, 1 + max(xdata)], [0, 1 + max(ydata)]])
+
+            # Add some text for labels, title and custom x-axis tick labels, etc.
+            ax.set_xlabel("Throughput (ebit/s)")
+            ax.set_ylabel("WCRT (s)")
+            ax.set_title("{}".format(label_map[sched]))
+
+        # fig.set_title('Throughput vs Jitter for F={}'.format(fidelity))
+
+        # Put a legend below current axis
+        # fig.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
+
+        fig.tight_layout()
+        plt.draw()
+
+        def on_resize(event):
+            fig.tight_layout()
+            fig.canvas.draw()
+
+        fig.canvas.mpl_connect('resize_event', on_resize)
+        import pdb
+        pdb.set_trace()
+        plt.show()
+
+
+def plot_throughput_jitter_hist2d(data):
+    """
+        Plots the results obtained from simulation files
+        :param data: type dict
+            A dictionary of the simulation results
+        :return: None
+        """
+    entry_key = list(data.keys())[0]
+    fidelities = list(data[entry_key].keys())
+    schedulers = list(sorted(data[entry_key][fidelities[0]]))
+    label_map = {
+        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
+        "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
+        "UniResourceCEDFScheduler": "PTS-CEDF",
+        "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
+        # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
+        # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
+        # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
+    }
+    schedulers = [sched for sched in schedulers if sched in label_map.keys()]
+
+    throughput_wcrt_data = defaultdict(lambda: defaultdict(list))
+    for sched in schedulers:
+        for run_key, run_data in data.items():
+            for fidelity in run_data.keys():
+                try:
+                    throughput_wcrt_data[fidelity][sched].append((run_data[fidelity][sched]["throughput"],
+                                                                  run_data[fidelity][sched]["jitter"]))
+                except Exception:
+                    pass
+
+    font = {'family': 'normal',
+            'size': 10}
+
+    matplotlib.rc('font', **font)
+    fidelities = list(sorted(throughput_wcrt_data.keys()))
+    for i, fidelity in enumerate(fidelities):
+        fig, axs = plt.subplots(1, len(schedulers))
+        all_axes = axs # [ax for ax in axs[i]]
+        for sched, ax in zip(schedulers, all_axes):
+            data = throughput_wcrt_data[fidelity][sched]
+            xdata = [d[0] for d in data]
+            ydata = [d[1] for d in data]
+            weights = np.ones_like(xdata) / float(len(xdata))
+            h = ax.hist2d(xdata, ydata, [60, 20], weights=weights)
+            fig.colorbar(h[3], ax=ax)
+            ax.set_xlabel("Throughput (ebit/s)", fontsize=12)
+            if i == 0:
+                ax.set_title("{}".format(label_map[sched]), fontsize=12)
+            ax.tick_params(axis='both', labelsize=10)
+
+        # Add some text for labels, title and custom x-axis tick labels, etc.
+        all_axes[0].set_ylabel("$F={}$\nJitter (s^2)".format(fidelity), fontsize=12)
+
+        fig.tight_layout()
+        plt.draw()
+
+        def on_resize(event):
+            fig.tight_layout()
+            fig.canvas.draw()
+
+        fig.canvas.mpl_connect('resize_event', on_resize)
+
+        plt.show()
 
 
 def plot_scheduler_rankings(data):
@@ -752,10 +1088,21 @@ def check_res_results():
 
 
 def check_load_results():
-    files = ["load_results.json", "remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in range(2, 7)]
+    files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in range(2, 11)]
+    files += ["remote_results/load_results_high_loads.json"] + ["remote_results/load_results_high_loads_{}.json".format(i) for i in range(2, 5)]
+    files += ["results/load_symm_results/load_results.json"] + ["results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
     results = load_results_from_files(files)
     print("Constructing load simulation results from {} datapoints".format(len(results.keys())))
     plot_load_v_throughput_results(results)
+
+
+def get_entries_for_load(data, load):
+    new_data = defaultdict(dict)
+    for run_key, run_data in data.items():
+        for fid_key, fid_data in run_data.items():
+            if fid_data.get(load):
+                new_data[run_key][fid_key] = fid_data[load]
+    return new_data
 
 
 def check_symm_throughputs():
@@ -763,14 +1110,60 @@ def check_symm_throughputs():
        Checks results for the line graph simulations
        :return: None
        """
-    files = ["symm_results.json", "remote_results/symm_results.json"]
+    # files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
+    # results = load_results_from_files(files)
+    files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in
+                                                    range(2, 11)]
+    files += ["remote_results/load_results_high_loads.json"] + [
+        "remote_results/load_results_high_loads_{}.json".format(i) for i in range(2, 5)]
+    files += ["results/load_symm_results/load_results.json"] + [
+        "results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
+        plot_achieved_throughput(results)
+
+
+def check_symm_wcrts():
+    files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     results = load_results_from_files(files)
-    print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
-    plot_achieved_throughput(results)
+    plot_achieved_wcrts(results)
+
+
+def check_symm_jitters():
+    files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
+    results = load_results_from_files(files)
+    plot_achieved_jitter(results)
+
+
+def check_symm_throughput_wcrt():
+    files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
+    results = load_results_from_files(files)
+    plot_throughput_wcrt_hist2d(results)
+
+
+def check_symm_throughput_jitter():
+    # files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
+    # results = load_results_from_files(files)
+    files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in
+                                                    range(2, 11)]
+    files += ["remote_results/load_results_high_loads.json"] + [
+        "remote_results/load_results_high_loads_{}.json".format(i) for i in range(2, 5)]
+    files += ["results/load_symm_results/load_results.json"] + [
+        "results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
+        plot_throughput_jitter_hist2d(results)
 
 
 def check_symm_scheduler_rankings():
     files = ["symm_results.json", "remote_results/symm_results.json"]
-    results = load_results_from_files(files)
-    print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
+    results = load_results_from_files(files("Constructing symm simulation plots from {} datapoints".format(len(results.keys()))))
     plot_scheduler_rankings(results)
