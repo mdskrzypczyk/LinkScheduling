@@ -42,6 +42,18 @@ def get_schedulers():
     return schedulers
 
 
+def get_rcpsp_schedulers():
+    schedulers = [
+        MultipleResourceBlockCEDFScheduler,
+        MultipleResourceBlockNPEDFScheduler,
+        MultipleResourceNonBlockNPEDFScheduler,
+        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+    ]
+    
+    return schedulers
+
 def get_network_demands(network_topology, num):
     """
     Generates a list of network demands on the provided network topology

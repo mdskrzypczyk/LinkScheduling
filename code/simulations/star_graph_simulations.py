@@ -12,7 +12,7 @@ def main():
     schedulers = get_schedulers()
     results_file = "star_results/star_results_{}.json"
     num_results = 0
-    while num_results < 100:
+    while True:
         print("Starting new run {}".format(num_results))
 
         run_results = {}
