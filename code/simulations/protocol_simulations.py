@@ -12,7 +12,7 @@ from simulations.common import get_protocol_without_rate_constraint
 logger = LSLogger()
 
 font = {'family': 'normal',
-        'size': 18}
+        'size': 14}
 
 matplotlib.rc('font', **font)
 
@@ -60,7 +60,7 @@ def slot_size_selection():
         latency_data[demand] = pdata_lat
         slot_count_data[demand] = pdata_slt
 
-    figure, axes = plt.subplots(nrows=2, ncols=2)
+    fig, axes = plt.subplots(nrows=1, ncols=4)
     for i, destination in enumerate(destinations):
         for demand, pdata in latency_data.items():
             if demand[1] != destination:
@@ -69,8 +69,8 @@ def slot_size_selection():
             xdata = [d[0] for d in spdata]
             ydata = [d[1] for d in spdata]
             label = "F={}".format(round(demand[2], 2))
-            axes[0, i].plot(xdata, ydata, label=label)
-        axes[0, i].set(xlabel="Slot Size(s)", ylabel="Latency (s)")
+            axes[i].plot(xdata, ydata, label=label)
+            axes[i].set(xlabel="Slot Size(s)", ylabel="Latency(s)")
 
         for demand, pdata in slot_count_data.items():
             if demand[1] != destination:
@@ -79,15 +79,21 @@ def slot_size_selection():
             xdata = [d[0] for d in spdata]
             ydata = [d[1] for d in spdata]
             label = "F={}".format(round(demand[2], 2))
-            axes[1, i].plot(xdata, ydata, label=label)
+            axes[i+2].plot(xdata, ydata, label=label)
+            axes[i+2].set(xlabel="Slot Size(s)", ylabel="Num Slots")
 
-        axes[1, i].set(xlabel="Slot Size(s)", ylabel="Num Slots")
+    axes[0].set_title("Link")
+    axes[1].set_title("One Hop")
+    axes[2].set_title("Link")
+    axes[3].set_title("One Hop")
+    handles, labels = axes[-1].get_legend_handles_labels()
+    fig.legend(handles, labels, bbox_to_anchor=(0.96, 0.35), loc='lower right', fontsize=10)
 
-    axes[0, 0].set_title("Link")
-    axes[0, 1].set_title("One Hop")
-    for ax in axes.flat:
-        ax.label_outer()
-    plt.legend()
+    def on_resize(event):
+        fig.tight_layout()
+        fig.canvas.draw()
+
+    fig.canvas.mpl_connect('resize_event', on_resize)
     plt.autoscale()
     plt.show()
 
