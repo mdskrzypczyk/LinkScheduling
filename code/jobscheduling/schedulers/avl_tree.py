@@ -278,8 +278,28 @@ class AVLTree:
         if self.node is None:
             return None
 
+        # Apply notes
         if self.node.note:
-            self.node.data[1] = max(self.node.data[1], self.node.note)
+            # Only update subtree notes if sj_max > s_max_note
+            if self.node.data[1] > self.node.note:
+                if self.node.left.node is not None:
+                    # If no previous note, set it
+                    if self.node.left.node.note is not None:
+                        self.node.left.note = self.node.note
+                    # Otherwise merge and set to the minimum note
+                    else:
+                        self.node.left.note = min(self.node.left.node.note, self.node.note)
+
+                if self.node.right.node is not None:
+                    # If no previous note, set it
+                    if self.node.right.node.note is not None:
+                        self.node.right.note = self.node.note
+                    # Otherwise merge and set to the minimum note
+                    else:
+                        self.node.right.note = min(self.node.right.node.note, self.node.note)
+
+            # If the note is present we update sj_max for this node
+            self.node.data[1] = min(self.node.data[1], self.node.note)
 
         if self.node and self.node.left.node is None:
             return self.node

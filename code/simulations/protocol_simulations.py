@@ -18,8 +18,14 @@ matplotlib.rc('font', **font)
 
 
 def slot_size_selection():
+    """
+    Plots the latency and number of slots needed to encode repeater protocols for
+    a few different levels of fidelity for both cases when two nodes are connected
+    or separated by two hops
+    :return: None
+    """
     link_length = 5
-    topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=5, link_length=link_length)
+    topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=link_length)
     protocols = []
 
     source = '0'
@@ -62,32 +68,42 @@ def slot_size_selection():
 
     fig, axes = plt.subplots(nrows=1, ncols=4)
     for i, destination in enumerate(destinations):
-        for demand, pdata in latency_data.items():
+        fmts = {
+            0.6: "-",
+            0.7: "--",
+            0.8: "-.",
+            0.9: ":"
+        }
+        for demand in latency_data.keys():
             if demand[1] != destination:
                 continue
+            pdata = latency_data[demand]
             spdata = sorted(pdata)
             xdata = [d[0] for d in spdata]
             ydata = [d[1] for d in spdata]
-            label = "F={}".format(round(demand[2], 2))
-            axes[i].plot(xdata, ydata, label=label)
+            fidelity = round(demand[2], 2)
+            label = "F={}".format(fidelity)
+            axes[i].plot(xdata, ydata, linestyle=fmts[fidelity], label=label)
             axes[i].set(xlabel="Slot Size(s)", ylabel="Latency(s)")
 
-        for demand, pdata in slot_count_data.items():
+        for demand in slot_count_data.keys():
             if demand[1] != destination:
                 continue
+            pdata = slot_count_data[demand]
             spdata = sorted(pdata)
             xdata = [d[0] for d in spdata]
             ydata = [d[1] for d in spdata]
-            label = "F={}".format(round(demand[2], 2))
-            axes[i+2].plot(xdata, ydata, label=label)
+            fidelity = round(demand[2], 2)
+            label = "F={}".format(fidelity)
+            axes[i+2].plot(xdata, ydata, linestyle=fmts[fidelity], label=label)
             axes[i+2].set(xlabel="Slot Size(s)", ylabel="Num Slots")
 
     axes[0].set_title("Link")
-    axes[1].set_title("One Hop")
+    axes[1].set_title("Two Hop")
     axes[2].set_title("Link")
-    axes[3].set_title("One Hop")
+    axes[3].set_title("Two Hop")
     handles, labels = axes[-1].get_legend_handles_labels()
-    fig.legend(handles, labels, bbox_to_anchor=(0.96, 0.35), loc='lower right', fontsize=10)
+    fig.legend(handles, labels, bbox_to_anchor=(0.96, 0.35), loc='lower right', fontsize=14)
 
     def on_resize(event):
         fig.tight_layout()
@@ -99,6 +115,11 @@ def slot_size_selection():
 
 
 def throughput_vs_chain_length():
+    """
+    Plots the achieved rate of a quantum repeater protocol for different levels of fidelity
+    and path length between end nodes
+    :return: None
+    """
     num_network_nodes = 6
     link_length = 5
     topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=5, link_length=link_length)
@@ -155,6 +176,10 @@ def throughput_vs_chain_length():
 
 
 def throughput_vs_link_length():
+    """
+    Plots the achieved rate of a quantum repeater protocol for different link lengths for a chain of 3 nodes
+    :return: None
+    """
     link_lengths = [5 + 5 * i for i in range(10)]
     fidelities = [0.55 + 0.05 * i for i in range(9)]
     latency_data = {}
@@ -207,6 +232,10 @@ def throughput_vs_link_length():
 
 
 def find_link_capabilities():
+    """
+    Function for checking what kinds of link capabilities end up in quantum repeater protocols generated
+    :return: None
+    """
     num_network_nodes = 6
     link_lengths = [5 + 5 * i for i in range(10)]
     fidelities = [0.55 + 0.05 * i for i in range(9)]
@@ -235,6 +264,10 @@ def find_link_capabilities():
 
 
 def throughput_vs_resources():
+    """
+    Plots the achieved rate of a quantum repeater protocol for different combinations of # comm q/# storage q
+    :return: None
+    """
     link_length = 5
     num_comm_qubits = [1, 2, 4]
     num_storage_qubits = [3, 4, 5]
@@ -295,6 +328,10 @@ def throughput_vs_resources():
 
 
 def visualize_protocol_scheduling():
+    """
+    Function for visualizing the temporal scheduling of a repeater protocol under different resources
+    :return: None
+    """
     line_topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=5)
     demand = ('0', '4', 0.6, 0.01)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
@@ -324,6 +361,11 @@ def visualize_protocol_scheduling():
 
 
 def visualize_scheduled_protocols():
+    """
+    Function for visualizing the temporal scheduling of a repeater protocol under different path lengths, resource
+    counts, and link lengths
+    :return: None
+    """
     # Iterate over path length
     max_num_nodes = 6
     max_num_resources = 8
@@ -360,9 +402,9 @@ def visualize_scheduled_protocols():
 
 
 if __name__ == "__main__":
-    # slot_size_selection()
+    slot_size_selection()
     # throughput_vs_chain_length()
     # throughput_vs_link_length()
     # throughput_vs_resources()
-    visualize_protocol_scheduling()
+    # visualize_protocol_scheduling()
     # find_link_capabilities()

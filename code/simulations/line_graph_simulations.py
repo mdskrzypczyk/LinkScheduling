@@ -9,7 +9,7 @@ def main():
     topology = gen_line_topology()
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "line_results/line_test_results_{}.json"
+    results_file = "line_test_results_{}.json"
     num_results = 0
     while True:
         print("Starting new run {}".format(num_results))
