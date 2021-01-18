@@ -29,15 +29,15 @@ def get_schedulers():
         List of scheduler classes to be used
     """
     schedulers = [
-        UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
-        UniResourceBlockNPEDFScheduler,
+        # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
+        # UniResourceBlockNPEDFScheduler,
         UniResourceCEDFScheduler,
         MultipleResourceBlockCEDFScheduler,
-        MultipleResourceBlockNPEDFScheduler,
-        MultipleResourceNonBlockNPEDFScheduler,
-        MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
-        MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
-        MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+        # MultipleResourceBlockNPEDFScheduler,
+        # MultipleResourceNonBlockNPEDFScheduler,
+        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
     ]
     return schedulers
 
@@ -368,6 +368,7 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         List of PeriodicDAGTasks representing the concrete repeater protocols
     """
     taskset = []
+    task_names = []
     num_succ = 0
     Gcq, G = topology
     end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
@@ -429,6 +430,9 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 
             demand = (source, destination, fidelity, new_rate)
             scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            while scheduled_task.name in task_names:
+                scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            task_names.append(scheduled_task.name)
             scheduled_task.p = ceil(1 / new_rate / slot_size)
             asap_dec, alap_dec, shift_dec = decoherence_times
             logger.info("Results for {}:".format(demand))
@@ -536,7 +540,8 @@ def get_fixed_load_taskset(topology, fidelity, load, slot_size):
 def load_results(filename):
     """
     Loads results from a file
-    :param filename:
+    :param filename: type str
+        The name of the file to load results from
     :return:
     """
     if exists(filename):
@@ -549,10 +554,30 @@ def load_results(filename):
 
 
 def write_results(filename, results):
+    """
+    Helper functions for recording simulation results
+    :param filename: type str
+        The file we are writing results to
+    :param results: type dict
+        The results to write to the file
+    :return: None
+    """
     json.dump(results, open(filename, 'w'), indent=4, sort_keys=True)
 
 
 def schedule_taskset(scheduler, taskset, topology, slot_size):
+    """
+    Helper functions for running simulations
+    :param scheduler: type Scheduler
+        An instance of the scheduler class we wish to use
+    :param taskset: type list
+        A list of DAGTasks to schedule
+    :param topology: type Graph
+        A graph of th enetwork topology to schedule on
+    :param slot_size: type float
+        The size of a slot in the schedule in seconds
+    :return: None
+    """
     try:
         results_key = type(scheduler).__name__
 
@@ -629,4 +654,6 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
 
     except Exception as err:
         logger.exception("Error occurred while scheduling: {}".format(err))
+        import pdb
+        pdb.set_trace()
 

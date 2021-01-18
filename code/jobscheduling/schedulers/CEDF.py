@@ -157,8 +157,8 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
 
             j_starts = [(float('inf'), float('inf'), float('inf'), task_i, ck_i)]
             for resource in taskset_lookup[original_taskname].resources:
-                sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
 
+                sj_min, sj_max, task_j, ck_j = critical_queue[resource].minimum().data
                 if task_j != task_i:
                     j_start = self.get_start_time(task_j, global_resource_occupations, node_resources,
                                                   max([sj_min, last_start]))
@@ -229,9 +229,6 @@ class MultiResourceBlockCEDFScheduler(Scheduler):
                     for resource in task_i.resources:
                         resource_interval_tree = IntervalTree(Interval(begin, end) for begin, end in
                                                               resource_intervals[resource])
-                        if global_resource_occupations[resource] & resource_interval_tree:
-                            import pdb
-                            pdb.set_trace()
                         global_resource_occupations[resource] |= resource_interval_tree
                         global_resource_occupations[resource].chop(0, min_chop)
                         global_resource_occupations[resource].merge_overlaps(strict=False)

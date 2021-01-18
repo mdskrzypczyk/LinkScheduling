@@ -44,8 +44,6 @@ def verify_schedule(original_taskset, schedule):
             offset_itree = IntervalTree([Interval(i.begin + offset, i.end + offset, t) for i in itree])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
-                    import pdb
-                    pdb.set_trace()
                     return False
                 global_resource_intervals[resource].add(interval)
 
@@ -80,8 +78,7 @@ def verify_budget_schedule(original_taskset, schedule):
 
         task_exec_times[instance_name] += end - start
         if task_exec_times[instance_name] > taskset_lookup[original_taskname].c:
-            import pdb
-            pdb.set_trace()
+            return False
 
         elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
             task_exec_times.pop(instance_name)
@@ -104,15 +101,11 @@ def verify_budget_schedule(original_taskset, schedule):
                                          if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
-                    import pdb
-                    pdb.set_trace()
                     return False
                 global_resource_intervals[resource].add(interval)
 
     # Check that the start and end periods align with the tasks runtime
     if task_exec_times != {}:
-        import pdb
-        pdb.set_trace()
         return False
 
     return True
@@ -147,8 +140,7 @@ def verify_segmented_budget_schedule(original_taskset, schedule):
 
         task_exec_times[instance_name] += end - start
         if task_exec_times[instance_name] > taskset_lookup[original_taskname].c:
-            import pdb
-            pdb.set_trace()
+            return False
 
         elif task_exec_times[instance_name] == taskset_lookup[original_taskname].c:
             task_exec_times.pop(instance_name)
@@ -171,15 +163,11 @@ def verify_segmented_budget_schedule(original_taskset, schedule):
                                          if start <= i.begin + offset < end and start < i.end + offset <= end])
             for interval in offset_itree:
                 if global_resource_intervals[resource].overlap(interval.begin, interval.end):
-                    import pdb
-                    pdb.set_trace()
                     return False
                 global_resource_intervals[resource].add(interval)
 
     # Check that the start and end periods align with the tasks runtime
     if task_exec_times != {}:
-        import pdb
-        pdb.set_trace()
         return False
 
     return True

@@ -343,6 +343,12 @@ def plot_pb_results(data):
 
 
 def plot_load_v_throughput_results(data):
+    """
+    Plots the achieved throughput as a function of the input load
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     fidelities = ['0.55', '0.65', '0.75', '0.85']
@@ -414,7 +420,7 @@ def plot_load_v_throughput_results(data):
 
     # fig.delaxes(all_axes[-1])
     handles, labels = all_axes[-1].get_legend_handles_labels()
-    fig.legend(handles, labels, bbox_to_anchor=(0.96, 0.35), loc='lower right', fontsize=10)
+    # fig.legend(handles, labels, bbox_to_anchor=(1, 0.5), loc='lower right', fontsize=10)
 
     def on_resize(event):
         fig.tight_layout()
@@ -426,7 +432,7 @@ def plot_load_v_throughput_results(data):
 
 def check_star_results():
     """
-    Checks results for the star graph simulations
+    Checks throughput results for the star graph simulations
     :return: None
     """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
@@ -436,6 +442,10 @@ def check_star_results():
 
 
 def check_star_throughputs():
+    """
+    Checks throughput CDFs for the star graph simulations
+    :return: None
+    """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
     files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
     results = load_results_from_files(files)
@@ -443,6 +453,10 @@ def check_star_throughputs():
 
 
 def check_star_wcrts():
+    """
+    Checks WCRTs for the star graph simulations
+    :return: None
+    """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
     files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
     results = load_results_from_files(files)
@@ -450,6 +464,10 @@ def check_star_wcrts():
 
 
 def check_star_jitters():
+    """
+    Checks jitter for the star graph simulations
+    :return: None
+    """
     files = ["results/star_results/{}".format(file) for file in listdir("results/star_results") if "1c3s" in file]
     files += ["remote_results/star_results/{}".format(file) for file in listdir("remote_results/star_results")]
     results = load_results_from_files(files)
@@ -458,7 +476,7 @@ def check_star_jitters():
 
 def check_H_results():
     """
-    Checks results for the H graph simulations
+    Checks throughput results for the H graph simulations
     :return: None
     """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
@@ -468,6 +486,10 @@ def check_H_results():
 
 
 def check_H_throughputs():
+    """
+    Checks throughput CDFs for the H graph simulations
+    :return: None
+    """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
     files += ["remote_results/H_results.json"]
     results = load_results_from_files(files)
@@ -475,6 +497,10 @@ def check_H_throughputs():
 
 
 def check_H_wcrts():
+    """
+    Checks WCRT results for the H graph simulations
+    :return: None
+    """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
     files += ["remote_results/H_results.json"]
     results = load_results_from_files(files)
@@ -482,6 +508,10 @@ def check_H_wcrts():
 
 
 def check_H_jitters():
+    """
+    Checks jitter results for the H graph simulations
+    :return: None
+    """
     files = ["results/H_results/{}".format(file) for file in listdir("results/H_results")]
     files += ["remote_results/H_results.json"]
     results = load_results_from_files(files)
@@ -490,7 +520,7 @@ def check_H_jitters():
 
 def check_line_results():
     """
-    Checks results for the line graph simulations
+    Checks throughput results for the line graph simulations
     :return: None
     """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
@@ -500,6 +530,10 @@ def check_line_results():
 
 
 def check_line_throughputs():
+    """
+    Checks throughput CDFs for the line graph simulations
+    :return: None
+    """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
     files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
     results = load_results_from_files(files)
@@ -507,6 +541,10 @@ def check_line_throughputs():
 
 
 def check_line_wcrts():
+    """
+    Checks WCRT results for the line graph simulations
+    :return: None
+    """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
     files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
     results = load_results_from_files(files)
@@ -514,6 +552,10 @@ def check_line_wcrts():
 
 
 def check_line_jitters():
+    """
+    Checks jitter results for the line graph simulations
+    :return: None
+    """
     files = ["results/line_results/{}".format(file) for file in listdir("results/line_results")]
     files += ["remote_results/line_results/{}".format(file) for file in listdir("remote_results/line_results")]
     results = load_results_from_files(files)
@@ -626,11 +668,11 @@ def check_star_res_results():
 
 def plot_achieved_throughput(data):
     """
-        Plots the results obtained from simulation files
-        :param data: type dict
-            A dictionary of the simulation results
-        :return: None
-        """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     fidelities = ["0.55", "0.65", "0.75", "0.85"]
@@ -693,11 +735,11 @@ def plot_achieved_throughput(data):
 
 def plot_achieved_wcrts(data):
     """
-        Plots the results obtained from simulation files
-        :param data: type dict
-            A dictionary of the simulation results
-        :return: None
-        """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
@@ -749,11 +791,11 @@ def plot_achieved_wcrts(data):
 
 def plot_achieved_jitter(data):
     """
-        Plots the results obtained from simulation files
-        :param data: type dict
-            A dictionary of the simulation results
-        :return: None
-        """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
@@ -805,11 +847,11 @@ def plot_achieved_jitter(data):
 
 def plot_throughput_wcrt_hist2d(data):
     """
-        Plots the results obtained from simulation files
-        :param data: type dict
-            A dictionary of the simulation results
-        :return: None
-        """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
@@ -869,11 +911,11 @@ def plot_throughput_wcrt_hist2d(data):
 
 def plot_throughput_jitter_hist2d(data):
     """
-        Plots the results obtained from simulation files
-        :param data: type dict
-            A dictionary of the simulation results
-        :return: None
-        """
+    Plots the results obtained from simulation files
+    :param data: type dict
+        A dictionary of the simulation results
+    :return: None
+    """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
@@ -897,7 +939,8 @@ def plot_throughput_jitter_hist2d(data):
                     throughput_wcrt_data[fidelity][sched].append((run_data[fidelity][sched]["throughput"],
                                                                   run_data[fidelity][sched]["jitter"]))
                 except Exception:
-                    pass
+                    import pdb
+                    pdb.set_trace()
 
     font = {'family': 'normal',
             'size': 10}
@@ -906,23 +949,33 @@ def plot_throughput_jitter_hist2d(data):
     fidelities = list(sorted(throughput_wcrt_data.keys()))
     for i, fidelity in enumerate(fidelities):
         fig, axs = plt.subplots(1, len(schedulers))
-        all_axes = axs # [ax for ax in axs[i]]
+        all_axes = axs  # [ax for ax in axs[i]]
         for sched, ax in zip(schedulers, all_axes):
             data = throughput_wcrt_data[fidelity][sched]
             xdata = [d[0] for d in data]
             ydata = [d[1] for d in data]
             weights = np.ones_like(xdata) / float(len(xdata))
-            h = ax.hist2d(xdata, ydata, [60, 20], weights=weights)
+            h = ax.hist2d(xdata, ydata, bins=30, norm=matplotlib.colors.LogNorm(), cmap=plt.cm.Greys)
             fig.colorbar(h[3], ax=ax)
             ax.set_xlabel("Throughput (ebit/s)", fontsize=12)
-            if i == 0:
-                ax.set_title("{}".format(label_map[sched]), fontsize=12)
+            ax.set_title("{}".format(label_map[sched]), fontsize=12)
             ax.tick_params(axis='both', labelsize=10)
 
-        # Add some text for labels, title and custom x-axis tick labels, etc.
-        all_axes[0].set_ylabel("$F={}$\nJitter (s^2)".format(fidelity), fontsize=12)
-
         fig.tight_layout()
+
+        # Add ylabel text
+        leftmost_label = "$F={}$\nJitter (s^2)".format(fidelity)
+        leftmost_offset = all_axes[0].yaxis.get_offset_text().get_text()
+        if leftmost_offset:
+            leftmost_label += "\n{}".format(leftmost_offset)
+        all_axes[0].set_ylabel(leftmost_label, fontsize=12)
+
+        for ax in all_axes[1:]:
+            offset = ax.yaxis.get_offset_text().get_text()
+            if offset:
+                ax.yaxis.set_label_text(offset)
+                ax.yaxis.offsetText.set_visible(False)
+
         plt.draw()
 
         def on_resize(event):
@@ -1088,6 +1141,10 @@ def check_res_results():
 
 
 def check_load_results():
+    """
+    Checks load v throughput results for the symm graph simulations
+    :return: None
+    """
     files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in range(2, 11)]
     files += ["remote_results/load_results_high_loads.json"] + ["remote_results/load_results_high_loads_{}.json".format(i) for i in range(2, 5)]
     files += ["results/load_symm_results/load_results.json"] + ["results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
@@ -1097,6 +1154,14 @@ def check_load_results():
 
 
 def get_entries_for_load(data, load):
+    """
+    Unpacks the data from the load controlled simulations
+    :param data: type dict
+        A dictionary of the simulation results
+    :param data: type str
+        The load to unpack results for
+    :return: None
+    """
     new_data = defaultdict(dict)
     for run_key, run_data in data.items():
         for fid_key, fid_data in run_data.items():
@@ -1107,9 +1172,9 @@ def get_entries_for_load(data, load):
 
 def check_symm_throughputs():
     """
-       Checks results for the line graph simulations
-       :return: None
-       """
+   Checks results for the line graph simulations
+   :return: None
+   """
     # files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     # results = load_results_from_files(files)
     files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in
@@ -1128,24 +1193,40 @@ def check_symm_throughputs():
 
 
 def check_symm_wcrts():
+    """
+    Plots the achieved wcrt for the symm topology
+    :return: None
+    """
     files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     results = load_results_from_files(files)
     plot_achieved_wcrts(results)
 
 
 def check_symm_jitters():
+    """
+    Plots the achieved jitter for the symm topology
+    :return: None
+    """
     files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     results = load_results_from_files(files)
     plot_achieved_jitter(results)
 
 
 def check_symm_throughput_wcrt():
+    """
+    Plots a 2D histogram of achieved throughput/wcrt pairs for the symm topology
+    :return: None
+    """
     files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     results = load_results_from_files(files)
     plot_throughput_wcrt_hist2d(results)
 
 
 def check_symm_throughput_jitter():
+    """
+    Plots a 2D histogram of achieved throughput/jitter pairs based on load for the symm topology
+    :return: None
+    """
     # files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
     # results = load_results_from_files(files)
     files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in
@@ -1156,14 +1237,129 @@ def check_symm_throughput_jitter():
         "results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
     loaded_results = load_results_from_files(files)
     for load in [str(i) for i in range(5, 55)]:
-        import pdb
-        pdb.set_trace()
         results = get_entries_for_load(loaded_results, load)
         print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
         plot_throughput_jitter_hist2d(results)
 
 
-def check_symm_scheduler_rankings():
-    files = ["symm_results.json", "remote_results/symm_results.json"]
-    results = load_results_from_files(files("Constructing symm simulation plots from {} datapoints".format(len(results.keys()))))
-    plot_scheduler_rankings(results)
+def check_star_load_results():
+    """
+    Checks the load v throughput results from the star topology
+    :return: None
+    """
+    files = ["remote_results/star_load_results{}.json".format(i) for i in [0, 2, 3, 4, 5]]
+    results = load_results_from_files(files)
+    print("Constructing star load simulation results from {} datapoints".format(len(results.keys())))
+    plot_load_v_throughput_results(results)
+
+
+def check_star_throughput_cdf():
+    """
+   Checks throughput CDFs based on load for the line graph simulations
+   :return: None
+   """
+    files = ["remote_results/star_load_results{}.json".format(i) for i in [0, 2, 3, 4, 5]]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing star simulation plots from {} datapoints".format(len(results.keys())))
+        plot_achieved_throughput(results)
+
+
+def check_star_throughput_jitter():
+    """
+    Plots a 2D histogram of achieved throughput/jitter pairs based on load for the star topology
+    :return: None
+    """
+    files = ["remote_results/star_load_results{}.json".format(i) for i in [0, 2, 3, 4, 5]]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing star simulation plots from {} datapoints".format(len(results.keys())))
+        plot_throughput_jitter_hist2d(get_entries_for_load(loaded_results, load))
+
+
+def check_H_load_results():
+    """
+    Checks the load v throughput results for the H topology
+    :return: None
+    """
+    files = ["remote_results/H_load_results{}.json".format(i) for i in range(21) if i != 18]
+    results = load_results_from_files(files)
+    print("Constructing H load simulation results from {} datapoints".format(len(results.keys())))
+    plot_load_v_throughput_results(results)
+
+
+def check_H_throughput_cdf():
+    """
+    Checks the throughput CDFs for the H graph simulations
+    :return: None
+    """
+    files = ["remote_results/H_load_results{}.json".format(i) for i in range(21) if i != 18]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing H simulation plots from {} datapoints".format(len(results.keys())))
+        plot_achieved_throughput(results)
+
+
+def check_H_throughput_jitter():
+    """
+    Plots the achieved throughput/jitter pairs based on load for the H graph simulations
+    :return: None
+    """
+    files = ["remote_results/H_load_results{}.json".format(i) for i in range(21) if i != 18]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing H simulation plots from {} datapoints".format(len(results.keys())))
+        plot_throughput_jitter_hist2d(results)
+
+
+def check_line_load_results():
+    """
+    Checks the load v throughput results for the line topology
+    :return: None
+    """
+    files = ["remote_results/line_load_results{}.json".format(i) for i in [0, 1, 2, 3, 4, 5]]
+    results = load_results_from_files(files)
+    print("Constructing line load simulation results from {} datapoints".format(len(results.keys())))
+    plot_load_v_throughput_results(results)
+
+
+def check_line_throughput_cdf():
+    """
+    Checks the throughput CDFs based on load for the line graph simulations
+    :return: None
+    """
+    files = ["remote_results/line_load_results{}.json".format(i) for i in [0, 1, 2, 3, 4, 5]]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing line simulation plots from {} datapoints".format(len(results.keys())))
+        plot_achieved_throughput(results)
+
+
+def check_line_throughput_jitter():
+    """
+    Plots the achieved throughput/jitter pairs based on load for the line graph simulations
+    :return: None
+    """
+    files = ["remote_results/line_load_results{}.json".format(i) for i in [0, 1, 2, 3, 4, 5]]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing line simulation plots from {} datapoints".format(len(results.keys())))
+        plot_throughput_jitter_hist2d(results)
