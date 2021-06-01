@@ -41,15 +41,13 @@ def slot_size_selection():
                 protocols.append((demand, protocol))
 
     # Increments of 4ms
-    slot_sizes = sorted(list(set([0.004 * i for i in range(1, 50)])))
+    slot_sizes = sorted(list(set([0.0001 * i for i in range(1, 200)])))
     latency_data = {}
     slot_count_data = {}
     for demand, protocol in protocols:
         pdata_lat = []
         pdata_slt = []
-        print("Processing demand {}".format(demand))
         for slot_size in slot_sizes:
-            print("Processing slot size {}".format(slot_size))
             task = convert_protocol_to_task(demand, protocol, slot_size)
             task, dec, corr = schedule_dag_for_resources(task, topology)
             asap_d, alap_d, shift_d = dec
@@ -63,16 +61,18 @@ def slot_size_selection():
             task_latency = num_slots * slot_size
             pdata_lat.append((slot_size, task_latency))
             pdata_slt.append((slot_size, num_slots))
+            s, d, f, r = demand
+            print("Hops: {}, Fidelity: {}, Slot Size: {}, Latency: {}".format(d, f, slot_size, task_latency))
         latency_data[demand] = pdata_lat
         slot_count_data[demand] = pdata_slt
 
     fig, axes = plt.subplots(nrows=1, ncols=4)
     for i, destination in enumerate(destinations):
         fmts = {
-            0.6: "-",
-            0.7: "--",
-            0.8: "-.",
-            0.9: ":"
+            0.6: ("-.", "0.8"),
+            0.7: ("--", "0.6"),
+            0.8: ("-", "0.4"),
+            0.9: ("-", "0.2")
         }
         for demand in latency_data.keys():
             if demand[1] != destination:
@@ -83,7 +83,8 @@ def slot_size_selection():
             ydata = [d[1] for d in spdata]
             fidelity = round(demand[2], 2)
             label = "F={}".format(fidelity)
-            axes[i].plot(xdata, ydata, linestyle=fmts[fidelity], label=label)
+            fmt, c = fmts[fidelity]
+            axes[i].plot(xdata, ydata, linestyle=fmt, color=c, label=label)
             axes[i].set(xlabel="Slot Size(s)", ylabel="Latency(s)")
 
         for demand in slot_count_data.keys():
@@ -95,7 +96,8 @@ def slot_size_selection():
             ydata = [d[1] for d in spdata]
             fidelity = round(demand[2], 2)
             label = "F={}".format(fidelity)
-            axes[i+2].plot(xdata, ydata, linestyle=fmts[fidelity], label=label)
+            fmt, c = fmts[fidelity]
+            axes[i+2].plot(xdata, ydata, linestyle=fmt, color=c, label=label)
             axes[i+2].set(xlabel="Slot Size(s)", ylabel="Num Slots")
 
     axes[0].set_title("Link")
@@ -120,28 +122,25 @@ def throughput_vs_chain_length():
     and path length between end nodes
     :return: None
     """
-    num_network_nodes = 6
+    num_network_nodes = 4
     link_length = 5
     topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=5, link_length=link_length)
     protocols = []
 
     source = '0'
-    destinations = [str(i) for i in range(2, num_network_nodes)]
-    fidelities = [0.55 + 0.05 * i for i in range(9)]
+    destinations = ['3'] # str(i) for i in range(3, num_network_nodes)]
+    fidelities = [0.55 + 0.1 * i for i in range(4)]
     for destination in destinations:
         for fidelity in fidelities:
             demand = (source, destination, fidelity, 1)
             protocol = get_protocol_without_rate_constraint(topology, demand)
 
             if protocol:
-                print("Found protocol between {} and {} with fidelity {} and rate {}".format(source, destination,
-                                                                                             protocol.F, protocol.R))
                 protocols.append((demand, protocol))
             else:
                 protocols.append((demand, None))
 
-    # Increments of 4ms
-    slot_size = 0.01
+    slot_size = 0.0005
     latency_data = {}
     for demand, protocol in protocols:
         print("Processing demand {}".format(demand))
@@ -160,6 +159,8 @@ def throughput_vs_chain_length():
             pdb.set_trace()
         task_latency = task.c * slot_size
         latency_data[demand] = 1 / task_latency
+        s,d,f,r = demand
+        print("Found protocol between {} and {} with fidelity {}, latency {}s, rate {}".format(s, d, f, task_latency, latency_data[demand]))
 
     for i, destination in enumerate(destinations):
         xdata = fidelities
@@ -333,16 +334,18 @@ def visualize_protocol_scheduling():
     :return: None
     """
     line_topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=5)
-    demand = ('0', '4', 0.6, 0.01)
+    demand = ('0', '3', 0.55, 0.01)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
     task = convert_protocol_to_task(demand, protocol, 0.01)
     asap_latency, asap_decoherence, asap_correct = schedule_dag_asap(task, line_topology)
     alap_latency, alap_decoherence, alap_correct = convert_task_to_alap(task)
     shift_latency, shift_decoherence, shift_correct = shift_distillations_and_swaps(task)
-    draw_DAG(task)
+    # draw_DAG(task)
+    # import pdb
+    # pdb.set_trace()
+    protocol_timeline(task)
     import pdb
     pdb.set_trace()
-    protocol_timeline(task)
     demand = ('0', '2', 0.8, 0.01)
     line_topology = gen_line_topology(num_end_node_comm_q=2, num_end_node_storage_q=3, link_length=5)
     protocol = get_protocol_without_rate_constraint(line_topology, demand)
@@ -402,8 +405,8 @@ def visualize_scheduled_protocols():
 
 
 if __name__ == "__main__":
-    slot_size_selection()
-    # throughput_vs_chain_length()
+    # slot_size_selection()
+    throughput_vs_chain_length()
     # throughput_vs_link_length()
     # throughput_vs_resources()
     # visualize_protocol_scheduling()

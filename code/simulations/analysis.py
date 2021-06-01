@@ -139,8 +139,7 @@ def plot_results(data):
                             diff = run_data[fidelity][sched][metric] - run_data[fidelity][baseline][metric]
                             increase[fidelity][sched].append(100 * diff / run_data[fidelity][baseline][metric])
                     except Exception:
-                        import pdb
-                        pdb.set_trace()
+                        continue
 
         for sched in schedulers:
             for fidelity in fidelities:
@@ -269,8 +268,7 @@ def plot_pb_results(data):
                             diff = run_data[fidelity][sched][metric] - run_data[fidelity][baseline][metric]
                             increase[fidelity][sched].append(100 * diff / run_data[fidelity][baseline][metric])
                     except Exception:
-                        import pdb
-                        pdb.set_trace()
+                        continue
 
         for sched in schedulers:
             for fidelity in fidelities:
@@ -387,27 +385,29 @@ def plot_load_v_throughput_results(data):
                                 means[true_load][sched].append(achieved_throughput)
                                 count[true_load][sched] += 1
                         except Exception as err:
-                            # import pdb
-                            # pdb.set_trace()
                             continue
 
         for sched in schedulers:
             for load in sorted(means.keys()):
                 errs[load][sched] = np.std(means[load][sched])
-                if any([float(throughput) > float(load) for throughput in means[load][sched]]):
-                    import pdb
-                    pdb.set_trace()
                 means[load][sched] = np.mean(means[load][sched])
 
         for sched in schedulers:
             print(sched, [(load, count[load][sched], means[load][sched]) for load in sorted(means.keys())])
 
-        fmts = ["-o", "--P", "-.*", ":X", "-D", "--s"]
-        for sched, fmt in zip(schedulers, fmts):
+        fmt_map = {
+            "MultipleResourceBlockCEDFScheduler": ("-", '0.7'),
+            "MultipleResourceNonBlockNPEDFScheduler": (":", '0.4'),
+            "MultipleResourceBlockNPEDFScheduler": ("-.", '0.1'),
+            "UniResourceCEDFScheduler": ("--", '0.1'),
+            "UniResourceBlockNPEDFScheduler": ("-", '0.4')
+        }
+        for sched in schedulers:
+            fmt, c = fmt_map[sched]
             xdata = list(sorted(means.keys()))
             ydata = [means[load][sched] for load in xdata]
             yerr = [errs[load][sched] for load in xdata]
-            (_, caps, _) = ax.errorbar(xdata, ydata, yerr, fmt=fmt, fillstyle='none', label=label_map[sched], markersize=3, capsize=2)
+            (_, caps, _) = ax.errorbar(xdata, ydata, yerr, fmt=fmt, color=c, fillstyle='none', label=label_map[sched], markersize=3, capsize=2)
             for cap in caps:
                 cap.set_markeredgewidth(2)
 
@@ -420,7 +420,7 @@ def plot_load_v_throughput_results(data):
 
     # fig.delaxes(all_axes[-1])
     handles, labels = all_axes[-1].get_legend_handles_labels()
-    # fig.legend(handles, labels, bbox_to_anchor=(1, 0.5), loc='lower right', fontsize=10)
+    # fig.legend(handles, labels, bbox_to_anchor=(1, 0.35), loc='lower right', fontsize=10)
 
     def on_resize(event):
         fig.tight_layout()
@@ -610,8 +610,7 @@ def check_star_res_results():
                     means[fidelity][sched].append(run_data[fidelity][sched][metric])
 
                 except Exception:
-                    import pdb
-                    pdb.set_trace()
+                    continue
 
         for fidelity in fidelities:
             errs[fidelity][sched] = np.std(means[fidelity][sched])
@@ -687,6 +686,13 @@ def plot_achieved_throughput(data):
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
         # "MultipleResourceConsiderateSegmentPreemptionBudgetScheduler": "RCPSP-PB-1s"
     }
+    fmt_map = {
+        "MultipleResourceBlockCEDFScheduler": ("-", '0.7'),
+        "MultipleResourceNonBlockNPEDFScheduler": (":", '0.4'),
+        "MultipleResourceBlockNPEDFScheduler": ("-.", '0.1'),
+        "UniResourceCEDFScheduler": ("--", '0.1'),
+        "UniResourceBlockNPEDFScheduler": ("-", '0.4')
+    }
     schedulers = [sched for sched in schedulers if sched in label_map.keys()]
     for metric in ["throughput"]:
         achieved_throughput = defaultdict(lambda: defaultdict(list))
@@ -702,15 +708,15 @@ def plot_achieved_throughput(data):
         fig, axs = plt.subplots(1, 4)
         all_axes = axs  # [ax for ax_list in axs for ax in ax_list]
         for i, (fidelity, ax) in enumerate(zip(fidelities, all_axes)):
-            fmts = ["-", "--", "-.", ":", "-", "--"]
-            for sched, fmt in zip(schedulers, fmts):
+            for sched in schedulers:
+                fmt, c = fmt_map[sched]
                 throughputs = list(sorted(achieved_throughput[fidelity][sched] + [0]))
                 throughput_counts = defaultdict(int)
                 for throughput in throughputs:
                     throughput_counts[throughput] += 1
                 xdata = list(sorted(throughput_counts.keys()))
                 ydata = [throughput_counts[x] / len(throughputs) for x in xdata]
-                ax.hist(throughputs, len(xdata), linestyle=fmt, density=True, histtype='step', cumulative=True, label=label_map[sched])
+                ax.hist(throughputs, len(xdata), linestyle=fmt, color=c, density=True, histtype='step', cumulative=True, label=label_map[sched])
 
             # Add some text for labels, title and custom x-axis tick labels, etc.
             ax.set_xlabel("Throughput (ebit/s)", fontsize=12)
@@ -939,8 +945,7 @@ def plot_throughput_jitter_hist2d(data):
                     throughput_wcrt_data[fidelity][sched].append((run_data[fidelity][sched]["throughput"],
                                                                   run_data[fidelity][sched]["jitter"]))
                 except Exception:
-                    import pdb
-                    pdb.set_trace()
+                    continue
 
     font = {'family': 'normal',
             'size': 10}
@@ -964,7 +969,7 @@ def plot_throughput_jitter_hist2d(data):
         fig.tight_layout()
 
         # Add ylabel text
-        leftmost_label = "$F={}$\nJitter (s^2)".format(fidelity)
+        leftmost_label = "$F={}$\nJitter ($s^2$)".format(fidelity)
         leftmost_offset = all_axes[0].yaxis.get_offset_text().get_text()
         if leftmost_offset:
             leftmost_label += "\n{}".format(leftmost_offset)
@@ -1019,8 +1024,7 @@ def plot_scheduler_rankings(data):
                     best_scheduler = sched_performance[0][1]
                     scheduler_rankings[fidelity][best_scheduler] += 1
                 except Exception:
-                    import pdb
-                    pdb.set_trace()
+                    continue
 
         for sched in schedulers:
             for fidelity in fidelities:
@@ -1093,8 +1097,7 @@ def check_res_results():
                             diff = run_data[fidelity][sched][metric] - run_data[fidelity][baseline][metric]
                             increase[fidelity][s_name].append(diff / run_data[fidelity][baseline][metric])
                     except Exception:
-                        import pdb
-                        pdb.set_trace()
+                        continue
 
         for sched in schedulers:
             for fidelity in fidelities:
@@ -1113,8 +1116,6 @@ def check_res_results():
 
             fig, ax = plt.subplots()
             offset = (len(means.keys()) - 1) * width / 2
-            import pdb
-            pdb.set_trace()
             for i, fidelity in enumerate(means.keys()):
                 ydata = [increase[fidelity][sched] * 100 for sched in label_map.keys()]
                 ax.bar(x - offset + i * width, ydata, width=width, label="$F$={}".format(fidelity))
@@ -1237,6 +1238,8 @@ def check_symm_throughput_jitter():
         "results/load_symm_results/load_results{}.json".format(i) for i in range(2, 7)]
     loaded_results = load_results_from_files(files)
     for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
         results = get_entries_for_load(loaded_results, load)
         print("Constructing symm simulation plots from {} datapoints".format(len(results.keys())))
         plot_throughput_jitter_hist2d(results)
