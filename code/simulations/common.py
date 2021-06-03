@@ -54,6 +54,7 @@ def get_rcpsp_schedulers():
     
     return schedulers
 
+
 def get_network_demands(network_topology, num):
     """
     Generates a list of network demands on the provided network topology
@@ -482,7 +483,7 @@ def get_fixed_load_taskset(topology, fidelity, load, slot_size):
         possible_nodes = end_nodes
         source, destination = random.sample(possible_nodes, 2)
         while destination == source:
-            destination = random.sample(end_nodes, 1)[0]
+            source, destination = random.sample(possible_nodes, 2)
 
         demand = (source, destination, fidelity, 1)
         try:

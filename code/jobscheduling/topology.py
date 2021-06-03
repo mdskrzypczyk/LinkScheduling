@@ -185,6 +185,83 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
     return Gcq, G
 
 
+def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3):
+    """
+    Generates a graph based on the SURFNET topology
+    :param num_end_node_comm_q: type int
+        Number of communication qubits each end node has
+    :param num_end_node_storage_q: type int
+        Number of storage qubits each end node has
+    :param num_rep_comm_q: type int
+        Number of communication qubits each repeater has
+    :param num_rep_storage_q: type int
+        Number of storage qubits each repeater has
+    :return: type tuple
+        Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+        in the network along with the link capabilities of each link.
+    """
+    surfnet_gml_path = 'jobscheduling/Surfnet.gml'
+    surfnet_graph = nx.readwrite.gml.read_gml(surfnet_gml_path)
+    link_capability = [(0.999, 1500)]
+    link_length = 5
+
+    city_edges = list(set([tuple(sorted([e[0], e[1]])) for e in surfnet_graph.edges]))
+    city_nodes = list(sorted(list(surfnet_graph.nodes)))
+    city_node_to_id = dict([(node, str(2*i)) for i, node in enumerate(city_nodes)])
+
+    edges = [(city_node_to_id[node1], city_node_to_id[node2]) for node1, node2 in city_edges]
+    repeater_nodes = list(city_node_to_id.values())
+    end_nodes = []
+
+    for node in repeater_nodes:
+        city_end_node = "{}".format(int(node) + 1)
+        end_nodes.append(city_end_node)
+        city_edge = (node, city_end_node)
+        edges.append(city_edge)
+
+    Gcq = nx.Graph()
+    G = nx.Graph()
+
+    for node in end_nodes:
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_end_node_comm_q):
+            comm_q_id = "{}-C{}".format(node, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_end_node_storage_q):
+            storage_q_id = "{}-S{}".format(node, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
+        G.nodes[node]["end_node"] = True
+
+    for node in repeater_nodes:
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_rep_comm_q):
+            comm_q_id = "{}-C{}".format(node, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_rep_storage_q):
+            storage_q_id = "{}-S{}".format(node, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
+        G.nodes[node]["end_node"] = False
+
+    for node1, node2 in edges:
+        G.add_edge("{}".format(node1), "{}".format(node2), capabilities=link_capability, weight=link_length)
+
+    for node1, node2 in edges:
+        num_comm_node1 = num_end_node_comm_q if G.nodes[node1]["end_node"] else num_rep_comm_q
+        num_comm_node2 = num_end_node_comm_q if G.nodes[node2]["end_node"] else num_rep_comm_q
+        for j in range(num_comm_node1):
+            for k in range(num_comm_node2):
+                Gcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
+
+    print("Surfnet has diameter {}".format(nx.algorithms.distance_measures.diameter(G)))
+    return Gcq, G
+
+
 def gen_symm_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
                       link_length=5):
     num_nodes = 8
