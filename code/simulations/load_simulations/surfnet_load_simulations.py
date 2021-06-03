@@ -48,8 +48,6 @@ def main():
             import pdb
             pdb.set_trace()
         print("Completed run {}".format(len(results.keys())))
-        import pdb
-        pdb.set_trace()
 
 
 if __name__ == "__main__":
