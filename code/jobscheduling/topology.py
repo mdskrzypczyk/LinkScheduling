@@ -1,5 +1,6 @@
 import networkx as nx
 from device_characteristics.nv_links import load_link_data
+from fiber_data.graph import construct_graph
 
 
 def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
@@ -205,6 +206,8 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
     link_capability = [(0.999, 1500)]
     link_length = 5
 
+    surfnet_graph = construct_graph(include='core')
+
     city_edges = list(set([tuple(sorted([e[0], e[1]])) for e in surfnet_graph.edges]))
     city_nodes = list(sorted(list(surfnet_graph.nodes)))
     city_node_to_id = dict([(node, str(2*i)) for i, node in enumerate(city_nodes)])
@@ -248,8 +251,19 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
         G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
         G.nodes[node]["end_node"] = False
 
-    for node1, node2 in edges:
-        G.add_edge("{}".format(node1), "{}".format(node2), capabilities=link_capability, weight=link_length)
+    # Connect all repeater nodes according to graph data
+    lengths = []
+    for node1, node2 in city_edges:
+        if node1 in city_nodes and node2 in city_nodes:
+            length = surfnet_graph.edges[(node1, node2)]['length']
+            lengths.append(length)
+            G.add_edge("{}".format(city_node_to_id[node1]), "{}".format(city_node_to_id[node2]),
+                       capabilities=link_capability, weight=link_length)
+
+    for node in end_nodes:
+        repeater_node = str(int(node) - 1)
+        G.add_edge("{}".format(node), "{}".format(repeater_node),
+                   capabilities=link_capability, weight=link_length)
 
     for node1, node2 in edges:
         num_comm_node1 = num_end_node_comm_q if G.nodes[node1]["end_node"] else num_rep_comm_q
@@ -259,6 +273,7 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
                 Gcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
 
     print("Surfnet has diameter {}".format(nx.algorithms.distance_measures.diameter(G)))
+
     return Gcq, G
 
 
