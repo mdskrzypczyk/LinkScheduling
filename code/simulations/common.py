@@ -30,11 +30,11 @@ def get_schedulers():
     """
     schedulers = [
         # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
-        # UniResourceBlockNPEDFScheduler,
-        UniResourceCEDFScheduler,
-        MultipleResourceBlockCEDFScheduler,
+        UniResourceBlockNPEDFScheduler,
+        # UniResourceCEDFScheduler,
+        # MultipleResourceBlockCEDFScheduler,
         # MultipleResourceBlockNPEDFScheduler,
-        # MultipleResourceNonBlockNPEDFScheduler,
+        MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,

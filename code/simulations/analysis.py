@@ -1366,3 +1366,47 @@ def check_line_throughput_jitter():
         results = get_entries_for_load(loaded_results, load)
         print("Constructing line simulation plots from {} datapoints".format(len(results.keys())))
         plot_throughput_jitter_hist2d(results)
+
+
+def check_surfnet_load_results():
+    """
+    Checks the load v throughput results for the H topology
+    :return: None
+    """
+    files = ["results/surfnet_results/surfnet_load_results.json"]
+    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    results = load_results_from_files(files)
+    print("Constructing H load simulation results from {} datapoints".format(len(results.keys())))
+    plot_load_v_throughput_results(results)
+
+
+def check_surfnet_throughput_cdf():
+    """
+    Checks the throughput CDFs for the H graph simulations
+    :return: None
+    """
+    files = ["results/surfnet_results/surfnet_load_results.json"]
+    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing surfnet simulation plots from {} datapoints".format(len(results.keys())))
+        plot_achieved_throughput(results)
+
+
+def check_surfnet_throughput_jitter():
+    """
+    Plots the achieved throughput/jitter pairs based on load for the H graph simulations
+    :return: None
+    """
+    files = ["results/surfnet_results/surfnet_load_results.json"]
+    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    loaded_results = load_results_from_files(files)
+    for load in [str(i) for i in range(5, 55)]:
+        import pdb
+        pdb.set_trace()
+        results = get_entries_for_load(loaded_results, load)
+        print("Constructing H simulation plots from {} datapoints".format(len(results.keys())))
+        plot_throughput_jitter_hist2d(results)

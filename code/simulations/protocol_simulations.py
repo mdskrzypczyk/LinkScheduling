@@ -122,25 +122,29 @@ def throughput_vs_chain_length():
     and path length between end nodes
     :return: None
     """
-    num_network_nodes = 4
+    num_network_nodes = 15
     link_length = 5
-    topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=5, link_length=link_length)
+    topology = gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, link_length=link_length)
+    for edge in topology[1].edges:
+        topology[1].edges[edge]['capabilities'] = [(0.999, 1500)]
     protocols = []
 
     source = '0'
-    destinations = ['3'] # str(i) for i in range(3, num_network_nodes)]
-    fidelities = [0.55 + 0.1 * i for i in range(4)]
+    destinations = [str(i) for i in range(3, num_network_nodes)]
+    fidelities = [0.98, 0.985, 0.99, 0.995, 0.997]
     for destination in destinations:
         for fidelity in fidelities:
-            demand = (source, destination, fidelity, 1)
+            print("Creating protocol betweein {} and {} with fidelity {}".format(source, destination, fidelity))
+            demand = (source, destination, fidelity, 1e-10)
             protocol = get_protocol_without_rate_constraint(topology, demand)
 
             if protocol:
                 protocols.append((demand, protocol))
             else:
+                print("Failed to find protocol for demand {}".format(demand))
                 protocols.append((demand, None))
 
-    slot_size = 0.0005
+    slot_size = 0.01
     latency_data = {}
     for demand, protocol in protocols:
         print("Processing demand {}".format(demand))

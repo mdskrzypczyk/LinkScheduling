@@ -156,7 +156,7 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
             Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of
             nodes in the network along with the link capabilities of each link.
         """
-    num_nodes = 6
+    num_nodes = 15
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
     # Line
