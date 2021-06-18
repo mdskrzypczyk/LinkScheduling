@@ -111,10 +111,10 @@ def plot_results(data):
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
     label_map = {
-        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        # "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
-        "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
-        "UniResourceCEDFScheduler": "PTS-CEDF",
+        # "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
+        # "UniResourceCEDFScheduler": "PTS-CEDF",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
         # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
@@ -349,15 +349,18 @@ def plot_load_v_throughput_results(data):
     """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
-    fidelities = ['0.55', '0.65', '0.75', '0.85']
+    # fidelities = ['0.55', '0.65', '0.75', '0.85']
+    # fidelities = ['0.7', '0.8']
+    fidelities = ['0.995', '0.997']
+    # fidelities = ['0.55', '0.85']
     loads = [str(i) for i in [0.5, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 80, 100]]
     load_key = list(data[entry_key][fidelities[0]].keys())[0]
     schedulers = list(sorted(data[entry_key][fidelities[0]][load_key]))
     label_map = {
-        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        # "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
-        "UniResourceCEDFScheduler": "PTS-CEDF",
+        # "UniResourceCEDFScheduler": "PTS-CEDF",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
         # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
@@ -366,7 +369,7 @@ def plot_load_v_throughput_results(data):
     schedulers = [sched for sched in schedulers if sched in label_map.keys()]
 
     matplotlib.rc('font', **font)
-    fig, axs = plt.subplots(1, 4)
+    fig, axs = plt.subplots(1, len(fidelities))
     all_axes = axs # [ax for ax_list in axs for ax in ax_list]
     for i, (fidelity, ax) in enumerate(zip(fidelities, all_axes)):
         count = defaultdict(lambda:defaultdict(int))
@@ -420,7 +423,7 @@ def plot_load_v_throughput_results(data):
 
     # fig.delaxes(all_axes[-1])
     handles, labels = all_axes[-1].get_legend_handles_labels()
-    # fig.legend(handles, labels, bbox_to_anchor=(1, 0.35), loc='lower right', fontsize=10)
+    fig.legend(handles, labels, bbox_to_anchor=(1, 0.35), loc='lower right', fontsize=10)
 
     def on_resize(event):
         fig.tight_layout()
@@ -674,13 +677,16 @@ def plot_achieved_throughput(data):
     """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
-    fidelities = ["0.55", "0.65", "0.75", "0.85"]
+    # fidelities = ["0.7", "0.8"]
+    # fidelities = ["0.55", "0.65", "0.75", "0.85"]
+    fidelities = ['0.995', '0.997']
+    # fidelities = ['0.55', '0.85']
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
     label_map = {
-        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        # "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
-        "UniResourceCEDFScheduler": "PTS-CEDF",
+        # "UniResourceCEDFScheduler": "PTS-CEDF",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
         # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
@@ -705,7 +711,7 @@ def plot_achieved_throughput(data):
                         pass
 
         matplotlib.rc('font', **font)
-        fig, axs = plt.subplots(1, 4)
+        fig, axs = plt.subplots(1, len(fidelities))
         all_axes = axs  # [ax for ax_list in axs for ax in ax_list]
         for i, (fidelity, ax) in enumerate(zip(fidelities, all_axes)):
             for sched in schedulers:
@@ -750,10 +756,10 @@ def plot_achieved_wcrts(data):
     fidelities = list(data[entry_key].keys())
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
     label_map = {
-        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        # "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
-        "UniResourceCEDFScheduler": "PTS-CEDF",
+        # "UniResourceCEDFScheduler": "PTS-CEDF",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
         # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
@@ -924,12 +930,14 @@ def plot_throughput_jitter_hist2d(data):
     """
     entry_key = list(data.keys())[0]
     fidelities = list(data[entry_key].keys())
+    # fidelities = ['0.995', '0.997']
+    # fidelities = ['0.55', '0.85']
     schedulers = list(sorted(data[entry_key][fidelities[0]]))
     label_map = {
-        "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
+        # "MultipleResourceBlockCEDFScheduler": "RCPSP-CEDF",
         "MultipleResourceNonBlockNPEDFScheduler": "RCPSP-NP-EDF",
         "MultipleResourceBlockNPEDFScheduler": "RCPSP-NP-FPR",
-        "UniResourceCEDFScheduler": "PTS-CEDF",
+        # "UniResourceCEDFScheduler": "PTS-CEDF",
         "UniResourceBlockNPEDFScheduler": "PTS-NP-EDF",
         # "UniResourceConsiderateFixedPointPreemptionBudgetScheduler": "PTS-PB",
         # "MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler": "RCPSP-PBS-1s",
@@ -965,6 +973,7 @@ def plot_throughput_jitter_hist2d(data):
             ax.set_xlabel("Throughput (ebit/s)", fontsize=12)
             ax.set_title("{}".format(label_map[sched]), fontsize=12)
             ax.tick_params(axis='both', labelsize=10)
+            ax.set_ylim(0, 0.3)
 
         fig.tight_layout()
 
@@ -1171,13 +1180,11 @@ def get_entries_for_load(data, load):
     return new_data
 
 
-def check_symm_throughputs():
+def check_symm_throughput_cdf():
     """
-   Checks results for the line graph simulations
+   Checks throughput CDFs based on load for the line graph simulations
    :return: None
    """
-    # files = ["results/symm_results/symm_results.json", "remote_results/symm_results.json"]
-    # results = load_results_from_files(files)
     files = ["remote_results/load_results.json"] + ["remote_results/load_results{}.json".format(i) for i in
                                                     range(2, 11)]
     files += ["remote_results/load_results_high_loads.json"] + [
@@ -1373,10 +1380,9 @@ def check_surfnet_load_results():
     Checks the load v throughput results for the H topology
     :return: None
     """
-    files = ["results/surfnet_results/surfnet_load_results.json"]
-    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    files = ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(0, 40)]
     results = load_results_from_files(files)
-    print("Constructing H load simulation results from {} datapoints".format(len(results.keys())))
+    print("Constructing surfnet load simulation results from {} datapoints".format(len(results.keys())))
     plot_load_v_throughput_results(results)
 
 
@@ -1385,8 +1391,7 @@ def check_surfnet_throughput_cdf():
     Checks the throughput CDFs for the H graph simulations
     :return: None
     """
-    files = ["results/surfnet_results/surfnet_load_results.json"]
-    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    files = ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(0, 40)]
     loaded_results = load_results_from_files(files)
     for load in [str(i) for i in range(5, 55)]:
         import pdb
@@ -1401,12 +1406,11 @@ def check_surfnet_throughput_jitter():
     Plots the achieved throughput/jitter pairs based on load for the H graph simulations
     :return: None
     """
-    files = ["results/surfnet_results/surfnet_load_results.json"]
-    files += ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(1, 9) if i != 3]
+    files = ["results/surfnet_results/surfnet_load_results{}.json".format(i) for i in range(0, 40)]
     loaded_results = load_results_from_files(files)
     for load in [str(i) for i in range(5, 55)]:
         import pdb
         pdb.set_trace()
         results = get_entries_for_load(loaded_results, load)
-        print("Constructing H simulation plots from {} datapoints".format(len(results.keys())))
+        print("Constructing surfnet simulation plots from {} datapoints".format(len(results.keys())))
         plot_throughput_jitter_hist2d(results)

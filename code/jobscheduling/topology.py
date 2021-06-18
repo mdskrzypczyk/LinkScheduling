@@ -203,7 +203,7 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
     """
     surfnet_gml_path = 'jobscheduling/Surfnet.gml'
     surfnet_graph = nx.readwrite.gml.read_gml(surfnet_gml_path)
-    link_capability = [(0.999, 1500)]
+    link_capability = [(0.999, 1400)]
     link_length = 5
 
     surfnet_graph = construct_graph(include='core')
