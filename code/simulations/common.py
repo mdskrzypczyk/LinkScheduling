@@ -253,6 +253,7 @@ def check_resource_utilization(taskset):
                 logger.warning("Taskset overutilizes resource {}, computed {}".format(resource,
                                                                                       resource_utilization[resource]))
                 result = False
+                return result
 
     for resource in resource_utilization.keys():
         resource_utilization[resource] = round(resource_utilization[resource], 3)
@@ -446,7 +447,7 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         except Exception as err:
             logger.exception("Error occurred while generating tasks: {}".format(err))
 
-        check_resource_utilization(taskset)
+        # check_resource_utilization(taskset)
         balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
         resource_utilization.update(get_resource_utilization(taskset))
 
