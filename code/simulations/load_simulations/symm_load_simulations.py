@@ -10,7 +10,7 @@ def main():
     topology = gen_symm_topology()
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "load_results.json"
+    results_file = "symm_load_results.json"
 
     results = load_results(results_file)
     while True:

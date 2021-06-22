@@ -33,7 +33,7 @@ def get_schedulers():
         UniResourceBlockNPEDFScheduler,
         # UniResourceCEDFScheduler,
         # MultipleResourceBlockCEDFScheduler,
-        # MultipleResourceBlockNPEDFScheduler,
+        MultipleResourceBlockNPEDFScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
         # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
         # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
@@ -126,7 +126,7 @@ def select_limited_rate(achieved_rate, max_rate, slot_size):
     rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
     rates = list(filter(lambda r: r < achieved_rate, rates))
     if rates:
-        allowed_rates = list(filter(lambda r: r < max_rate, rates))
+        allowed_rates = list(filter(lambda r: r <= max_rate, rates))
         if not allowed_rates:
             return min(rates)
         else:
@@ -527,9 +527,9 @@ def get_fixed_load_taskset(topology, fidelity, load, slot_size):
         except Exception as err:
             logger.exception("Error occurred while generating tasks: {}".format(err))
 
-        check_resource_utilization(taskset)
+        # check_resource_utilization(taskset)
         balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
-        resource_utilization.update(get_resource_utilization(taskset))
+        # resource_utilization.update(get_resource_utilization(taskset))
 
     task_load = sum([float(t.name.split("R=")[1].split(", ")[0]) for t in taskset])
     if task_load < load:
