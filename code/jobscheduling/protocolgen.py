@@ -1,4 +1,5 @@
 import networkx as nx
+import time
 from math import ceil
 from copy import copy
 from jobscheduling.log import LSLogger
@@ -121,6 +122,21 @@ class SwapProtocol(Protocol):
 cache = {}
 
 
+def remap_protocol(protocol, path_mapping):
+    if protocol is None:
+        import pdb
+        pdb.set_trace()
+    new_protocol = copy(protocol)
+    q = [new_protocol]
+    while q:
+        curr_protocol = q.pop(0)
+        curr_protocol.nodes = [path_mapping[node] for node in curr_protocol.nodes]
+        if isinstance(curr_protocol, DistillationProtocol) or isinstance(curr_protocol, SwapProtocol):
+            q += curr_protocol.protocols
+
+    return new_protocol
+
+
 def create_protocol(path, nodeG, Fmin, Rmin):
     """
     Attempts to create a protocol over the repeater chain specified by the path in the graph nodeG. If a protocol is
@@ -146,8 +162,7 @@ def create_protocol(path, nodeG, Fmin, Rmin):
     subG = nx.subgraph_view(nodeG, filter_node, filter_edge)
 
     pathResources = {}
-    cache_key = [Fmin, Rmin]
-    cache_key += [node for node in sorted(path)]
+
     for node in sorted(path):
         numCommResources = len(nodeG.nodes[node]['comm_qs'])
         numStorResources = len(nodeG.nodes[node]['storage_qs'])
@@ -156,20 +171,27 @@ def create_protocol(path, nodeG, Fmin, Rmin):
             "storage": numStorResources,
             "total": numCommResources + numStorResources
         }
-        cache_key.append(numCommResources)
-        cache_key.append(numStorResources)
 
+    cache_key = [Fmin, Rmin]
+    cache_key += [nodeG.edges[(node1, node2)]['weight'] for node1, node2 in zip(path, path[1:])]
+    cache_key += [(pathResources[node]['comm'], pathResources[node]['storage']) for node in path]
     cache_key = tuple(cache_key)
+
     if cache_key in cache.keys():
-        return cache[cache_key]
+        old_protocol, old_path = cache[cache_key]
+        path_mapping = dict([(orig_node, new_node) for new_node, orig_node in zip(path, old_path)])
+        remapped_protocol = remap_protocol(old_protocol, path_mapping)
+
+        return remapped_protocol
 
     try:
+        start = time.time()
         protocol = esss(path, pathResources, subG, Fmin, Rmin)
         if type(protocol) != Protocol and protocol is not None:
-            cache[cache_key] = protocol
+            cache[cache_key] = (protocol, path)
             return protocol
         else:
-            cache[cache_key] = None
+            cache[cache_key] = (None, path)
             return None
     except Exception:
         logger.exception("Failed to create protocol for path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
@@ -193,6 +215,17 @@ def esss(path, pathResources, G, Fmin, Rmin):
         The sink protocol action for the repeater protocol to use over the path
     """
     logger.debug("ESSS on path {} with Fmin {} and Rmin {}".format(path, Fmin, Rmin))
+    cache_key = [Fmin, Rmin]
+    cache_key += [G.edges[(node1, node2)]['weight'] for node1, node2 in zip(path, path[1:])]
+    cache_key += [(pathResources[node]['comm'], pathResources[node]['storage']) for node in path]
+
+    cache_key = tuple(cache_key)
+    if cache_key in cache.keys():
+        old_protocol, old_path = cache[cache_key]
+        path_mapping = dict([(orig_node, new_node) for new_node, orig_node in zip(path, old_path)])
+        remapped_protocol = remap_protocol(old_protocol, path_mapping)
+        return remapped_protocol
+
     if len(path) == 2:
         logger.debug("Down to elementary link, finding distillation protocol")
         link_properties = G.get_edge_data(*path)['capabilities']
@@ -231,6 +264,7 @@ def esss(path, pathResources, G, Fmin, Rmin):
         else:
             rate = get_protocol_rate(('', '', Fmin, Rmin), protocol, (None, G))
             protocol.R = rate
+            cache[cache_key] = (protocol, path)
 
         return protocol
 
@@ -365,6 +399,17 @@ def get_protocol_for_link(link_properties, G, Fmin, Rmin, nodes, nodeResources):
         logger.debug("Not enough resources to generate link between nodes {}".format(nodes))
         return None
 
+    cache_key = [Fmin, Rmin]
+    cache_key += [G.edges[(nodes[0], nodes[1])]['weight']]
+    cache_key += [(nodeResources[node]['comm'], nodeResources[node]['storage']) for node in nodes]
+
+    cache_key = tuple(cache_key)
+    if cache_key in cache.keys():
+        old_protocol, old_path = cache[cache_key]
+        path_mapping = dict([(orig_node, new_node) for new_node, orig_node in zip(path, old_path)])
+        remapped_protocol = remap_protocol(old_protocol, path_mapping)
+        return remapped_protocol
+
     # Check if any single link generation protocols exist
     protocols = []
     for F, R in link_properties:
@@ -386,8 +431,11 @@ def get_protocol_for_link(link_properties, G, Fmin, Rmin, nodes, nodeResources):
         binary_protocol = find_binary_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin)
         if binary_protocol:
             if not pumping_protocol or binary_protocol.R > pumping_protocol.R:
+                cache[cache_key] = (binary_protocol, nodes)
                 return binary_protocol
 
+    if pumping_protocol:
+        cache[cache_key] = (pumping_protocol, nodes)
     return pumping_protocol
 
 
@@ -424,6 +472,9 @@ def find_pumping_protocol(nodes, nodeResources, G, link_properties, Fmin, Rmin):
             generationLatency = 1 / (R / ceil(numGens / minNodeComms))
             distillLatency = numGens * DistillationProtocol.distillation_duration
             currR = 1 / (generationLatency + distillLatency)
+            if currR < Rmin:
+                continue
+
             linkProtocol = LinkProtocol(F=F, R=R, nodes=nodes)
             for i in range(numGens):
                 currF = distill_links(currF, F)

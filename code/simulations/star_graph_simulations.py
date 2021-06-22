@@ -10,9 +10,9 @@ def main():
                                  num_rep_comm_q=1, num_rep_storage_q=3)
     slot_size = 0.01
     schedulers = get_schedulers()
-    results_file = "star_results/star_results_{}.json"
+    results_file = "star_results_{}.json"
     num_results = 0
-    while num_results < 100:
+    while True:
         print("Starting new run {}".format(num_results))
 
         run_results = {}

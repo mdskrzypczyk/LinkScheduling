@@ -1,5 +1,6 @@
 import networkx as nx
 from device_characteristics.nv_links import load_link_data
+from fiber_data.graph import construct_graph
 
 
 def gen_H_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
@@ -155,7 +156,7 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
             Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of
             nodes in the network along with the link capabilities of each link.
         """
-    num_nodes = 6
+    num_nodes = 15
     d_to_cap = load_link_data()
     link_capability = d_to_cap[str(link_length)]
     # Line
@@ -181,5 +182,151 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
                     Gcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(i, k))
 
             G.add_edge("{}".format(prev_node_id), "{}".format(i), capabilities=link_capability, weight=link_length)
+
+    return Gcq, G
+
+
+def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3):
+    """
+    Generates a graph based on the SURFNET topology
+    :param num_end_node_comm_q: type int
+        Number of communication qubits each end node has
+    :param num_end_node_storage_q: type int
+        Number of storage qubits each end node has
+    :param num_rep_comm_q: type int
+        Number of communication qubits each repeater has
+    :param num_rep_storage_q: type int
+        Number of storage qubits each repeater has
+    :return: type tuple
+        Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+        in the network along with the link capabilities of each link.
+    """
+    surfnet_gml_path = 'jobscheduling/Surfnet.gml'
+    surfnet_graph = nx.readwrite.gml.read_gml(surfnet_gml_path)
+    link_capability = [(0.999, 1400)]
+    link_length = 5
+
+    surfnet_graph = construct_graph(include='core')
+
+    city_edges = list(set([tuple(sorted([e[0], e[1]])) for e in surfnet_graph.edges]))
+    city_nodes = list(sorted(list(surfnet_graph.nodes)))
+    city_node_to_id = dict([(node, str(2*i)) for i, node in enumerate(city_nodes)])
+
+    edges = [(city_node_to_id[node1], city_node_to_id[node2]) for node1, node2 in city_edges]
+    repeater_nodes = list(city_node_to_id.values())
+    end_nodes = []
+
+    for node in repeater_nodes:
+        city_end_node = "{}".format(int(node) + 1)
+        end_nodes.append(city_end_node)
+        city_edge = (node, city_end_node)
+        edges.append(city_edge)
+
+    Gcq = nx.Graph()
+    G = nx.Graph()
+
+    for node in end_nodes:
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_end_node_comm_q):
+            comm_q_id = "{}-C{}".format(node, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_end_node_storage_q):
+            storage_q_id = "{}-S{}".format(node, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
+        G.nodes[node]["end_node"] = True
+
+    for node in repeater_nodes:
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_rep_comm_q):
+            comm_q_id = "{}-C{}".format(node, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_rep_storage_q):
+            storage_q_id = "{}-S{}".format(node, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(node), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs)
+        G.nodes[node]["end_node"] = False
+
+    # Connect all repeater nodes according to graph data
+    lengths = []
+    for node1, node2 in city_edges:
+        if node1 in city_nodes and node2 in city_nodes:
+            length = surfnet_graph.edges[(node1, node2)]['length']
+            lengths.append(length)
+            G.add_edge("{}".format(city_node_to_id[node1]), "{}".format(city_node_to_id[node2]),
+                       capabilities=link_capability, weight=link_length)
+
+    for node in end_nodes:
+        repeater_node = str(int(node) - 1)
+        G.add_edge("{}".format(node), "{}".format(repeater_node),
+                   capabilities=link_capability, weight=link_length)
+
+    for node1, node2 in edges:
+        num_comm_node1 = num_end_node_comm_q if G.nodes[node1]["end_node"] else num_rep_comm_q
+        num_comm_node2 = num_end_node_comm_q if G.nodes[node2]["end_node"] else num_rep_comm_q
+        for j in range(num_comm_node1):
+            for k in range(num_comm_node2):
+                Gcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
+
+    print("Surfnet has diameter {}".format(nx.algorithms.distance_measures.diameter(G)))
+
+    return Gcq, G
+
+
+def gen_symm_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3,
+                      link_length=5):
+    num_nodes = 8
+    d_to_cap = load_link_data()
+    link_capability = d_to_cap[str(link_length)]
+
+    Gcq = nx.Graph()
+    G = nx.Graph()
+
+    # Nodes 0-3 are the end nodes
+    for i in range(4):
+        node = "{}".format(i)
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_end_node_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_end_node_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs, end_node=True)
+
+    # Nodes 4-7 form the complete internal repeater network
+    for i in range(4, 8):
+        node = "{}".format(i)
+        comm_qs = []
+        storage_qs = []
+        for c in range(num_rep_comm_q):
+            comm_q_id = "{}-C{}".format(i, c)
+            comm_qs.append(comm_q_id)
+        for s in range(num_rep_storage_q):
+            storage_q_id = "{}-S{}".format(i, s)
+            storage_qs.append(storage_q_id)
+        Gcq.add_nodes_from(comm_qs, node="{}".format(i), storage=storage_qs)
+        G.add_node(node, comm_qs=comm_qs, storage_qs=storage_qs, end_node=False)
+
+    # Internal complete network
+    repeater_connections = {
+        "4": ["0", "5", "6", "7"],
+        "5": ["1", "4", "6", "7"],
+        "6": ["2", "4", "5", "7"],
+        "7": ["3", "4", "5", "6"]
+    }
+    for node, connected_nodes in repeater_connections.items():
+        for prev_node_id in connected_nodes:
+            for j in range(num_end_node_comm_q):
+                for k in range(num_end_node_storage_q):
+                    Gcq.add_edge("{}-C{}".format(prev_node_id, j), "{}-C{}".format(node, k))
+
+            G.add_edge("{}".format(prev_node_id), "{}".format(node), capabilities=link_capability, weight=link_length)
 
     return Gcq, G

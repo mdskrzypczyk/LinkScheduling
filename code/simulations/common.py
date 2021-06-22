@@ -29,9 +29,21 @@ def get_schedulers():
         List of scheduler classes to be used
     """
     schedulers = [
-        UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
+        # UniResourceConsiderateFixedPointPreemptionBudgetScheduler,
         UniResourceBlockNPEDFScheduler,
-        UniResourceCEDFScheduler,
+        # UniResourceCEDFScheduler,
+        # MultipleResourceBlockCEDFScheduler,
+        MultipleResourceBlockNPEDFScheduler,
+        MultipleResourceNonBlockNPEDFScheduler,
+        # MultipleResourceConsiderateBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
+        # MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
+    ]
+    return schedulers
+
+
+def get_rcpsp_schedulers():
+    schedulers = [
         MultipleResourceBlockCEDFScheduler,
         MultipleResourceBlockNPEDFScheduler,
         MultipleResourceNonBlockNPEDFScheduler,
@@ -39,6 +51,7 @@ def get_schedulers():
         MultipleResourceConsiderateSegmentBlockPreemptionBudgetScheduler,
         MultipleResourceConsiderateSegmentPreemptionBudgetScheduler,
     ]
+    
     return schedulers
 
 
@@ -97,6 +110,27 @@ def select_rate(achieved_rate, slot_size):
     rates = list(filter(lambda r: r < achieved_rate, rates))
     if rates:
         return random.choice(rates)
+    else:
+        return 0
+
+
+def select_limited_rate(achieved_rate, max_rate, slot_size):
+    """
+    Chooses a new rate for a demand that is lower than the achieved rate of a protocol
+    :param achieved_rate: type float
+        The achieved rate we want a lower rate than
+    :param slot_size: type float
+        The duration of a time slot in seconds
+    :return: type float
+    """
+    rates = [1 / (slot_size * (2 ** i)) for i in range(10)]  # Rate range between
+    rates = list(filter(lambda r: r < achieved_rate, rates))
+    if rates:
+        allowed_rates = list(filter(lambda r: r <= max_rate, rates))
+        if not allowed_rates:
+            return min(rates)
+        else:
+            return random.choice(allowed_rates)
     else:
         return 0
 
@@ -219,6 +253,7 @@ def check_resource_utilization(taskset):
                 logger.warning("Taskset overutilizes resource {}, computed {}".format(resource,
                                                                                       resource_utilization[resource]))
                 result = False
+                return result
 
     for resource in resource_utilization.keys():
         resource_utilization[resource] = round(resource_utilization[resource], 3)
@@ -335,6 +370,7 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         List of PeriodicDAGTasks representing the concrete repeater protocols
     """
     taskset = []
+    task_names = []
     num_succ = 0
     Gcq, G = topology
     end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
@@ -396,6 +432,9 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 
             demand = (source, destination, fidelity, new_rate)
             scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            while scheduled_task.name in task_names:
+                scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            task_names.append(scheduled_task.name)
             scheduled_task.p = ceil(1 / new_rate / slot_size)
             asap_dec, alap_dec, shift_dec = decoherence_times
             logger.info("Results for {}:".format(demand))
@@ -408,9 +447,94 @@ def get_balanced_taskset(topology, fidelity, slot_size):
         except Exception as err:
             logger.exception("Error occurred while generating tasks: {}".format(err))
 
-        check_resource_utilization(taskset)
+        # check_resource_utilization(taskset)
         balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
         resource_utilization.update(get_resource_utilization(taskset))
+
+    return taskset
+
+
+def get_fixed_load_taskset(topology, fidelity, load, slot_size):
+    """
+        Obtains a set of concrete repeater protocols that have resources balanced across the network
+        :param topology: type tuple
+            Tuple of networkx.Graphs that represent the communication resources and connectivity of the quantum network
+        :param fidelity: type float
+            Minimum fidelity of the concrete repeater protocols
+        :param slot_size: type float
+            The duration of a slot in the schedule
+        :return: type list
+            List of PeriodicDAGTasks representing the concrete repeater protocols
+        """
+    taskset = []
+    num_succ = 0
+    Gcq, G = topology
+    end_nodes = [node for node in G.nodes if G.nodes[node]["end_node"]]
+    all_node_resources = []
+    for node in G.nodes:
+        comm_qs = G.nodes[node]["comm_qs"]
+        storage_qs = G.nodes[node]["storage_qs"]
+        node_resources = comm_qs + storage_qs
+        all_node_resources += node_resources
+
+    resource_utilization = dict([(r, 0) for r in all_node_resources])
+    not_allowed = []
+    demands = []
+    while sum([rate for _, _, _, rate in demands]) < load:
+        possible_nodes = end_nodes
+        source, destination = random.sample(possible_nodes, 2)
+        while destination == source:
+            source, destination = random.sample(possible_nodes, 2)
+
+        demand = (source, destination, fidelity, 1)
+        try:
+            logger.debug("Constructing protocol for request {}".format(demand))
+            protocol = get_protocol_without_rate_constraint(topology, demand)
+            if protocol is None:
+                logger.warning("Demand {} could not be satisfied!".format(demand))
+                not_allowed.append((source, destination))
+                continue
+
+            logger.debug("Converting protocol for request {} to task".format(demand))
+            task = convert_protocol_to_task(demand, protocol, slot_size)
+
+            logger.debug("Scheduling task for request {}".format(demand))
+
+            scheduled_task, decoherence_times, correct = schedule_dag_for_resources(task, topology)
+
+            latency = scheduled_task.c * slot_size
+            achieved_rate = 1 / latency
+            current_load = sum([rate for _, _, _, rate in demands])
+            new_rate = select_limited_rate(achieved_rate, load - current_load, slot_size)
+
+            if new_rate == 0:
+                logger.warning("Could not provide rate for {}".format(demand))
+                not_allowed.append((source, destination))
+                continue
+
+            demand = (source, destination, fidelity, new_rate)
+            scheduled_task.name = "S={}, D={}, F={}, R={}, ID={}".format(*demand, random.randint(0, 100))
+            scheduled_task.p = ceil(1 / new_rate / slot_size)
+            asap_dec, alap_dec, shift_dec = decoherence_times
+            logger.info("Results for {}:".format(demand))
+            num_succ += 1
+            logger.info(
+                "Successfully created protocol and task for demand (S={}, D={}, F={}, R={}), {}".format(*demand,
+                                                                                                        num_succ))
+            taskset.append(scheduled_task)
+            demands.append(demand)
+
+        except Exception as err:
+            logger.exception("Error occurred while generating tasks: {}".format(err))
+
+        # check_resource_utilization(taskset)
+        balance_taskset_resource_utilization(taskset, node_resources=topology[1].nodes)
+        # resource_utilization.update(get_resource_utilization(taskset))
+
+    task_load = sum([float(t.name.split("R=")[1].split(", ")[0]) for t in taskset])
+    if task_load < load:
+        import pdb
+        pdb.set_trace()
 
     return taskset
 
@@ -418,7 +542,8 @@ def get_balanced_taskset(topology, fidelity, slot_size):
 def load_results(filename):
     """
     Loads results from a file
-    :param filename:
+    :param filename: type str
+        The name of the file to load results from
     :return:
     """
     if exists(filename):
@@ -431,10 +556,30 @@ def load_results(filename):
 
 
 def write_results(filename, results):
+    """
+    Helper functions for recording simulation results
+    :param filename: type str
+        The file we are writing results to
+    :param results: type dict
+        The results to write to the file
+    :return: None
+    """
     json.dump(results, open(filename, 'w'), indent=4, sort_keys=True)
 
 
 def schedule_taskset(scheduler, taskset, topology, slot_size):
+    """
+    Helper functions for running simulations
+    :param scheduler: type Scheduler
+        An instance of the scheduler class we wish to use
+    :param taskset: type list
+        A list of DAGTasks to schedule
+    :param topology: type Graph
+        A graph of th enetwork topology to schedule on
+    :param slot_size: type float
+        The size of a slot in the schedule in seconds
+    :return: None
+    """
     try:
         results_key = type(scheduler).__name__
 
@@ -446,7 +591,7 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
             total_rate_dict[1 / task.p] += 1
 
         logger.info("Scheduling tasks with {}".format(results_key))
-        start = time.time()
+        start = time.time() 
 
         for task in taskset:
             # First test the taskset if it is even feasible to schedule
@@ -511,3 +656,6 @@ def schedule_taskset(scheduler, taskset, topology, slot_size):
 
     except Exception as err:
         logger.exception("Error occurred while scheduling: {}".format(err))
+        import pdb
+        pdb.set_trace()
+
