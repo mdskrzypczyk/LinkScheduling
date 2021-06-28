@@ -21,14 +21,24 @@ def main(no_output=False):
     """
     gss_factory = NVStateDeliverySamplerFactory()
 
+    # Distance to rates
     d_to_rates = {}
     d_to_sem_rates = {}
+
+    # Distance to fidelities
     d_to_fidelities = {}
     d_to_sem_fidelities = {}
+
+    # Choices of bright state population
     alphas = list(np.linspace(0.1, 0.5, 10))
+
+    # Perfect bell states
     ideal_states = [ket2dm(b) for b in [b00, b01, b10, b11]]
+
+    # Distances to simulate
     distances = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
 
+    # Iterate over distances and collect capabilities
     for internode_distance in distances:
         rates = []  # mean rates
         fidelities = []
@@ -37,9 +47,14 @@ def main(no_output=False):
 
         # Perform sampling
         for alpha in alphas:
+            # Get device parameters
             current_params = NVParameterSet2019Optimistic()
+
+            # Compute how frequently entanglement can be attempted
             cycle_time = current_params.photon_emission_delay + \
                 internode_distance / current_params.c * 10 ** 9
+
+            # Make state sampler
             gss = gss_factory.create_state_delivery_sampler(
                 **current_params.to_dict(),
                 p_det=current_params.to_dict()["prob_detect_excl_transmission_no_conversion_no_cavities"],
@@ -68,6 +83,7 @@ def main(no_output=False):
         d_to_fidelities[internode_distance] = fidelities
         d_to_sem_fidelities[internode_distance] = sem_fidelities
 
+    # Record to JSON
     data = {
         "rates": d_to_rates,
         "sem_rates": d_to_sem_rates,
@@ -75,8 +91,9 @@ def main(no_output=False):
         "sem_fidelities": d_to_sem_fidelities
     }
     with open("data.json", "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4, sort_keys=True)
 
+    # Plot data for visualization
     for internode_distance in distances:
         rates = d_to_rates[internode_distance]
         sem_rates = d_to_sem_rates[internode_distance]
