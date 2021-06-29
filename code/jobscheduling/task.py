@@ -66,8 +66,9 @@ def get_dag_exec_time(dag):
     :return: type int
     """
     if not dag.subtasks:
-        import pdb
-        pdb.set_trace()
+        logger.error("Cannot calculate execution time for DAGTask without subtasks")
+
+    # Get the max finish time of all subtasks
     return max([subtask.a + subtask.c for subtask in dag.subtasks]) - min([source.a for source in dag.sources])
 
 
@@ -85,42 +86,63 @@ def find_dag_task_preemption_points(budget_dag_task, resources=None):
 
     resource_intervals = budget_dag_task.get_resource_intervals(separate_occupation=True)
     global_itree = IntervalTree()
+
+    # Make one interval tree where any resource is in use
     for resource in resources:
         global_itree |= resource_intervals[resource]
 
+    # Merge intervals
     global_itree.merge_overlaps()
+
+    # Preemption points are then the spaces between intervals in global_itree
     preemption_points = list(sorted([(interval.begin, interval.end) for interval in global_itree
                                      if interval.end <= budget_dag_task.a + budget_dag_task.c]))
+
+    # Now check which resources are locked at each preemption point as well as which
+    # resources are needed for the subsequent interval to execute
     points_to_locked_resources = defaultdict(list)
     points_to_needed_resources = defaultdict(list)
-
     points_to_subtasks = defaultdict(set)
+
+    # Iterate over the set of preemption points
     for point_start, point_end in preemption_points:
+        # Iterate over resources
         for resource, itree in resource_intervals.items():
+            # Grab all the intervals of the task up until this end point
             locking_intervals = sorted(itree[0:point_end])
+
+            # Check that point_end is not just the end of the task
             if locking_intervals and point_end < budget_dag_task.a + budget_dag_task.c:
+                # Get the last task for this resource and check if it is locked
                 last_task = locking_intervals[-1].data
                 if last_task.locked_resources and resource in last_task.locked_resources:
                     points_to_locked_resources[(point_start, point_end)].append(resource)
+
+            # Check if this resource is used in the rest of the task
             active_intervals = sorted(itree[point_start:budget_dag_task.a + budget_dag_task.c])
             if active_intervals:
+                # Record that this resource is needed for the rest of the task
                 points_to_needed_resources[(point_start, point_end)].append(resource)
+
+                # Record the subtasks that are active during this interval
                 active_intervals = sorted(itree[point_start:point_end])
                 for interval in active_intervals:
                     if type(interval.data) != ResourceTask:
                         points_to_subtasks[(point_start, point_end)] |= {interval.data}
 
+    # Store preemption point info with (start, end) points, locked resources, resources needed to continue,
+    # and subtasks that belong to this interval
     preemption_points = [(point, points_to_locked_resources[point], points_to_needed_resources[point],
                           points_to_subtasks[point]) for point in preemption_points]
+
+    # Check that all the subtasks are accounted for
     all_pp_subtasks = list()
     for taskset in points_to_subtasks.values():
         all_pp_subtasks += list(filter(lambda task: type(task) != ResourceTask, taskset))
 
     if len(all_pp_subtasks) != len(budget_dag_task.subtasks) or \
             any([t not in all_pp_subtasks for t in budget_dag_task.subtasks]):
-        print("Incorrect subtask set")
-        import pdb
-        pdb.set_trace()
+        logger.error("Incorrect subtask set")
 
     return preemption_points
 
@@ -545,6 +567,8 @@ class DAGTask(Task):
         self.sinks = []
         self.tasks = {}
         self.subtasks = tasks
+
+        # Get all the sources and sinks of the DAGTask
         for task in tasks:
             if not task.parents:
                 self.sources.append(task)
@@ -563,6 +587,8 @@ class DAGTask(Task):
     def __copy__(self):
         tasks = {}
         q = [t for t in self.sources]
+
+        # Copy each subtask and reconstruct parent/child
         while q:
             original_task = q.pop(0)
             task = tasks.get(original_task.name, copy(original_task))
@@ -609,6 +635,8 @@ class PeriodicDAGTask(PeriodicTask):
     def __copy__(self):
         tasks = {}
         q = [t for t in self.sources]
+
+        # Copy tasks and reconstruct parent/child relationship
         while q:
             original_task = q.pop(0)
             task = tasks.get(original_task.name, copy(original_task))
@@ -688,21 +716,26 @@ class ResourceDAGTask(ResourceTask):
         :return: type dict
             A dictionary of reosurce identifiers to lists of occupied time slots by the DAGTask's sub tasks
         """
+        # Create schedules for each resource
         full_resource_schedules = defaultdict(list)
         for task in self.subtasks:
             resource_schedules = task.get_resource_schedules()
             for resource, slots in resource_schedules.items():
                 full_resource_schedules[resource] += slots
 
+        # Sort the slots in each schedule, record where occupation tasks are in schedule
         for resource in full_resource_schedules.keys():
             full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
             additional_slots = []
+
+            # Add occupation slots between tasks
             for (s1, t1), (s2, t2) in zip(full_resource_schedules[resource], full_resource_schedules[resource][1:]):
                 if t1 != t2 and s2 - s1 > 1 and resource in t1.locked_resources:
                     occ_task = ResourceTask(name="Occupation", c=s2 - s1, a=s1 + 1, resources=[resource],
                                             locked_resources=[resource])
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2 - s1)]
 
+            # Add occupation slots between last tasks and end of DAGTask
             last_slot, last_task = full_resource_schedules[resource][-1]
             completion_time = self.c + self.a
             if last_task.locked_resources and resource in last_task.locked_resources and \
@@ -725,24 +758,23 @@ class ResourceDAGTask(ResourceTask):
         :return: type dict(IntervalTree)
             A dictionary of resource identifiers to interval trees representing the periods of occupation
         """
+        # Take the resource schedules
         resource_schedules = self.get_resource_schedules()
+
+        # Take each resource and convert slots to IntervalTree
         resource_intervals = defaultdict(IntervalTree)
         for resource, schedule in resource_schedules.items():
             s, t = schedule[0]
             interval = Interval(begin=s, end=s + 1, data=t)
+
+            # If consecutive slots belong to same task extend the interval, otherwise
+            # add it to the IntervalTree and start a new one
             for s, t in schedule[1:]:
                 if t == interval.data and (not separate_occupation or t.name[0] != "O"):
                     interval = Interval(begin=interval.begin, end=s + 1, data=t)
                 else:
-                    if resource_intervals[resource].overlap(interval.begin, interval.end):
-                        import pdb
-                        pdb.set_trace()
                     resource_intervals[resource].add(interval)
                     interval = Interval(begin=s, end=s + 1, data=t)
-
-            if resource_intervals[resource].overlap(interval.begin, interval.end):
-                import pdb
-                pdb.set_trace()
 
             resource_intervals[resource].add(interval)
 
@@ -837,14 +869,16 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
         """
         Obtains the occupation schedules of the resources used by the DAGTask
         :return: type dict
-            A dictionary of reosurce identifiers to lists of occupied time slots by the DAGTask's sub tasks
+            A dictionary of resource identifiers to lists of occupied time slots by the DAGTask's sub tasks
         """
+        # Get the slots for each resource
         full_resource_schedules = defaultdict(list)
         for task in self.subtasks:
             resource_schedules = task.get_resource_schedules()
             for resource, slots in resource_schedules.items():
                 full_resource_schedules[resource] += slots
 
+        # Add occupation tasks between tasks on resource
         for resource in full_resource_schedules.keys():
             full_resource_schedules[resource] = list(sorted(full_resource_schedules[resource], key=lambda s: s[0]))
             additional_slots = []
@@ -854,6 +888,7 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
                                             locked_resources=[resource])
                     additional_slots += [(s1 + i, occ_task) for i in range(1, s2 - s1)]
 
+            # Add occupation slots from last task to end of DAGTask
             last_slot, last_task = full_resource_schedules[resource][-1]
             completion_time = self.c + self.a
             if last_task.locked_resources and resource in last_task.locked_resources and \
@@ -876,24 +911,21 @@ class PeriodicResourceDAGTask(PeriodicDAGTask):
         :return: type dict(IntervalTree)
             A dictionary of resource identifiers to interval trees representing the periods of occupation
         """
+        # Get the resource schedules
         resource_schedules = self.get_resource_schedules()
+
+        # Convert resource schedules to IntervalTree
         resource_intervals = defaultdict(IntervalTree)
         for resource, schedule in resource_schedules.items():
             s, t = schedule[0]
             interval = Interval(begin=s, end=s + 1, data=t)
+            # Check consecutive slots to see if a new interval needs to be made
             for s, t in schedule[1:]:
                 if t == interval.data and (not separate_occupation or t.name[0] != "O"):
                     interval = Interval(begin=interval.begin, end=s + 1, data=t)
                 else:
-                    if resource_intervals[resource].overlap(interval.begin, interval.end):
-                        import pdb
-                        pdb.set_trace()
                     resource_intervals[resource].add(interval)
                     interval = Interval(begin=s, end=s + 1, data=t)
-
-            if resource_intervals[resource].overlap(interval.begin, interval.end):
-                import pdb
-                pdb.set_trace()
 
             resource_intervals[resource].add(interval)
 
