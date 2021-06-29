@@ -91,6 +91,7 @@ def distillations_for_fidelity(Finitial, Ftarget):
     else:
         num = 0
         currF = Finitial
+        # Iteratively distill, stop if we can't increase anymore
         while Ftarget > currF:
             newF = distill_links(currF, Finitial)
             num += 1
@@ -112,8 +113,11 @@ def fidelity_for_distillations(k, Ftarget):
     """
     if k == 0:
         return Ftarget
+
     Fupper = Ftarget
     Flower = undistill_link(Ftarget, Ftarget)
+
+    # Binary search for fidelity which can be used to reach Ftarget with j <= k distillations
     while not isclose(Flower, Fupper, abs_tol=0.00001):
         F = (Fupper + Flower) / 2
         j = distillations_for_fidelity(F, Ftarget)
@@ -140,7 +144,10 @@ def max_distilled_fidelity(Finitial):
     else:
         currF = Finitial
         newF = distill_links(currF, Finitial)
+
+        # Iterate until increase stops
         while newF > currF:
             currF = newF
             newF = distill_links(currF, Finitial)
+
         return currF
