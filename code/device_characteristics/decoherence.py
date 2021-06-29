@@ -146,7 +146,6 @@ class RestrictedBSMProgram(IBellStateMeasurementProgram):
         yield self.run()
 
 
-
 class FidelityTrackingProtocol(TimedProtocol):
     def __init__(self, node, qubit_id, time_step):
         super(FidelityTrackingProtocol, self).__init__(time_step=time_step, node=node)

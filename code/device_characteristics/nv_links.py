@@ -10,11 +10,8 @@ def load_link_data():
     with open("device_characteristics/data.json") as f:
         data = json.load(f)
 
-    with open("device_characteristics/data.json", "w") as f:
-        json.dump(data, f, indent=4, sort_keys=True)
-
+    # Map link capabilities to distance
     distances = list(data["rates"].keys())
-
     d_to_capability = {}
     for d in distances:
         d_to_capability[d] = list(zip(data["fidelities"][d], data["rates"][d]))
