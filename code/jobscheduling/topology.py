@@ -223,29 +223,12 @@ def gen_line_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_c
     return Gcq, G
 
 
-def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3):
-    """
-    Generates a graph based on the SURFNET topology
-    :param num_end_node_comm_q: type int
-        Number of communication qubits each end node has
-    :param num_end_node_storage_q: type int
-        Number of storage qubits each end node has
-    :param num_rep_comm_q: type int
-        Number of communication qubits each repeater has
-    :param num_rep_storage_q: type int
-        Number of storage qubits each repeater has
-    :return: type tuple
-        Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
-        in the network along with the link capabilities of each link.
-    """
-    link_capability = [(0.999, 1400)]
-    link_length = 5
-
+def create_surfnet_topology_gml(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3):
     # Load graph and get edges and nodes
     surfnet_graph = construct_graph(include='core')
     city_edges = list(set([tuple(sorted([e[0], e[1]])) for e in surfnet_graph.edges]))
     city_nodes = list(sorted(list(surfnet_graph.nodes)))
-    city_node_to_id = dict([(node, str(2*i)) for i, node in enumerate(city_nodes)])
+    city_node_to_id = dict([(node, str(2 * i)) for i, node in enumerate(city_nodes)])
 
     # Create edges for graph
     edges = [(city_node_to_id[node1], city_node_to_id[node2]) for node1, node2 in city_edges]
@@ -302,13 +285,11 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
         if node1 in city_nodes and node2 in city_nodes:
             length = surfnet_graph.edges[(node1, node2)]['length']
             lengths.append(length)
-            G.add_edge("{}".format(city_node_to_id[node1]), "{}".format(city_node_to_id[node2]),
-                       capabilities=link_capability, weight=link_length)
+            G.add_edge("{}".format(city_node_to_id[node1]), "{}".format(city_node_to_id[node2]), weight=link_length)
 
     for node in end_nodes:
         repeater_node = str(int(node) - 1)
-        G.add_edge("{}".format(node), "{}".format(repeater_node),
-                   capabilities=link_capability, weight=link_length)
+        G.add_edge("{}".format(node), "{}".format(repeater_node), weight=link_length)
 
     # Add edges
     for node1, node2 in edges:
@@ -317,6 +298,37 @@ def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_re
         for j in range(num_comm_node1):
             for k in range(num_comm_node2):
                 Gcq.add_edge("{}-C{}".format(node1, j), "{}-C{}".format(node2, k))
+
+    nx.write_gml(G, "Surfnet.gml")
+    nx.write_gml(Gcq, "Surfnetcq.gml")
+
+    return Gcq, G
+
+
+def gen_surfnet_topology(num_end_node_comm_q=1, num_end_node_storage_q=3, num_rep_comm_q=1, num_rep_storage_q=3):
+    """
+    Generates a graph based on the SURFNET topology
+    :param num_end_node_comm_q: type int
+        Number of communication qubits each end node has
+    :param num_end_node_storage_q: type int
+        Number of storage qubits each end node has
+    :param num_rep_comm_q: type int
+        Number of communication qubits each repeater has
+    :param num_rep_storage_q: type int
+        Number of storage qubits each repeater has
+    :return: type tuple
+        Tuple of networkx.Graphs that represent the communication resources in the network and the connectivity of nodes
+        in the network along with the link capabilities of each link.
+    """
+    # Link capability to use
+    link_capability = [(0.999, 1400)]
+
+    # Load GML files
+    G = nx.read_gml("Surfnet.gml")
+    Gcq = nx.read_gml("Surfnetcq.gml")
+
+    for edge in G.edges:
+        G.edges[edge]['capabilities'] = link_capability
 
     return Gcq, G
 
